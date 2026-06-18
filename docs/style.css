@@ -1,11 +1,14 @@
+/* docs/style.css */
 :root {
     --bg-color: #0A0A0F;
-    --accent-color: #4A9EFF;
-    --accent-hover: #3b7dcc;
     --text-color: #E8E8F0;
-    --text-muted: #9BA1A6;
-    --card-bg: #1A1A24;
-    --border-color: #2A2A35;
+    --text-muted: #9898B8;
+    --text-footer: #5A5A7A;
+    --accent-color: #4A9EFF;
+    --accent-hover: #3A8EEF;
+    --card-bg: #12121A;
+    --border-color: #2A2A3E;
+    --badge-bg: #1E1E2E;
     --font-family: 'Inter', sans-serif;
 }
 
@@ -17,11 +20,27 @@
 
 body {
     background-color: var(--bg-color);
-    color: var(--text-color);
     font-family: var(--font-family);
-    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+p {
+    font-size: 1rem;
+    line-height: 1.7;
+    color: var(--text-muted);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-color);
+}
+
+h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-align: center;
+    margin-bottom: 3rem;
 }
 
 .container {
@@ -31,20 +50,8 @@ body {
     padding: 0 24px;
 }
 
-h1, h2, h3 {
-    font-weight: 700;
-    line-height: 1.2;
-}
-
-h2 {
-    font-size: 2.5rem;
-    text-align: center;
-    margin-bottom: 3rem;
-}
-
-/* Typography Helpers */
-p {
-    color: var(--text-muted);
+section, header {
+    padding: 80px 0;
 }
 
 a {
@@ -61,13 +68,13 @@ a:hover {
 /* Buttons */
 .btn {
     display: inline-block;
-    padding: 12px 24px;
-    border-radius: 8px;
+    padding: 12px 28px;
+    border-radius: 6px;
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 0.95rem;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .btn:hover {
@@ -76,81 +83,86 @@ a:hover {
 
 .btn-primary {
     background-color: var(--accent-color);
-    color: #fff;
-    border: 2px solid var(--accent-color);
+    color: #FFFFFF;
+    border: 1px solid var(--accent-color);
 }
 
 .btn-primary:hover {
     background-color: var(--accent-hover);
     border-color: var(--accent-hover);
-    color: #fff;
 }
 
 .btn-outline {
     background-color: transparent;
-    color: var(--accent-color);
-    border: 2px solid var(--accent-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
 }
 
 .btn-outline:hover {
-    background-color: rgba(74, 158, 255, 0.1);
+    border-color: var(--accent-color);
     color: var(--accent-color);
 }
 
-/* Badges / Pills */
+/* Badges */
 .badge {
-    background-color: var(--card-bg);
-    color: var(--accent-color);
-    padding: 6px 12px;
-    border-radius: 9999px;
-    font-size: 0.875rem;
-    font-weight: 500;
+    background-color: var(--badge-bg);
+    color: var(--text-muted);
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
     border: 1px solid var(--border-color);
-}
-
-.pill {
-    background-color: var(--card-bg);
-    color: var(--text-color);
-    padding: 8px 16px;
-    border-radius: 9999px;
-    font-size: 1rem;
-    font-weight: 500;
-    border: 1px solid var(--border-color);
+    display: inline-block;
 }
 
 /* Section 1 - Hero */
 .hero {
-    text-align: center;
-    padding: 100px 0 80px;
-    background: radial-gradient(circle at top center, rgba(74, 158, 255, 0.15) 0%, rgba(10, 10, 15, 0) 50%);
-    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.hero-container {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+
+.hero-content {
+    flex: 1;
+}
+
+.hero-image-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.hero-screenshot {
+    width: 100%;
+    max-width: 520px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
 .hero h1 {
-    font-size: 4rem;
+    font-size: clamp(2.5rem, 5vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
     margin-bottom: 1rem;
-    letter-spacing: -0.05em;
-    background: linear-gradient(to right, #ffffff, #88c0ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
 }
 
 .hero .tagline {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     color: var(--text-color);
     margin-bottom: 1rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .hero .description {
-    font-size: 1.125rem;
-    max-width: 600px;
-    margin: 0 auto 2rem;
+    margin-bottom: 2rem;
 }
 
 .hero-badges {
     display: flex;
-    justify-content: center;
     gap: 12px;
     flex-wrap: wrap;
     margin-bottom: 2.5rem;
@@ -158,16 +170,11 @@ a:hover {
 
 .cta-group {
     display: flex;
-    justify-content: center;
     gap: 16px;
     flex-wrap: wrap;
 }
 
 /* Section 2 - Features */
-.features {
-    padding: 100px 0;
-}
-
 .feature-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -177,39 +184,47 @@ a:hover {
 .feature-card {
     background-color: var(--card-bg);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 8px;
     padding: 24px;
-    transition: transform 0.2s, border-color 0.2s;
+    transition: border-color 0.2s ease;
 }
 
 .feature-card:hover {
-    transform: translateY(-4px);
     border-color: var(--accent-color);
 }
 
 .feature-icon {
-    font-size: 2rem;
-    margin-bottom: 16px;
+    font-size: 1.5rem;
+    margin-bottom: 12px;
+    display: block;
 }
 
 .feature-card h3 {
-    font-size: 1.25rem;
+    font-size: 1rem;
+    font-weight: 600;
     margin-bottom: 8px;
-    color: var(--text-color);
 }
 
 .feature-card p {
-    font-size: 0.95rem;
+    font-size: 0.875rem;
 }
 
-/* Section 3 - Why PDF Manager */
-.why-us {
-    padding: 80px 0;
-    background-color: rgba(26, 26, 36, 0.5);
-    border-top: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--border-color);
+/* Section 3 - Screenshots */
+.screenshot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px;
 }
 
+.app-screenshot {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    display: block;
+}
+
+/* Section 4 - Why PDF Manager */
 .benefits-row {
     display: flex;
     justify-content: space-between;
@@ -222,27 +237,23 @@ a:hover {
 }
 
 .benefit-item h3 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     margin-bottom: 12px;
-    color: var(--accent-color);
 }
 
-/* Section 4 - Installation */
-.installation {
-    padding: 100px 0;
-}
-
+/* Section 5 - Installation */
 .steps-list {
     max-width: 600px;
     margin: 0 auto;
     padding-left: 24px;
-    font-size: 1.125rem;
     color: var(--text-muted);
 }
 
 .steps-list li {
     margin-bottom: 16px;
     padding-left: 8px;
+    font-size: 1rem;
+    line-height: 1.7;
 }
 
 .steps-list li::marker {
@@ -260,9 +271,8 @@ code {
     color: var(--text-color);
 }
 
-/* Section 5 - Tech Stack */
+/* Section 6 - Tech Stack */
 .tech-stack {
-    padding: 80px 0 100px;
     text-align: center;
 }
 
@@ -273,11 +283,11 @@ code {
     gap: 16px;
 }
 
-/* Section 6 - Footer */
+/* Section 7 - Footer */
 footer {
+    background-color: var(--bg-color);
     border-top: 1px solid var(--border-color);
-    padding: 40px 0;
-    background-color: var(--card-bg);
+    padding: 32px 0;
 }
 
 .footer-content {
@@ -288,9 +298,24 @@ footer {
     gap: 20px;
 }
 
+.footer-copyright {
+    color: var(--text-footer);
+    font-size: 0.875rem;
+}
+
 .footer-links {
     display: flex;
     gap: 24px;
+}
+
+.footer-links a {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.footer-links a:hover {
+    color: var(--text-color);
+    text-decoration: none;
 }
 
 /* Responsive Styles */
@@ -298,35 +323,36 @@ footer {
     .feature-grid {
         grid-template-columns: repeat(2, 1fr);
     }
-    
-    .hero h1 {
-        font-size: 3rem;
-    }
 }
 
 @media (max-width: 768px) {
+    .hero-container {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .hero-image-wrapper {
+        justify-content: center;
+        margin-top: 2rem;
+    }
+
+    .hero-badges, .cta-group {
+        justify-content: center;
+    }
+
+    .screenshot-grid {
+        grid-template-columns: 1fr;
+    }
+
     .benefits-row {
         flex-direction: column;
         gap: 40px;
-    }
-    
-    .footer-content {
-        flex-direction: column;
-        text-align: center;
     }
 }
 
 @media (max-width: 600px) {
     .feature-grid {
         grid-template-columns: 1fr;
-    }
-    
-    .hero h1 {
-        font-size: 2.5rem;
-    }
-    
-    .hero .tagline {
-        font-size: 1.25rem;
     }
     
     .cta-group {
@@ -338,5 +364,10 @@ footer {
     
     .btn {
         width: 100%;
+    }
+
+    .footer-content {
+        flex-direction: column;
+        text-align: center;
     }
 }
