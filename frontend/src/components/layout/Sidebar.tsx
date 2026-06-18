@@ -71,7 +71,7 @@ export function Sidebar() {
           {!collapsed && (
             <div>
               <div className="sidebar-logo-text">PDF Manager</div>
-              <div className="sidebar-logo-sub">v2.0</div>
+              <div className="sidebar-logo-sub">v1.0.0</div>
             </div>
           )}
         </div>
@@ -144,7 +144,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="sidebar-footer">
           <p className="text-mono text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
-            PDF Manager v2.0<br />
+            PDF Manager v1.0.0<br />
             <span style={{ opacity: 0.6 }}>Offline · Local Processing</span>
           </p>
         </div>
