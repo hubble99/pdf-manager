@@ -1,0 +1,64 @@
+# ── Python ──────────────────────────────────────────────────────────────────────
+backend/.venv/
+backend/__pycache__/
+backend/dist/
+backend/build/
+backend/*.spec.bak
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ── Node ─────────────────────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# ── Rust / Tauri ─────────────────────────────────────────────────────────────────
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+
+# ── Sidecar binary (too large for git, built locally or in CI) ───────────────────
+frontend/src-tauri/binaries/*.exe
+frontend/src-tauri/binaries/*.app
+
+# ── Environment ──────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+
+# ── OS files ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──────────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# ── Build output ─────────────────────────────────────────────────────────────────
+dist-package/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────────
+*.log
+backend/logs/
+
+# ── Test artifacts ───────────────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+frontend/coverage/
+
+# -- AI Documentation -------------------------------------------------------------
+agent_docs/
+
+# Internal development docs
+AGENTS.md
+manage_code.md

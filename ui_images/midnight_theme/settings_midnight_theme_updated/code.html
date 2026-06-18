@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary-container": "#39485a",
+                    "secondary-fixed": "#d4e4fa",
+                    "tertiary-fixed": "#e1e0ff",
+                    "on-tertiary-fixed-variant": "#2f2ebe",
+                    "secondary-fixed-dim": "#b9c8de",
+                    "surface": "#0b1326",
+                    "on-tertiary-container": "#0f00a2",
+                    "surface-container-high": "#222a3d",
+                    "tertiary-fixed-dim": "#c0c1ff",
+                    "on-background": "#dae2fd",
+                    "outline-variant": "#454653",
+                    "primary": "#bdc2ff",
+                    "outline": "#908f9e",
+                    "surface-container-low": "#131b2e",
+                    "surface-variant": "#2d3449",
+                    "inverse-primary": "#4953bc",
+                    "on-secondary-fixed-variant": "#39485a",
+                    "on-surface-variant": "#c6c5d5",
+                    "tertiary": "#c0c1ff",
+                    "on-primary": "#131e8c",
+                    "tertiary-container": "#8689ff",
+                    "on-secondary": "#233143",
+                    "on-secondary-fixed": "#0d1c2d",
+                    "on-tertiary": "#1000a9",
+                    "secondary": "#b9c8de",
+                    "surface-bright": "#31394d",
+                    "on-surface": "#dae2fd",
+                    "inverse-surface": "#dae2fd",
+                    "primary-fixed": "#e0e0ff",
+                    "on-error-container": "#ffdad6",
+                    "surface-dim": "#0b1326",
+                    "on-error": "#690005",
+                    "surface-tint": "#bdc2ff",
+                    "surface-container": "#171f33",
+                    "error": "#ffb4ab",
+                    "surface-container-lowest": "#060e20",
+                    "primary-container": "#818cf8",
+                    "background": "#0b1326",
+                    "on-secondary-container": "#a7b6cc",
+                    "on-tertiary-fixed": "#07006c",
+                    "on-primary-container": "#101b8a",
+                    "on-primary-fixed-variant": "#2f3aa3",
+                    "primary-fixed-dim": "#bdc2ff",
+                    "error-container": "#93000a",
+                    "on-primary-fixed": "#000767",
+                    "surface-container-highest": "#2d3449",
+                    "inverse-on-surface": "#283044"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "md": "16px",
+                    "unit": "4px",
+                    "lg": "24px",
+                    "xl": "48px",
+                    "toolbar-height": "64px",
+                    "sm": "8px",
+                    "xs": "4px",
+                    "sidebar-width": "280px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Inter"],
+                    "label-md": ["Inter"],
+                    "body-md": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "mono-label": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "body-lg": ["Inter"],
+                    "headline-lg": ["Inter"],
+                    "display-lg": ["Inter"]
+            },
+            "fontSize": {
+                    "label-lg": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                    "mono-label": ["11px", {"lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "400"}],
+                    "title-lg": ["20px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #454653;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #818CF8;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #818CF8;
+        }
+        .toggle-checkbox:checked + .toggle-label .toggle-dot {
+            transform: translateX(100%);
+        }
+    </style>
+</head>
+<body class="bg-surface">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-full w-[280px] bg-surface-container-low flex flex-col border-r border-outline-variant/20 z-50">
+<div class="px-lg py-xl flex flex-col gap-xs">
+<span class="font-headline-md text-headline-md font-bold text-primary">PDF Suite</span>
+<span class="font-label-md text-label-md text-on-surface-variant opacity-70">Pro Workspace</span>
+</div>
+<nav class="flex-1 px-md flex flex-col gap-unit">
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-lg text-label-lg">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">call_merge</span>
+<span class="font-label-lg text-label-lg">Merge PDF</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">compress</span>
+<span class="font-label-lg text-label-lg">Compress PDF</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">image</span>
+<span class="font-label-lg text-label-lg">PDF to Image</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-primary bg-primary-container/10 border-r-2 border-primary transition-colors duration-200 rounded-l-lg" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-lg text-label-lg">Settings</span>
+</a>
+</nav>
+<div class="mt-auto p-lg flex flex-col gap-md">
+<button class="w-full py-md bg-primary-container text-on-primary-container rounded-xl font-label-lg text-label-lg flex items-center justify-center gap-sm active:scale-[0.98] transition-transform shadow-lg shadow-primary-container/20">
+<span class="material-symbols-outlined">add</span>
+                New Document
+            </button>
+<div class="flex flex-col gap-unit pt-md border-t border-outline-variant/10">
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">help</span>
+<span class="font-label-lg text-label-lg">Help</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-variant/50 transition-colors duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-label-lg text-label-lg">Sign Out</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Top App Bar -->
+<header class="fixed top-0 right-0 w-[calc(100%-280px)] h-toolbar-height backdrop-blur-xl bg-surface/80 flex items-center justify-between px-lg z-40 border-b border-outline-variant/10">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface">Application Settings</h1>
+</header>
+<!-- Main Content Area -->
+<main class="ml-[280px] pt-[calc(64px+40px)] px-xl pb-xl min-h-screen">
+<div class="max-w-4xl mx-auto space-y-xl">
+<!-- Appearance Section -->
+<section class="space-y-md">
+<div class="flex flex-col gap-xs">
+<h2 class="font-display-lg text-display-lg text-on-surface">Appearance</h2>
+<p class="font-body-md text-on-surface-variant opacity-80">Customize how PDF Pro looks and feels on your desktop.</p>
+</div>
+<div class="glass-card overflow-hidden divide-y divide-outline-variant/10">
+<!-- Theme Switcher -->
+<div class="flex items-center justify-between p-lg">
+<div class="flex flex-col gap-xs">
+<span class="font-label-lg text-label-lg text-on-surface">Theme</span>
+<span class="font-body-md text-body-md text-on-surface-variant opacity-70">Choose your preferred interface style</span>
+</div>
+<div class="flex bg-surface-container rounded-lg p-sm border border-outline-variant/20">
+<button class="px-lg py-sm rounded-md font-label-md text-label-md bg-primary-container text-on-primary-container shadow-sm">System</button>
+<button class="px-lg py-sm rounded-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">Light</button>
+<button class="px-lg py-sm rounded-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">Dark</button>
+</div>
+</div>
+<!-- Accent Color -->
+<div class="p-lg space-y-md">
+<div class="flex justify-between items-center">
+<div class="flex flex-col gap-xs">
+<span class="font-label-lg text-label-lg text-on-surface">Accent Color</span>
+<span class="font-body-md text-body-md text-on-surface-variant opacity-70">Global highlight color for buttons and interactive elements</span>
+</div>
+<span class="px-sm py-unit bg-primary/10 text-primary font-mono-label text-mono-label rounded border border-primary/20 uppercase">Electric Blue</span>
+</div>
+<div class="flex gap-md">
+<div class="w-10 h-10 rounded-full ring-2 ring-offset-4 ring-offset-surface ring-primary-container bg-primary-container cursor-pointer transition-transform hover:scale-110"></div>
+<div class="w-10 h-10 rounded-full bg-[#FB7185] cursor-pointer transition-transform hover:scale-110"></div>
+<div class="w-10 h-10 rounded-full bg-[#FACC15] cursor-pointer transition-transform hover:scale-110"></div>
+<div class="w-10 h-10 rounded-full bg-[#B9C8DE] cursor-pointer transition-transform hover:scale-110"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Document Defaults Section -->
+<section class="space-y-md">
+<div class="flex flex-col gap-xs">
+<h2 class="font-headline-md text-headline-md text-on-surface">Document Defaults</h2>
+<p class="font-body-md text-on-surface-variant opacity-80">Set global preferences for all new and exported documents.</p>
+</div>
+<div class="glass-card overflow-hidden divide-y divide-outline-variant/10">
+<!-- Quality Selector -->
+<div class="flex items-center justify-between p-lg">
+<div class="flex flex-col gap-xs">
+<span class="font-label-lg text-label-lg text-on-surface">Export Quality</span>
+<span class="font-body-md text-body-md text-on-surface-variant opacity-70">Balancing file size and visual clarity</span>
+</div>
+<div class="relative">
+<select class="bg-surface-container-high text-primary font-label-lg text-label-lg border border-outline-variant/30 rounded-lg pl-md pr-xl py-sm focus:ring-2 focus:ring-primary-container outline-none appearance-none cursor-pointer">
+<option>High (300 DPI)</option>
+<option>Medium (150 DPI)</option>
+<option>Low (72 DPI)</option>
+</select>
+<span class="material-symbols-outlined absolute right-sm top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
+</div>
+</div>
+<!-- Default Format -->
+<div class="flex items-center justify-between p-lg">
+<div class="flex flex-col gap-xs">
+<span class="font-label-lg text-label-lg text-on-surface">Default Image Format</span>
+<span class="font-body-md text-body-md text-on-surface-variant opacity-70">Preferred format when converting PDF to images</span>
+</div>
+<div class="flex bg-surface-container rounded-lg p-xs border border-outline-variant/20">
+<button class="px-lg py-sm rounded-md font-label-md text-label-md bg-primary-container text-on-primary-container shadow-sm">PNG</button>
+<button class="px-lg py-sm rounded-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">JPG</button>
+<button class="px-lg py-sm rounded-md font-label-md text-label-md text-on-surface-variant hover:text-on-surface transition-colors">TIFF</button>
+</div>
+</div>
+<!-- Auto-save Toggle -->
+<div class="flex items-center justify-between p-lg">
+<div class="flex flex-col gap-xs">
+<span class="font-label-lg text-label-lg text-on-surface">Auto-save changes</span>
+<span class="font-body-md text-body-md text-on-surface-variant opacity-70">Continuously save your progress to the local workspace</span>
+</div>
+<div class="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-surface-variant border-4 border-surface appearance-none cursor-pointer" id="auto-save-toggle" name="auto-save-toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-outline-variant cursor-pointer" for="auto-save-toggle"></label>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer Info -->
+<div class="flex flex-col items-center justify-center pt-xl pb-lg border-t border-outline-variant/10 gap-sm">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-on-surface-variant/60 text-[20px]">verified</span>
+<p class="font-body-md text-body-md text-on-surface-variant opacity-70">PDF Pro Enterprise v4.2.0 (Build 892)</p>
+</div>
+<p class="font-mono-label text-mono-label text-on-surface-variant opacity-40">© 2024 PDF Pro Tools Inc. • All Rights Reserved</p>
+</div>
+</div>
+</main>
+<script>
+    // Theme switching simulation
+    const themeButtons = document.querySelectorAll('.flex.bg-surface-container button');
+    themeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const parent = btn.parentElement;
+            parent.querySelectorAll('button').forEach(b => {
+                b.classList.remove('bg-primary-container', 'text-on-primary-container', 'shadow-sm');
+                b.classList.add('text-on-surface-variant');
+            });
+            btn.classList.add('bg-primary-container', 'text-on-primary-container', 'shadow-sm');
+            btn.classList.remove('text-on-surface-variant');
+        });
+    });
+
+    // Color selection simulation
+    const colorDots = document.querySelectorAll('.rounded-full.cursor-pointer');
+    colorDots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            colorDots.forEach(d => d.classList.remove('ring-2', 'ring-offset-4', 'ring-offset-surface', 'ring-primary-container'));
+            dot.classList.add('ring-2', 'ring-offset-4', 'ring-offset-surface', 'ring-primary-container');
+        });
+    });
+</script>
+</body></html>

@@ -1,0 +1,350 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>PDF Pro - Insert Content (Advanced)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet">
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      vertical-align: middle;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #131313;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2a2a2a;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #414752;
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "secondary-container": "#474746",
+            "surface": "#131313",
+            "primary-container": "#4a9eff",
+            "outline": "#8a919e",
+            "on-tertiary-fixed-variant": "#683d00",
+            "on-error": "#690005",
+            "on-secondary-fixed": "#1b1c1c",
+            "secondary-fixed-dim": "#c8c6c5",
+            "on-primary": "#00315d",
+            "on-tertiary": "#482900",
+            "inverse-on-surface": "#313030",
+            "on-error-container": "#ffdad6",
+            "surface-bright": "#3a3939",
+            "primary": "#a4c9ff",
+            "on-background": "#e5e2e1",
+            "error": "#ffb4ab",
+            "on-tertiary-fixed": "#2c1700",
+            "primary-fixed-dim": "#a4c9ff",
+            "tertiary-container": "#de8800",
+            "secondary": "#c8c6c5",
+            "surface-variant": "#353534",
+            "inverse-surface": "#e5e2e1",
+            "on-secondary": "#303030",
+            "tertiary-fixed-dim": "#ffb869",
+            "on-tertiary-container": "#4d2c00",
+            "surface-dim": "#131313",
+            "tertiary": "#ffb869",
+            "surface-tint": "#a4c9ff",
+            "error-container": "#93000a",
+            "primary-fixed": "#d4e3ff",
+            "outline-variant": "#414752",
+            "on-primary-container": "#003463",
+            "background": "#131313",
+            "surface-container-lowest": "#0e0e0e",
+            "on-secondary-container": "#b7b5b4",
+            "on-primary-fixed": "#001c39",
+            "secondary-fixed": "#e4e2e1",
+            "on-surface": "#e5e2e1",
+            "tertiary-fixed": "#ffdcbb",
+            "surface-container-highest": "#353534",
+            "surface-container": "#201f1f",
+            "on-surface-variant": "#c0c7d4",
+            "inverse-primary": "#005fad",
+            "surface-container-high": "#2a2a2a",
+            "on-secondary-fixed-variant": "#474746",
+            "on-primary-fixed-variant": "#004884",
+            "surface-container-low": "#1c1b1b"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "stack-md": "16px",
+            "container-padding": "40px",
+            "gutter": "24px",
+            "stack-lg": "32px",
+            "stack-sm": "8px",
+            "sidebar-width": "280px"
+          },
+          "fontFamily": {
+            "title-sm": ["Inter"],
+            "label-caps": ["Inter"],
+            "headline-md": ["Inter"],
+            "body-md": ["Inter"],
+            "mono-label": ["JetBrains Mono"],
+            "display-lg": ["Inter"],
+            "body-sm": ["Inter"]
+          },
+          "fontSize": {
+            "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+            "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+            "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+            "body-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+            "mono-label": ["12px", {"lineHeight": "1", "fontWeight": "400"}],
+            "display-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+            "body-sm": ["13px", {"lineHeight": "1.5", "fontWeight": "400"}]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container-low border-r border-outline-variant flex flex-col h-full py-stack-lg z-30">
+<div class="px-6 mb-stack-lg">
+<div class="text-headline-md font-headline-md font-bold text-primary-container">PDF Pro</div>
+<div class="text-label-caps font-label-caps text-on-surface-variant tracking-widest mt-1 uppercase">Enterprise Tool</div>
+</div>
+<nav class="flex-1 flex flex-col">
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="call_merge">call_merge</span>
+<span class="font-body-md">Merge PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="content_cut">content_cut</span>
+<span class="font-body-md">Extract Pages</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="compress">compress</span>
+<span class="font-body-md">Compress PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="picture_as_pdf">picture_as_pdf</span>
+<span class="font-body-md">PDF to Image</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="image">image</span>
+<span class="font-body-md">Image to PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+<span class="font-body-md">QR &amp; Barcode Generator</span>
+</a>
+<a class="flex items-center gap-stack-md text-primary-container border-l-4 border-primary-container bg-surface-container-high px-4 py-3 opacity-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="post_add">post_add</span>
+<span class="font-body-md">Insert Content</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant/30 pt-4">
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md">Settings</span>
+</a>
+<button class="w-full mt-2 text-label-caps font-label-caps text-outline hover:text-on-surface transition-colors uppercase tracking-widest text-center py-2">Collapse</button>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 h-16 left-sidebar-width bg-surface border-b border-outline-variant z-20">
+<div class="flex justify-between items-center px-container-padding h-full w-full">
+
+<div class="flex items-center gap-gutter">
+<button class="bg-primary-container text-on-primary-container px-6 py-2 rounded font-label-caps text-label-caps hover:scale-[0.98] active:scale-95 transition-all shadow-lg shadow-primary-container/20">
+          Upload File
+        </button>
+
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="pt-16 pl-sidebar-width h-screen flex flex-col bg-background">
+<!-- Content Header -->
+<div class="px-container-padding py-8 flex items-center justify-between border-b border-outline-variant/30">
+<div class="flex flex-col">
+<h1 class="text-display-lg font-display-lg text-on-surface tracking-tight">Insert Content</h1>
+<p class="text-body-sm text-on-surface-variant mt-1">Manage rules for sophisticated document assembly.</p>
+</div>
+<!-- Segmented Toggle -->
+<div class="flex bg-surface-container-low p-1 rounded-lg border border-outline-variant">
+<button class="px-4 py-2 text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface transition-all">BASIC</button>
+<button class="px-6 py-2 text-label-caps font-label-caps bg-primary-container text-on-primary-container rounded shadow-sm">ADVANCED</button>
+</div>
+</div>
+<!-- Split View Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Left Panel: PDF Drop Zone (60%) -->
+<section class="w-3/5 p-gutter overflow-y-auto">
+<div class="h-full border-2 border-dashed border-outline-variant rounded-xl bg-surface-container-lowest flex flex-col relative group transition-all duration-300 hover:border-primary-container/50 hover:bg-surface-container-low/30 overflow-hidden">
+<!-- Background Preview Image -->
+<img class="absolute inset-0 w-full h-full object-cover opacity-10 group-hover:opacity-20 transition-opacity" data-alt="A macro close-up of a high-resolution technical document with crisp typography and subtle blue grid lines. The lighting is cold and professional, reflecting a high-performance productivity environment. The image uses deep charcoal backgrounds and bright white text with electric blue accent marks. It has a cinematic depth of field focused on a specific paragraph." src="https://lh3.googleusercontent.com/aida-public/AB6AXuByUdAgEDb4zdxVlDstIeEYSG3cmcPmZhJMrLmBbKvO8NV19_Ykh7EtjyfV7Mr7w9aujykAX2Uj-pOdNP6WMfevzP56CPk9soAiZu49AInCspEs1hj2G3w0pRDdxAey0xleb75vlNobJ4LG-fcul5gqOYDI9Nqb7xxhd25nIWv94tuPisdHolf4ZpQ05VmSM9jv865-4b26csCVSfMqVWFgobSy3c4jBcIrDTN3eTelrLjuXnxdUgcykCq7iMxqm5njhttF3LuJw6X0">
+<div class="relative z-10 flex flex-col items-center justify-center h-full text-center p-stack-lg">
+<div class="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-6 border border-outline-variant shadow-inner">
+<span class="material-symbols-outlined text-primary-container text-4xl" data-icon="description">description</span>
+</div>
+<h3 class="text-title-sm font-title-sm text-on-surface">Target: Annual_Report_2023.pdf</h3>
+<p class="text-body-sm text-on-surface-variant mt-2 max-w-sm">Drop additional files here or use the panel to the right to define precise insertion logic.</p>
+<div class="mt-8 flex gap-stack-md">
+<button class="px-6 py-2 rounded border border-outline-variant text-label-caps font-label-caps hover:bg-surface-container-high transition-colors">Swap Target</button>
+<button class="px-6 py-2 rounded bg-surface-container-highest text-label-caps font-label-caps hover:brightness-125 transition-all">Preview All</button>
+</div>
+</div>
+<!-- Bottom Floating Status -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-high/80 backdrop-blur-md border border-outline-variant px-4 py-2 rounded-full flex items-center gap-3">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+<span class="text-mono-label font-mono-label text-on-surface-variant">42 Pages Detected • 1.2MB</span>
+</div>
+</div>
+</section>
+<!-- Right Panel: Rules List (40%) -->
+<section class="w-2/5 border-l border-outline-variant bg-surface-container-lowest flex flex-col">
+<div class="p-6 border-b border-outline-variant flex justify-between items-center">
+<h2 class="text-title-sm font-title-sm">Rules List</h2>
+<span class="bg-surface-variant px-2 py-0.5 rounded text-mono-label text-on-surface-variant">Active: 01</span>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-4">
+<!-- Rule Card 1 -->
+<div class="bg-surface-container-high border border-outline-variant rounded-lg p-4 flex items-center gap-4 group hover:border-primary-container/40 transition-all">
+<div class="text-title-sm font-title-sm text-outline-variant group-hover:text-primary-container transition-colors">1.</div>
+<div class="flex-1">
+<div class="flex items-center gap-2">
+<span class="font-body-md font-semibold text-on-surface">appendix.pdf</span>
+<span class="bg-primary-container/20 text-primary-container text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Before</span>
+</div>
+<div class="text-body-sm text-on-surface-variant mt-1 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" data-icon="insert_page_break">insert_page_break</span>
+                Target: Page 12
+              </div>
+</div>
+<button class="w-8 h-8 rounded flex items-center justify-center text-outline-variant hover:text-error hover:bg-error-container/20 transition-all">
+<span class="material-symbols-outlined" data-icon="delete">delete</span>
+</button>
+</div>
+<!-- Empty Slot Visualizer -->
+<div class="border border-dashed border-outline-variant/50 rounded-lg p-8 flex flex-col items-center justify-center text-on-surface-variant/40">
+<span class="material-symbols-outlined text-4xl mb-2" data-icon="add_circle">add_circle</span>
+<span class="text-label-caps font-label-caps">Next Rule Slot</span>
+</div>
+</div>
+<!-- Bottom Actions -->
+<div class="p-6 border-t border-outline-variant space-y-3">
+<button class="w-full border border-outline-variant py-3 rounded text-label-caps font-label-caps hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2" onclick="toggleModal(true)">
+<span class="material-symbols-outlined text-[18px]" data-icon="add">add</span>
+            Add Rule
+          </button>
+<button class="w-full bg-primary-container text-on-primary-container py-3 rounded text-label-caps font-label-caps font-bold hover:brightness-110 active:scale-[0.98] transition-all shadow-xl shadow-primary-container/20">
+            EXECUTE PLAN
+          </button>
+</div>
+</section>
+</div>
+</main>
+<!-- Modal Dialog Overlay: Configure Rule -->
+<div class="fixed inset-0 z-50 flex items-center justify-center transition-all duration-300 backdrop-blur-md bg-black/60" id="rule-modal">
+<div class="bg-surface-container-high border border-outline-variant w-full max-w-lg rounded-xl shadow-2xl overflow-hidden transform scale-100 opacity-100">
+<!-- Modal Header -->
+<div class="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-highest">
+<h3 class="text-title-sm font-title-sm">Configure Rule</h3>
+<button class="text-on-surface-variant hover:text-on-surface transition-colors" onclick="toggleModal(false)">
+<span class="material-symbols-outlined" data-icon="close">close</span>
+</button>
+</div>
+<!-- Modal Body -->
+<div class="p-6 space-y-gutter">
+<!-- Source File -->
+<div class="space-y-stack-sm">
+<label class="text-label-caps font-label-caps text-on-surface-variant block">Source File</label>
+<div class="relative">
+<select class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-body-md appearance-none focus:ring-2 focus:ring-primary-container focus:outline-none transition-all">
+<option>Select file from library...</option>
+<option>appendix.pdf</option>
+<option>legal_terms.pdf</option>
+<option>cover_letter.docx</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-outline" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<!-- Page Range -->
+<div class="space-y-stack-sm">
+<label class="text-label-caps font-label-caps text-on-surface-variant block">Page Range (e.g. 1-5, 8)</label>
+<input class="w-full bg-surface-container-lowest border border-outline-variant rounded p-3 text-body-md focus:ring-2 focus:ring-primary-container focus:outline-none transition-all" placeholder="All" type="text">
+</div>
+<!-- Mode (Radio Buttons) -->
+<div class="space-y-stack-sm">
+<label class="text-label-caps font-label-caps text-on-surface-variant block">Insertion Mode</label>
+<div class="grid grid-cols-3 gap-stack-md">
+<label class="relative flex flex-col items-center p-3 border border-outline-variant rounded cursor-pointer hover:bg-surface-container-highest transition-all has-[:checked]:border-primary-container has-[:checked]:bg-primary-container/10">
+<input checked="" class="hidden" name="mode" type="radio" value="before">
+<span class="material-symbols-outlined mb-1" data-icon="arrow_upward">arrow_upward</span>
+<span class="text-label-caps">Before</span>
+</label>
+<label class="relative flex flex-col items-center p-3 border border-outline-variant rounded cursor-pointer hover:bg-surface-container-highest transition-all has-[:checked]:border-primary-container has-[:checked]:bg-primary-container/10">
+<input class="hidden" name="mode" type="radio" value="after">
+<span class="material-symbols-outlined mb-1" data-icon="arrow_downward">arrow_downward</span>
+<span class="text-label-caps">After</span>
+</label>
+<label class="relative flex flex-col items-center p-3 border border-outline-variant rounded cursor-pointer hover:bg-surface-container-highest transition-all has-[:checked]:border-primary-container has-[:checked]:bg-primary-container/10">
+<input class="hidden" name="mode" type="radio" value="replace">
+<span class="material-symbols-outlined mb-1" data-icon="swap_horiz">swap_horiz</span>
+<span class="text-label-caps">Replace</span>
+</label>
+</div>
+</div>
+<!-- Target Page -->
+<div class="space-y-stack-sm">
+<label class="text-label-caps font-label-caps text-on-surface-variant block">Target Page Position</label>
+<div class="flex gap-stack-md">
+<input class="flex-1 bg-surface-container-lowest border border-outline-variant rounded p-3 text-body-md focus:ring-2 focus:ring-primary-container focus:outline-none transition-all" min="1" type="number" value="1">
+<div class="flex items-center gap-2 text-body-sm text-outline px-4 italic border border-outline-variant/30 rounded">
+              Current Last Page: 42
+            </div>
+</div>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="p-6 bg-surface-container-highest/50 border-t border-outline-variant flex justify-end gap-stack-md">
+<button class="px-6 py-2 rounded text-label-caps font-label-caps text-on-surface-variant hover:text-on-surface transition-colors" onclick="toggleModal(false)">Cancel</button>
+<button class="px-8 py-2 bg-primary-container text-on-primary-container rounded text-label-caps font-label-caps font-bold shadow-lg shadow-primary-container/20">SAVE RULE</button>
+</div>
+</div>
+</div>
+<script>
+    function toggleModal(show) {
+      const modal = document.getElementById('rule-modal');
+      if (show) {
+        modal.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+        modal.classList.add('flex', 'opacity-100');
+      } else {
+        modal.classList.add('opacity-0', 'pointer-events-none');
+        setTimeout(() => {
+          modal.classList.remove('flex');
+          modal.classList.add('hidden');
+        }, 300);
+      }
+    }
+    
+    // Initialize modal state
+    // Set to show by default as requested in prompt "A visible modal dialog overlay"
+    document.addEventListener('DOMContentLoaded', () => {
+      // Logic for interactions could go here
+    });
+  </script>
+
+
+</body></html>

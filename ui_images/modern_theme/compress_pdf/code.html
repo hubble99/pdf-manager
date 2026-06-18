@@ -1,0 +1,295 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>PDF Pro - Compress PDF</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "secondary-container": "#474746",
+                        "surface": "#131313",
+                        "primary-container": "#4a9eff",
+                        "outline": "#8a919e",
+                        "on-tertiary-fixed-variant": "#683d00",
+                        "on-error": "#690005",
+                        "on-secondary-fixed": "#1b1c1c",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "on-primary": "#00315d",
+                        "on-tertiary": "#482900",
+                        "inverse-on-surface": "#313030",
+                        "on-error-container": "#ffdad6",
+                        "surface-bright": "#3a3939",
+                        "primary": "#a4c9ff",
+                        "on-background": "#e5e2e1",
+                        "error": "#ffb4ab",
+                        "on-tertiary-fixed": "#2c1700",
+                        "primary-fixed-dim": "#a4c9ff",
+                        "tertiary-container": "#de8800",
+                        "secondary": "#c8c6c5",
+                        "surface-variant": "#353534",
+                        "inverse-surface": "#e5e2e1",
+                        "on-secondary": "#303030",
+                        "tertiary-fixed-dim": "#ffb869",
+                        "on-tertiary-container": "#4d2c00",
+                        "surface-dim": "#131313",
+                        "tertiary": "#ffb869",
+                        "surface-tint": "#a4c9ff",
+                        "error-container": "#93000a",
+                        "primary-fixed": "#d4e3ff",
+                        "outline-variant": "#414752",
+                        "on-primary-container": "#003463",
+                        "background": "#131313",
+                        "surface-container-lowest": "#0e0e0e",
+                        "on-secondary-container": "#b7b5b4",
+                        "on-primary-fixed": "#001c39",
+                        "secondary-fixed": "#e4e2e1",
+                        "on-surface": "#e5e2e1",
+                        "tertiary-fixed": "#ffdcbb",
+                        "surface-container-highest": "#353534",
+                        "surface-container": "#201f1f",
+                        "on-surface-variant": "#c0c7d4",
+                        "inverse-primary": "#005fad",
+                        "surface-container-high": "#2a2a2a",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-primary-fixed-variant": "#004884",
+                        "surface-container-low": "#1c1b1b"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-md": "16px",
+                        "container-padding": "40px",
+                        "gutter": "24px",
+                        "stack-lg": "32px",
+                        "stack-sm": "8px",
+                        "sidebar-width": "280px"
+                    },
+                    "fontFamily": {
+                        "title-sm": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "mono-label": ["JetBrains Mono"],
+                        "display-lg": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "mono-label": ["12px", {"lineHeight": "1", "fontWeight": "400"}],
+                        "display-lg": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-sm": ["13px", {"lineHeight": "1.5", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { background-color: #0F0F0F; color: #e5e2e1; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .custom-range::-webkit-slider-runnable-track { background: #2A2A2A; height: 4px; border-radius: 2px; }
+        .custom-range::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #4a9eff; margin-top: -6px; border: 2px solid #131313; cursor: pointer; }
+        .glass-panel { background: rgba(26, 26, 26, 0.8); backdrop-filter: blur(12px); border: 1px solid #2A2A2A; }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased">
+<!-- SideNavBar Shell -->
+<aside class="fixed left-0 top-0 h-full w-sidebar-width bg-surface-container-low border-r border-outline-variant flex flex-col h-full py-stack-lg z-50">
+<div class="px-6 mb-10">
+<h1 class="text-headline-md font-headline-md font-bold text-primary-container">PDF Pro</h1>
+<p class="text-label-caps font-label-caps text-on-surface-variant opacity-60">Enterprise Tool</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">call_merge</span>
+<span class="font-body-md">Merge PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">content_cut</span>
+<span class="font-body-md">Extract Pages</span>
+</a>
+<a class="flex items-center gap-stack-md text-primary-container border-l-4 border-primary-container bg-surface-container-high px-4 py-3 opacity-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined">compress</span>
+<span class="font-body-md">Compress PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">picture_as_pdf</span>
+<span class="font-body-md">PDF to Image</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">image</span>
+<span class="font-body-md">Image to PDF</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">qr_code_2</span>
+<span class="font-body-md">QR &amp; Barcode Generator</span>
+</a>
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">post_add</span>
+<span class="font-body-md">Insert Content</span>
+</a>
+</nav>
+<div class="mt-auto border-t border-outline-variant pt-4">
+<a class="flex items-center gap-stack-md text-on-surface-variant px-4 py-3 hover:bg-surface-container-highest transition-colors duration-200" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md">Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar Shell -->
+<header class="fixed top-0 right-0 h-16 left-sidebar-width bg-surface border-b border-outline-variant z-40">
+<div class="flex justify-between items-center px-container-padding h-full w-full">
+
+<div class="flex items-center gap-6">
+
+
+
+
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-sidebar-width min-h-screen p-container-padding bg-[#0F0F0F] pt-8">
+<div class="max-w-5xl mx-auto space-y-stack-lg animate-in fade-in slide-in-from-bottom-4 duration-700">
+<!-- Header Section -->
+<div class="flex justify-between items-end border-b border-outline-variant pb-stack-md">
+<div>
+<h2 class="text-display-lg font-display-lg text-on-surface">Compress PDF</h2>
+<p class="text-on-surface-variant mt-2">Optimize your document size without sacrificing essential quality.</p>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-high px-4 py-2 rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-primary-container text-sm">info</span>
+<span class="text-body-sm text-on-surface-variant">V4.2.0 Engine Active</span>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column: Tooling -->
+<div class="lg:col-span-8 space-y-stack-lg">
+<!-- Drag & Drop Zone -->
+<div class="relative group h-80 rounded-xl border-2 border-dashed border-outline-variant bg-[#1A1A1A] flex flex-col items-center justify-center transition-all hover:border-primary-container hover:bg-[#1A1A1A]/50" id="drop-zone">
+<div class="absolute inset-0 bg-primary-container/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="text-center p-stack-lg relative z-10">
+<div class="w-20 h-20 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto mb-6 border border-outline-variant group-hover:scale-110 transition-transform duration-300">
+<span class="material-symbols-outlined text-4xl text-primary-container">upload_file</span>
+</div>
+<h3 class="text-title-sm font-title-sm mb-2 text-on-surface">Annual_Report_2023_Draft.pdf</h3>
+<p class="text-body-sm text-on-surface-variant mb-6">Drag and drop or <span class="text-primary-container cursor-pointer underline">browse</span> to replace file</p>
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-surface-variant rounded text-mono-label text-outline uppercase tracking-wider">
+                                15.4 MB • 42 Pages • PDF 1.7
+                            </div>
+</div>
+</div>
+<!-- Configuration Section -->
+<div class="glass-panel p-stack-lg rounded-xl space-y-stack-md">
+<div class="flex justify-between items-center">
+<label class="text-label-caps font-label-caps text-on-surface">Image Quality</label>
+<span class="bg-primary-container/20 text-primary-container px-3 py-1 rounded-full text-mono-label font-bold">75%</span>
+</div>
+<input class="w-full custom-range appearance-none bg-transparent focus:outline-none" max="100" min="0" type="range" value="75">
+<div class="flex justify-between text-mono-label text-on-surface-variant opacity-60">
+<span class="">Maximum Compression</span>
+<span class="">High Fidelity</span>
+</div>
+</div>
+</div>
+<!-- Right Column: Summary & CTA -->
+<div class="lg:col-span-4 space-y-stack-lg">
+<!-- Metrics Cards -->
+<div class="space-y-4">
+<div class="bg-[#1A1A1A] border border-outline-variant p-stack-md rounded-xl">
+<p class="text-label-caps font-label-caps text-on-surface-variant mb-1">Original Size</p>
+<p class="text-headline-md font-headline-md text-on-surface">15.4 MB</p>
+</div>
+<div class="bg-[#1A1A1A] border border-primary-container/30 p-stack-md rounded-xl relative overflow-hidden">
+<div class="absolute -right-2 -top-2 w-24 h-24 bg-primary-container/10 blur-2xl rounded-full"></div>
+<div class="relative z-10 flex justify-between items-start">
+<div>
+<p class="text-label-caps font-label-caps text-primary-container mb-1">Estimated Size</p>
+<p class="text-headline-md font-headline-md text-on-surface">4.2 MB</p>
+</div>
+<span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-tighter">
+                                    72% Reduction
+                                </span>
+</div>
+</div>
+</div>
+<!-- Optimization Preview (Bento element) -->
+<div class="bg-[#1A1A1A] border border-outline-variant rounded-xl overflow-hidden">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low flex items-center justify-between">
+<span class="text-label-caps font-label-caps">Visual Preview</span>
+<span class="material-symbols-outlined text-sm cursor-pointer hover:text-primary-container">zoom_in</span>
+</div>
+<div class="p-4 flex gap-2">
+<div class="w-1/2 aspect-[3/4] bg-surface-container-highest rounded border border-outline-variant flex items-center justify-center relative overflow-hidden group">
+<img alt="Preview Original" class="w-full h-full object-cover opacity-60 grayscale" data-alt="A highly detailed close-up of high-quality architectural documentation printed on premium paper. The lighting is studio-quality, emphasizing the sharp lines and crisp typography of technical drawings. The aesthetic is industrial and professional, with a cool blue and dark grey color palette reflecting technical excellence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXyqjIhc9lCy72harSyOJU8ufZDDIZj4RU33tAz5rkzMv2pMW_jhKpD_jdkiZWTJZ-jJu68sjltRdvvbOs9J07T6wsj49hDtd5C83lJRZSJ29RXy--4_yPjmZLoR8ghcw8dAXDv6Xb5oP_uvHlFxXAURd4vs0DX8dFpEJpTCtWPjSGlTJQMuIitCHm6cjdUToTNip8JemHztA5rqAJ1efnF9mV7XIY7Cr_sApXWdnnQiBKOPA7v_sjfx0AM5zi0AyBCCmuhB8jZnQi">
+<span class="absolute bottom-2 left-2 text-[8px] bg-black/80 px-1 rounded uppercase">Original</span>
+</div>
+<div class="w-1/2 aspect-[3/4] bg-surface-container-highest rounded border border-primary-container flex items-center justify-center relative overflow-hidden group">
+<img alt="Preview Compressed" class="w-full h-full object-cover" data-alt="A high-resolution image of digital architectural blueprints displayed on a high-end monitor. The image demonstrates crisp, optimized vector lines and clear text. The mood is sleek and digital, featuring a dark mode UI context with vibrant electric blue highlights and sophisticated greyscale tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBecOCbYqJSwqAnsqRkWUbQy6I_SiWpa7RhQ1EfOhFo3HZMwOirfdxvp0kTTvNDqv5iMOXWtyf2ZE7REAqEoa1xgM19iQdBHfR-ad66mu-mqsB3SmC6ZLELpauAGQHtfCfm9hfkC8tXHkeADwbfM2EwhiQWhaqyZChFra1pM4pZPEf8ma04ZJ7xusovCuc3ZdgzdMEe12ls3rW1DlOf-yjii5ajDM7BG4c3Fk9QEN3eMgmpkTmxJn16NrqKvmNBvFJMcrW1yZxW11xm">
+<span class="absolute bottom-2 left-2 text-[8px] bg-primary-container px-1 rounded uppercase text-on-primary-container font-bold">Optimized</span>
+</div>
+</div>
+<div class="px-4 py-3 text-[10px] text-on-surface-variant leading-tight border-t border-outline-variant italic">
+                            * Previews are rendered at 100% scale for quality verification.
+                        </div>
+</div>
+<!-- Action Button -->
+<button class="w-full py-4 bg-primary-container text-on-primary-container font-bold text-label-caps rounded-xl shadow-lg shadow-primary-container/20 hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">bolt</span>
+                        Compress PDF
+                    </button>
+<div class="flex items-center justify-center gap-4 py-2">
+<div class="flex items-center gap-1 text-on-surface-variant opacity-50">
+<span class="material-symbols-outlined text-sm">lock</span>
+<span class="text-[10px] font-label-caps">Secure SSL</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant opacity-50">
+<span class="material-symbols-outlined text-sm">delete_sweep</span>
+<span class="text-[10px] font-label-caps">Auto-delete 2h</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+        // Micro-interactions
+        const dropZone = document.getElementById('drop-zone');
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-primary-container', 'bg-primary-container/5');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-primary-container', 'bg-primary-container/5');
+        });
+
+        // Range slider value update simulation
+        const range = document.querySelector('.custom-range');
+        const badge = document.querySelector('.bg-primary-container\\/20');
+        
+        range.addEventListener('input', (e) => {
+            badge.textContent = `${e.target.value}%`;
+            // Subtle feedback effect
+            badge.classList.add('scale-110');
+            setTimeout(() => badge.classList.remove('scale-110'), 100);
+        });
+    </script>
+
+
+
+
+</body></html>
