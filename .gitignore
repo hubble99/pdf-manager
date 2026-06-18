@@ -55,6 +55,11 @@ backend/logs/
 htmlcov/
 .coverage
 frontend/coverage/
+backend/test*.pdf
+backend/test*.png
+
+# ── Assets ───────────────────────────────────────────────────────────────────────
+ui_images/
 
 # -- AI Documentation -------------------------------------------------------------
 agent_docs/
