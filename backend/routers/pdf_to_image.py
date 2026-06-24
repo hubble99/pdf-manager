@@ -20,6 +20,7 @@ async def pdf_to_image_endpoint(
     page_ranges: str = Form(default=""),
     format: str = Form(default="png"),
     dpi: int = Form(default=150),
+    output_filename: str = Form(default=""),
 ):
     """
     Convert PDF pages to images.
@@ -39,8 +40,11 @@ async def pdf_to_image_endpoint(
 
         temp_path = await save_upload(file, subdir="pdf_to_image")
         
-        # Derive clean base name from original filename (no UUID, no extension)
-        clean_name = sanitize_stem(file.filename or "document")
+        # Derive clean base name from original filename or provided output_filename
+        if output_filename:
+            clean_name = sanitize_stem(output_filename)
+        else:
+            clean_name = sanitize_stem(file.filename or "document")
 
         try:
             out_path, pages_exported, is_zip = pdf_to_image(
