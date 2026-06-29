@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  Activity,
   FolderOpen,
   HardDrive,
   History,
   Info,
   Moon,
   Palette,
-  Server,
   Settings,
   Trash2,
   Loader2,
   Waves,
 } from 'lucide-react';
 import apiClient from '../api/client';
-import { API_BASE_URL } from '../api/config';
 import { getHistory, clearHistory } from '../utils/historyStore';
 import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
@@ -38,8 +35,6 @@ export function SettingsPage() {
   const { showToast } = useToast();
   const { theme, setTheme } = useTheme();
   const [outDir, setOutDir] = useState('');
-  const [latency, setLatency] = useState<number | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
@@ -67,22 +62,6 @@ export function SettingsPage() {
     const paths = await openFilePicker({ multiple: false, title: 'Select Output Folder' });
     if (paths?.[0]) {
       setOutDir(paths[0]);
-    }
-  };
-
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setLatency(null);
-    const start = performance.now();
-    try {
-      await apiClient.get('/health');
-      const end = performance.now();
-      setLatency(Math.round(end - start));
-      showToast({ type: 'success', title: 'Connection OK', message: 'Backend is reachable and healthy.' });
-    } catch {
-      showToast({ type: 'error', title: 'Connection Failed', message: 'Could not reach the backend server.' });
-    } finally {
-      setIsTesting(false);
     }
   };
 
@@ -214,30 +193,6 @@ export function SettingsPage() {
                 ? 'Click Browse to select a folder using the native file dialog.'
                 : 'Running in browser mode — paste the directory path manually. The Browse button requires the Tauri desktop app.'}
             </p>
-          </section>
-
-          {/* Backend Connection */}
-          <section className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Server size={18} color="var(--accent)" /> Backend Connection
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ flex: 1 }}>
-                <label className="input-label">API Base URL</label>
-                <input type="text" className="input" value={API_BASE_URL} readOnly style={{ background: 'var(--surface-container-high)', cursor: 'not-allowed' }} />
-              </div>
-              <div style={{ paddingTop: 20 }}>
-                <button className="btn btn-secondary" onClick={handleTestConnection} disabled={isTesting}>
-                  {isTesting ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Activity size={15} />}
-                  Test Connection
-                </button>
-              </div>
-            </div>
-            {latency !== null && (
-              <div style={{ fontSize: 13, color: 'var(--success)' }}>
-                Response time: {latency} ms
-              </div>
-            )}
           </section>
 
           {/* Temp Files */}

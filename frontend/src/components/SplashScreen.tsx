@@ -22,7 +22,7 @@ async function pingHealth(): Promise<boolean> {
 
 export function SplashScreen({ onReady, onError }: SplashScreenProps) {
   const [progress, setProgress] = useState(0);
-  const [statusText, setStatusText] = useState('Starting backend engine...');
+  const [statusText, setStatusText] = useState('Starting...');
   const [timedOut, setTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
@@ -48,14 +48,14 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
       if (elapsed >= MAX_WAIT_MS) {
         clearInterval(progressInterval);
         setTimedOut(true);
-        setStatusText('Backend did not start in time.');
+        setStatusText('Please wait...');
         onError();
         return;
       }
 
       const attempt = Math.floor(elapsed / POLL_INTERVAL_MS) + 1;
-      if (attempt <= 3) setStatusText('Starting backend engine...');
-      else if (attempt <= 8) setStatusText('Loading PDF libraries...');
+      if (attempt <= 3) setStatusText('Starting...');
+      else if (attempt <= 8) setStatusText('Loading...');
       else setStatusText('Almost ready...');
 
       const ok = await pingHealth();
@@ -156,10 +156,10 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
             <AlertCircle size={32} color="var(--error)" />
             <div>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', marginBottom: 6 }}>
-                Backend Failed to Start
+                Please wait...
               </div>
               <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', lineHeight: 1.5 }}>
-                Could not connect to the processing engine. The backend may have crashed or your antivirus may have blocked it.
+                Please wait...
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
@@ -227,7 +227,7 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
             </div>
 
             <p style={{ fontSize: 11, color: 'var(--outline)', textAlign: 'center', margin: 0 }}>
-              Initializing PDF processing engine…
+              Please wait...
             </p>
           </>
         )}
