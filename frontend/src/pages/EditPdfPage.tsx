@@ -216,17 +216,29 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
     ref
   ) => {
     const [image] = useImage(`data:image/png;base64,${page.data}`);
-    const [editingText, setEditingText] = useState<{ id: string; x: number; y: number; text: string; isNew?: boolean } | null>(null);
+    const [textInputState, setTextInputState] = useState<{
+      visible: boolean;
+      x: number;
+      y: number;
+      value: string;
+      editingId: string | null;
+    }>({
+      visible: false,
+      x: 0,
+      y: 0,
+      value: '',
+      editingId: null,
+    });
     const isDrawing = useRef(false);
     const currentShapeId = useRef<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
-      if (editingText && textareaRef.current) {
+      if (textInputState.visible && textareaRef.current) {
         textareaRef.current.style.height = 'auto';
         textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
       }
-    }, [editingText?.text]);
+    }, [textInputState.value, textInputState.visible]);
 
     // Save to history
     const pushToHistory = useCallback((nextState: KonvaObject[]) => {
@@ -245,7 +257,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
     }, [history, historyIndex, triggerHistoryChange]);
 
     const handleMouseDown = (e: any) => {
-      if (activeTool === 'select' || activeTool === 'eraser' || editingText) return;
+      if (activeTool === 'select' || activeTool === 'eraser' || activeTool === 'text' || textInputState.visible) return;
 
       const stage = e.target.getStage();
       const pos = stage.getPointerPosition();
@@ -371,6 +383,29 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       pushToHistory(nextObjs);
     };
 
+    const handleStageClick = (e: any) => {
+      if (activeTool !== 'text') return;
+      if (textInputState.visible) return;
+      
+      const stage = e.target.getStage();
+      if (!stage) return;
+      
+      // Let handleTextDoubleClick handle clicks on text objects
+      const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
+      if (!clickedOnEmpty) return;
+
+      const pointerPos = stage.getPointerPosition();
+      if (!pointerPos) return;
+
+      setTextInputState({
+        visible: true,
+        x: pointerPos.x,
+        y: pointerPos.y,
+        value: '',
+        editingId: null,
+      });
+    };
+
     const handleTextDoubleClick = (e: any, textObj: TextObj) => {
       e.cancelBubble = true;
       const textPosition = e.target.getAbsolutePosition();
@@ -387,40 +422,62 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       // Update Toolbar state to match this text
       onTextSelected(textObj);
       
-      setEditingText({
-        id: textObj.id,
+      setTextInputState({
+        visible: true,
         x: textPosition.x,
         y: textPosition.y,
-        text: textObj.text,
-        isNew: false,
+        value: textObj.text,
+        editingId: textObj.id,
       });
     };
 
-    const handleTextSubmit = (newText: string) => {
-      if (!editingText) return;
+    const commitTextInput = () => {
+      if (!textInputState.visible) return;
+      const val = textInputState.value.trim();
       
-      const trimmedText = newText.trim();
-      
-      if (!trimmedText) {
-        // Delete the Konva object if empty
-        const nextObjs = objects.filter((o) => o.id !== editingText.id);
-        setObjects(nextObjs);
-        pushToHistory(nextObjs);
+      if (textInputState.editingId) {
+        if (!val) {
+          // Delete the Konva object if empty
+          const nextObjs = objects.filter((o) => o.id !== textInputState.editingId);
+          setObjects(nextObjs);
+          pushToHistory(nextObjs);
+        } else {
+          // Update existing text
+          const nextObjs = objects.map((obj) => {
+            if (obj.id === textInputState.editingId && obj.type === 'text') {
+              return {
+                ...obj,
+                text: val,
+                visible: true,
+              };
+            }
+            return obj;
+          });
+          setObjects(nextObjs);
+          pushToHistory(nextObjs);
+        }
       } else {
-        const nextObjs = objects.map((obj) => {
-          if (obj.id === editingText.id && obj.type === 'text') {
-            return {
-              ...obj,
-              text: trimmedText,
-              visible: true,
-            };
-          }
-          return obj;
-        });
-        setObjects(nextObjs);
-        pushToHistory(nextObjs);
+        // Create new text
+        if (val) {
+          const fontStyle = `${isBold ? 'bold' : ''} ${isItalic ? 'italic' : ''}`.trim() || 'normal';
+          const newText: TextObj = {
+            id: generateId(),
+            type: 'text',
+            x: textInputState.x,
+            y: textInputState.y - fontSize / 2, // Center vertically
+            text: val,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            fill: color,
+            fontStyle: fontStyle,
+            visible: true,
+          };
+          const nextObjs = [...objects, newText];
+          setObjects(nextObjs);
+          pushToHistory(nextObjs);
+        }
       }
-      setEditingText(null);
+      setTextInputState({ visible: false, x: 0, y: 0, value: '', editingId: null });
     };
 
     return (
@@ -447,6 +504,8 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           onTouchStart={handleMouseDown}
           onTouchMove={handleMouseMove}
           onTouchEnd={handleMouseUp}
+          onClick={handleStageClick}
+          onTap={handleStageClick}
           style={{ cursor: activeTool === 'select' ? 'default' : activeTool === 'eraser' ? 'cell' : 'crosshair' }}
         >
           <Layer>
@@ -564,38 +623,36 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           </Layer>
         </Stage>
 
-        {editingText && (
+        {textInputState.visible && (
           <textarea
             ref={textareaRef}
-            value={editingText.text}
-            onChange={(e) => setEditingText({ ...editingText, text: e.target.value })}
-            onBlur={(e) => handleTextSubmit(e.target.value)}
+            value={textInputState.value}
+            onChange={(e) => setTextInputState((prev) => ({ ...prev, value: e.target.value }))}
+            onBlur={commitTextInput}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleTextSubmit(editingText.text);
+                commitTextInput();
               } else if (e.key === 'Escape') {
                 e.preventDefault();
-                if (editingText.isNew) {
-                  const nextObjs = objects.filter((o) => o.id !== editingText.id);
-                  setObjects(nextObjs);
-                } else {
+                if (textInputState.editingId) {
+                  // Restore text visibility
                   const nextObjs = objects.map((obj) => {
-                    if (obj.id === editingText.id) {
+                    if (obj.id === textInputState.editingId) {
                       return { ...obj, visible: true };
                     }
                     return obj;
                   });
                   setObjects(nextObjs);
                 }
-                setEditingText(null);
+                setTextInputState({ visible: false, x: 0, y: 0, value: '', editingId: null });
               }
             }}
             autoFocus
             style={{
               position: 'absolute',
-              top: `${editingText.y}px`,
-              left: `${editingText.x}px`,
+              top: `${textInputState.y}px`,
+              left: `${textInputState.x}px`,
               background: 'transparent',
               color: color,
               border: '1px solid #4A9EFF',
@@ -606,11 +663,12 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
               fontStyle: isItalic ? 'italic' : 'normal',
               outline: 'none',
               resize: 'none',
-              zIndex: 100,
+              zIndex: 1000,
               minWidth: '120px',
               minHeight: '32px',
               padding: '4px',
               overflow: 'hidden',
+              pointerEvents: 'all',
             }}
           />
         )}
@@ -644,7 +702,7 @@ export function EditPdfPage() {
   // Store annotation objects per page index
   const [pageObjects, setPageObjects] = useState<Record<number, KonvaObject[]>>({});
 
-  const [zoom, setZoom] = useState(1.0);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
 
   // Sync active settings when activeTool changes
   useEffect(() => {
@@ -664,19 +722,15 @@ export function EditPdfPage() {
   }, [activeTool]);
 
   const handleZoomIn = () => {
-    setZoom((prev) => Math.min(2.0, prev + 0.25));
+    setZoomLevel((prev) => Math.min(prev + 0.25, 2.0));
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => Math.max(0.25, prev - 0.25));
+    setZoomLevel((prev) => Math.max(prev - 0.25, 0.25));
   };
 
   const handleFitToWidth = () => {
-    if (pages.length === 0) return;
-    const firstPage = pages[0];
-    const viewportWidth = window.innerWidth - 320 - 64;
-    const calculatedZoom = Math.max(0.25, Math.min(2.0, viewportWidth / firstPage.width));
-    setZoom(Math.round(calculatedZoom * 20) / 20);
+    setZoomLevel(1);
   };
 
   // History system per page index
@@ -1302,15 +1356,15 @@ export function EditPdfPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleZoomOut}
-                disabled={pages.length === 0 || zoom <= 0.25}
+                disabled={pages.length === 0 || zoomLevel <= 0.25}
                 title="Zoom Out"
                 style={{
                   background: 'transparent',
-                  color: (pages.length === 0 || zoom <= 0.25) ? '#414752' : '#9898B8',
+                  color: (pages.length === 0 || zoomLevel <= 0.25) ? '#414752' : '#9898B8',
                   border: 'none',
                   padding: '6px',
                   borderRadius: '4px',
-                  cursor: (pages.length === 0 || zoom <= 0.25) ? 'not-allowed' : 'pointer',
+                  cursor: (pages.length === 0 || zoomLevel <= 0.25) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -1318,19 +1372,19 @@ export function EditPdfPage() {
                 <ZoomOut size={16} />
               </button>
               <span style={{ fontSize: '13px', color: '#E8E8F0', minWidth: '40px', textAlign: 'center', fontFamily: 'monospace' }}>
-                {Math.round(zoom * 100)}%
+                {Math.round(zoomLevel * 100)}%
               </span>
               <button
                 onClick={handleZoomIn}
-                disabled={pages.length === 0 || zoom >= 2.0}
+                disabled={pages.length === 0 || zoomLevel >= 2.0}
                 title="Zoom In"
                 style={{
                   background: 'transparent',
-                  color: (pages.length === 0 || zoom >= 2.0) ? '#414752' : '#9898B8',
+                  color: (pages.length === 0 || zoomLevel >= 2.0) ? '#414752' : '#9898B8',
                   border: 'none',
                   padding: '6px',
                   borderRadius: '4px',
-                  cursor: (pages.length === 0 || zoom >= 2.0) ? 'not-allowed' : 'pointer',
+                  cursor: (pages.length === 0 || zoomLevel >= 2.0) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                 }}
@@ -1425,60 +1479,74 @@ export function EditPdfPage() {
                 <p className="text-sm">Please drop a PDF on the left panel to begin editing.</p>
               </div>
             ) : (
-              pages.map((p) => {
-                const isLazy = pages.length > 50;
-                return (
-                  <LazyPageContainer
-                    key={p.index}
-                    width={p.width}
-                    height={p.height}
-                    active={isLazy}
-                  >
-                    <KonvaPageEditor
-                      ref={(el) => {
-                        if (el) {
-                          stageRefs.current[p.index] = el;
-                        } else {
-                          delete stageRefs.current[p.index];
-                        }
-                      }}
-                      page={p}
-                      objects={pageObjects[p.index] || []}
-                      setObjects={(action) => {
-                        setPageObjects((prev) => {
-                          const currentObjs = prev[p.index] || [];
-                          const nextObjs = typeof action === 'function' ? action(currentObjs) : action;
-                          return {
-                            ...prev,
-                            [p.index]: nextObjs,
-                          };
-                        });
-                      }}
-                      activeTool={activeTool}
-                      color={color}
-                      strokeWidth={strokeWidth}
-                      fontFamily={fontFamily}
-                      fontSize={fontSize}
-                      isBold={isBold}
-                      isItalic={isItalic}
-                      onTextSelected={handleTextSelected}
-                      history={{
-                        get: () => pageHistory.current[p.index] || [[]],
-                        set: (val) => {
-                          pageHistory.current[p.index] = val;
-                        },
-                      }}
-                      historyIndex={{
-                        get: () => pageHistoryIndex.current[p.index] ?? 0,
-                        set: (val) => {
-                          pageHistoryIndex.current[p.index] = val;
-                        },
-                      }}
-                      triggerHistoryChange={triggerHistoryChange}
-                    />
-                  </LazyPageContainer>
-                );
-              })
+              <div
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'top center',
+                  transition: 'transform 0.15s ease',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '24px',
+                  alignItems: 'center',
+                  width: '100%',
+                  paddingBottom: '100px',
+                }}
+              >
+                {pages.map((p) => {
+                  const isLazy = pages.length > 50;
+                  return (
+                    <LazyPageContainer
+                      key={p.index}
+                      width={p.width}
+                      height={p.height}
+                      active={isLazy}
+                    >
+                      <KonvaPageEditor
+                        ref={(el) => {
+                          if (el) {
+                            stageRefs.current[p.index] = el;
+                          } else {
+                            delete stageRefs.current[p.index];
+                          }
+                        }}
+                        page={p}
+                        objects={pageObjects[p.index] || []}
+                        setObjects={(action) => {
+                          setPageObjects((prev) => {
+                            const currentObjs = prev[p.index] || [];
+                            const nextObjs = typeof action === 'function' ? action(currentObjs) : action;
+                            return {
+                              ...prev,
+                              [p.index]: nextObjs,
+                            };
+                          });
+                        }}
+                        activeTool={activeTool}
+                        color={color}
+                        strokeWidth={strokeWidth}
+                        fontFamily={fontFamily}
+                        fontSize={fontSize}
+                        isBold={isBold}
+                        isItalic={isItalic}
+                        onTextSelected={handleTextSelected}
+                        history={{
+                          get: () => pageHistory.current[p.index] || [[]],
+                          set: (val) => {
+                            pageHistory.current[p.index] = val;
+                          },
+                        }}
+                        historyIndex={{
+                          get: () => pageHistoryIndex.current[p.index] ?? 0,
+                          set: (val) => {
+                            pageHistoryIndex.current[p.index] = val;
+                          },
+                        }}
+                        triggerHistoryChange={triggerHistoryChange}
+                      />
+                    </LazyPageContainer>
+                  );
+                })}
+              </div>
             )}
           </div>
 
