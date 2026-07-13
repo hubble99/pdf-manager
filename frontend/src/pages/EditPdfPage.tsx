@@ -14,6 +14,10 @@ import {
   Italic,
   Upload,
   Loader2,
+  Trash2,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Line as KonvaLine, Rect as KonvaRect, Ellipse as KonvaEllipse, Text as KonvaText } from 'react-konva';
 import useImage from 'use-image';
@@ -58,6 +62,7 @@ interface TextObj {
   fontFamily: string;
   fill: string;
   fontStyle: string; // 'normal' | 'bold' | 'italic' | 'bold italic'
+  visible?: boolean;
 }
 
 type KonvaObject = DrawingLine | ShapeObj | TextObj;
@@ -211,9 +216,17 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
     ref
   ) => {
     const [image] = useImage(`data:image/png;base64,${page.data}`);
+    const [editingText, setEditingText] = useState<{ id: string; x: number; y: number; text: string; isNew?: boolean } | null>(null);
     const isDrawing = useRef(false);
     const currentShapeId = useRef<string | null>(null);
-    const [editingText, setEditingText] = useState<{ id: string; x: number; y: number; text: string } | null>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+      if (editingText && textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      }
+    }, [editingText?.text]);
 
     // Save to history
     const pushToHistory = useCallback((nextState: KonvaObject[]) => {
@@ -272,15 +285,23 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           type: 'text',
           x: pos.x,
           y: pos.y - fontSize / 2, // Center vertically
-          text: 'Double click to edit',
+          text: 'Text',
           fontSize: fontSize,
           fontFamily: fontFamily,
           fill: color,
           fontStyle: fontStyle,
+          visible: false,
         };
         const nextObjs = [...objects, newText];
         setObjects(nextObjs);
-        pushToHistory(nextObjs);
+        
+        setEditingText({
+          id: newId,
+          x: pos.x,
+          y: pos.y - fontSize / 2,
+          text: '',
+          isNew: true,
+        });
       }
     };
 
@@ -354,6 +375,15 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       e.cancelBubble = true;
       const textPosition = e.target.getAbsolutePosition();
       
+      // Hide original Konva text object during edit
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === textObj.id) {
+          return { ...obj, visible: false };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      
       // Update Toolbar state to match this text
       onTextSelected(textObj);
       
@@ -362,24 +392,34 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
         x: textPosition.x,
         y: textPosition.y,
         text: textObj.text,
+        isNew: false,
       });
     };
 
     const handleTextSubmit = (newText: string) => {
       if (!editingText) return;
       
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === editingText.id && obj.type === 'text') {
-          return {
-            ...obj,
-            text: newText.trim() || 'Double click to edit',
-          };
-        }
-        return obj;
-      });
+      const trimmedText = newText.trim();
       
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
+      if (!trimmedText) {
+        // Delete the Konva object if empty
+        const nextObjs = objects.filter((o) => o.id !== editingText.id);
+        setObjects(nextObjs);
+        pushToHistory(nextObjs);
+      } else {
+        const nextObjs = objects.map((obj) => {
+          if (obj.id === editingText.id && obj.type === 'text') {
+            return {
+              ...obj,
+              text: trimmedText,
+              visible: true,
+            };
+          }
+          return obj;
+        });
+        setObjects(nextObjs);
+        pushToHistory(nextObjs);
+      }
       setEditingText(null);
     };
 
@@ -509,6 +549,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                     fontFamily={obj.fontFamily}
                     fontStyle={obj.fontStyle}
                     fill={obj.fill}
+                    visible={obj.visible !== false}
                     draggable={activeTool === 'select'}
                     onClick={(e) => handleObjectClick(e, obj.id)}
                     onTouchEnd={(e) => handleObjectClick(e, obj.id)}
@@ -525,6 +566,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
 
         {editingText && (
           <textarea
+            ref={textareaRef}
             value={editingText.text}
             onChange={(e) => setEditingText({ ...editingText, text: e.target.value })}
             onBlur={(e) => handleTextSubmit(e.target.value)}
@@ -532,6 +574,21 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleTextSubmit(editingText.text);
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                if (editingText.isNew) {
+                  const nextObjs = objects.filter((o) => o.id !== editingText.id);
+                  setObjects(nextObjs);
+                } else {
+                  const nextObjs = objects.map((obj) => {
+                    if (obj.id === editingText.id) {
+                      return { ...obj, visible: true };
+                    }
+                    return obj;
+                  });
+                  setObjects(nextObjs);
+                }
+                setEditingText(null);
               }
             }}
             autoFocus
@@ -539,18 +596,21 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
               position: 'absolute',
               top: `${editingText.y}px`,
               left: `${editingText.x}px`,
-              background: '#1E1E2E',
-              color: '#E8E8F0',
+              background: 'transparent',
+              color: color,
               border: '1px solid #4A9EFF',
               borderRadius: '4px',
               fontFamily: fontFamily,
               fontSize: `${fontSize}px`,
+              fontWeight: isBold ? 'bold' : 'normal',
+              fontStyle: isItalic ? 'italic' : 'normal',
               outline: 'none',
-              resize: 'both',
+              resize: 'none',
               zIndex: 100,
-              minWidth: '150px',
-              minHeight: '40px',
+              minWidth: '120px',
+              minHeight: '32px',
               padding: '4px',
+              overflow: 'hidden',
             }}
           />
         )}
@@ -583,6 +643,41 @@ export function EditPdfPage() {
 
   // Store annotation objects per page index
   const [pageObjects, setPageObjects] = useState<Record<number, KonvaObject[]>>({});
+
+  const [zoom, setZoom] = useState(1.0);
+
+  // Sync active settings when activeTool changes
+  useEffect(() => {
+    if (activeTool === 'pen') {
+      setColor('#4A9EFF');
+      setStrokeWidth(3);
+    } else if (activeTool === 'highlighter') {
+      setColor('#FFFF00');
+      setStrokeWidth(12);
+    } else if (activeTool === 'text') {
+      setColor('#000000');
+      setFontSize(16);
+    } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
+      setColor('#4A9EFF');
+      setStrokeWidth(2);
+    }
+  }, [activeTool]);
+
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(2.0, prev + 0.25));
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(0.25, prev - 0.25));
+  };
+
+  const handleFitToWidth = () => {
+    if (pages.length === 0) return;
+    const firstPage = pages[0];
+    const viewportWidth = window.innerWidth - 320 - 64;
+    const calculatedZoom = Math.max(0.25, Math.min(2.0, viewportWidth / firstPage.width));
+    setZoom(Math.round(calculatedZoom * 20) / 20);
+  };
 
   // History system per page index
   const pageHistory = useRef<Record<number, KonvaObject[][]>>({});
@@ -822,17 +917,57 @@ export function EditPdfPage() {
             padding: '20px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px',
+            gap: '16px',
             overflowY: 'auto',
           }}
         >
-          <div className="flex items-center gap-2 mb-2">
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-1">
             <span className="text-[#4A9EFF] font-bold text-lg">Edit PDF</span>
             <span className="text-xs px-2 py-0.5 rounded bg-[#2A2A3E] text-[#9898B8] font-semibold">BETA</span>
           </div>
 
-          {/* Upload Section */}
-          {!file ? (
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileBrowse}
+            accept=".pdf"
+            className="hidden"
+          />
+
+          {/* Zona 1 — File Info (only when file is uploaded) */}
+          {file && (
+            <div
+              className="card"
+              style={{
+                padding: '8px 12px',
+                background: '#12121A',
+                border: '1px solid #2A2A3E',
+                borderRadius: '8px',
+                maxHeight: '64px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Filename name={file.name} className="text-xs font-semibold text-[#E8E8F0] truncate block" />
+                <span className="text-[10px] text-[#9898B8] block mt-0.5">{formatBytes(file.size)}</span>
+              </div>
+              <button
+                onClick={handleRemoveFile}
+                className="text-[#9898B8] hover:text-[#ffb4ab] transition-colors p-1"
+                title="Clear PDF"
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Zona 2 — Drop Zone (only when no file is uploaded) */}
+          {!file && (
             <div
               className={`drop-zone ${isDragOver ? 'drag-over' : ''}`}
               onDragOver={handleDragOver}
@@ -847,105 +982,296 @@ export function EditPdfPage() {
                 background: '#12121A',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
-                height: '160px',
-                maxHeight: '160px',
+                height: '120px',
+                maxHeight: '120px',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 alignItems: 'center',
               }}
             >
-              <Upload className="mx-auto mb-2 text-[#9898B8]" size={24} />
-              <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#E8E8F0', marginBottom: '4px' }}>Drag & Drop PDF</p>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>or click to browse local files</span>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileBrowse}
-                accept=".pdf"
-                className="hidden"
-              />
+              <Upload className="mx-auto mb-1.5 text-[#9898B8]" size={20} />
+              <p style={{ fontSize: '0.8rem', fontWeight: 500, color: '#E8E8F0', marginBottom: '2px' }}>Drag & Drop PDF</p>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>or click to browse</span>
             </div>
-          ) : (
-            <div className="card" style={{ padding: '16px', background: '#12121A', border: '1px solid #2A2A3E', borderRadius: '8px' }}>
-              <div className="flex items-start justify-between gap-2">
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <Filename name={file.name} className="text-sm font-semibold text-[#E8E8F0] truncate block" />
-                  <span className="text-xs text-[#9898B8] mt-1 block">{formatBytes(file.size)}</span>
-                </div>
+          )}
+
+          {/* Loading status under file card */}
+          {file && loading && (
+            <div className="flex items-center gap-2 text-[#9898B8] text-xs">
+              <Loader2 className="animate-spin text-[#4A9EFF]" size={14} />
+              <span>Converting PDF pages to images...</span>
+            </div>
+          )}
+
+          {/* Zona 3 — Vertical Tools */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {[
+              { id: 'select', label: 'Select', icon: MousePointer },
+              { id: 'pen', label: 'Pen', icon: Pen },
+              { id: 'highlighter', label: 'Highlighter', icon: Highlighter },
+              { id: 'text', label: 'Text', icon: Type },
+              { id: 'rect', label: 'Rect', icon: Square },
+              { id: 'circle', label: 'Circle', icon: CircleIcon },
+              { id: 'line', label: 'Line', icon: Minus },
+              { id: 'eraser', label: 'Eraser', icon: Eraser },
+            ].map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTool === t.id;
+              return (
                 <button
-                  onClick={handleRemoveFile}
-                  className="text-[#9898B8] hover:text-[#ffb4ab] transition-colors"
-                  title="Remove document"
+                  key={t.id}
+                  onClick={() => setActiveTool(t.id as Tool)}
+                  disabled={pages.length === 0}
+                  style={{
+                    width: '100%',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '0 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    transition: 'all 0.2s ease',
+                    background: isActive ? '#4A9EFF' : 'transparent',
+                    color: isActive ? '#ffffff' : '#9898B8',
+                    opacity: pages.length === 0 ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive && pages.length > 0) e.currentTarget.style.background = '#2A2A3E';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.background = 'transparent';
+                  }}
                 >
-                  Clear
+                  <Icon size={16} />
+                  <span>{t.label}</span>
                 </button>
-              </div>
-              
-              {loading && (
-                <div className="flex items-center gap-2 mt-4 text-[#9898B8] text-xs">
-                  <Loader2 className="animate-spin text-[#4A9EFF]" size={16} />
-                  <span>Converting PDF pages to images...</span>
-                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ borderBottom: '1px solid #2A2A3E' }} />
+
+          {/* Zona 4 — Contextual Controls */}
+          {pages.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {activeTool === 'pen' && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#9898B8]">Size</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                        {strokeWidth}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={strokeWidth}
+                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTool === 'highlighter' && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#9898B8]">Size</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                        {strokeWidth}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="30"
+                      value={strokeWidth}
+                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTool === 'text' && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Font</span>
+                    <select
+                      value={fontFamily}
+                      onChange={(e) => setFontFamily(e.target.value)}
+                      style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', cursor: 'pointer', fontSize: '13px' }}
+                    >
+                      {FONT_FAMILIES.map((font) => (
+                        <option key={font} value={font} style={{ fontFamily: font }}>
+                          {font}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Size</span>
+                    <input
+                      type="number"
+                      min="8"
+                      max="72"
+                      value={fontSize}
+                      onChange={(e) => setFontSize(Math.max(8, Math.min(72, Number(e.target.value))))}
+                      style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', fontSize: '13px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      onClick={() => setIsBold(!isBold)}
+                      style={{ flex: 1, height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isBold ? '#4A9EFF' : '#12121A', border: '1px solid #2A2A3E', borderRadius: '6px', color: isBold ? '#ffffff' : '#9898B8', cursor: 'pointer' }}
+                    >
+                      <Bold size={16} />
+                    </button>
+                    <button
+                      onClick={() => setIsItalic(!isItalic)}
+                      style={{ flex: 1, height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isItalic ? '#4A9EFF' : '#12121A', border: '1px solid #2A2A3E', borderRadius: '6px', color: isItalic ? '#ffffff' : '#9898B8', cursor: 'pointer' }}
+                    >
+                      <Italic size={16} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {(activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                    <input
+                      type="color"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#9898B8]">Border Size</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                        {strokeWidth}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={strokeWidth}
+                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTool === 'select' && (
+                <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
+                  Click object to select. Drag to move.
+                </span>
+              )}
+
+              {activeTool === 'eraser' && (
+                <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
+                  Click any object to delete it.
+                </span>
               )}
             </div>
           )}
 
-          {/* Output Filename Area */}
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label className="text-xs font-semibold text-[#9898B8]" htmlFor="edit-output-name">
-              Output Filename
-            </label>
-            <input
-              id="edit-output-name"
-              type="text"
-              value={outputFilename}
-              onChange={(e) => setOutputFilename(e.target.value)}
-              placeholder="edited_document"
-              disabled={!file || loading}
+          {/* Zona 5 — Bottom Controls */}
+          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label className="text-xs font-semibold text-[#9898B8]" htmlFor="edit-output-name">
+                Output Filename
+              </label>
+              <input
+                id="edit-output-name"
+                type="text"
+                value={outputFilename}
+                onChange={(e) => setOutputFilename(e.target.value)}
+                placeholder="edited_document"
+                disabled={!file || loading}
+                style={{
+                  width: '100%',
+                  background: '#12121A',
+                  border: '1px solid #2A2A3E',
+                  color: '#E8E8F0',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  outline: 'none',
+                  fontSize: '14px',
+                }}
+              />
+            </div>
+
+            <button
+              onClick={handleSave}
+              disabled={!file || loading || saving || pages.length === 0}
               style={{
                 width: '100%',
-                background: '#12121A',
-                border: '1px solid #2A2A3E',
-                color: '#E8E8F0',
-                padding: '10px 12px',
+                background: (!file || loading || saving || pages.length === 0) ? '#2A2A3E' : '#4A9EFF',
+                color: '#ffffff',
+                padding: '12px',
                 borderRadius: '8px',
-                outline: 'none',
+                fontWeight: 600,
                 fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                border: 'none',
+                cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
+                transition: 'background 0.2s ease',
               }}
-            />
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="animate-spin" size={16} />
+                  <span>Saving PDF...</span>
+                </>
+              ) : (
+                <span>Save as PDF</span>
+              )}
+            </button>
           </div>
-
-          {/* Save PDF Button */}
-          <button
-            onClick={handleSave}
-            disabled={!file || loading || saving || pages.length === 0}
-            style={{
-              width: '100%',
-              background: (!file || loading || saving || pages.length === 0) ? '#2A2A3E' : '#4A9EFF',
-              color: '#ffffff',
-              padding: '12px',
-              borderRadius: '8px',
-              fontWeight: 600,
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              border: 'none',
-              cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
-              transition: 'background 0.2s ease',
-            }}
-          >
-            {saving ? (
-              <>
-                <Loader2 className="animate-spin" size={16} />
-                <span>Saving PDF...</span>
-              </>
-            ) : (
-              <span>Save as PDF</span>
-            )}
-          </button>
         </div>
 
         {/* Right Panel: Toolbar + Canvas Editor viewport */}
@@ -972,56 +1298,45 @@ export function EditPdfPage() {
               zIndex: 10,
             }}
           >
-            {/* Tool Selector Buttons */}
-            <div className="flex items-center gap-1">
-              {[
-                { id: 'select', icon: MousePointer, label: 'Select' },
-                { id: 'pen', icon: Pen, label: 'Pen' },
-                { id: 'highlighter', icon: Highlighter, label: 'Highlighter' },
-                { id: 'text', icon: Type, label: 'Text' },
-                { id: 'rect', icon: Square, label: 'Rect' },
-                { id: 'circle', icon: CircleIcon, label: 'Circle' },
-                { id: 'line', icon: Minus, label: 'Line' },
-                { id: 'eraser', icon: Eraser, label: 'Eraser' },
-              ].map((tool) => {
-                const Icon = tool.icon;
-                const isActive = activeTool === tool.id;
-                return (
-                  <button
-                    key={tool.id}
-                    onClick={() => setActiveTool(tool.id as Tool)}
-                    disabled={pages.length === 0}
-                    title={tool.label}
-                    style={{
-                      background: isActive ? '#4A9EFF' : 'transparent',
-                      color: isActive ? '#ffffff' : '#9898B8',
-                      border: 'none',
-                      padding: '6px 10px',
-                      borderRadius: '4px',
-                      cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '13px',
-                      fontWeight: 500,
-                      transition: 'all 0.15s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive && pages.length > 0) {
-                        e.currentTarget.style.background = '#1E1E2E';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'transparent';
-                      }
-                    }}
-                  >
-                    <Icon size={16} />
-                    <span className="hidden xl:inline">{tool.label}</span>
-                  </button>
-                );
-              })}
+            {/* Zoom Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleZoomOut}
+                disabled={pages.length === 0 || zoom <= 0.25}
+                title="Zoom Out"
+                style={{
+                  background: 'transparent',
+                  color: (pages.length === 0 || zoom <= 0.25) ? '#414752' : '#9898B8',
+                  border: 'none',
+                  padding: '6px',
+                  borderRadius: '4px',
+                  cursor: (pages.length === 0 || zoom <= 0.25) ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <ZoomOut size={16} />
+              </button>
+              <span style={{ fontSize: '13px', color: '#E8E8F0', minWidth: '40px', textAlign: 'center', fontFamily: 'monospace' }}>
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                onClick={handleZoomIn}
+                disabled={pages.length === 0 || zoom >= 2.0}
+                title="Zoom In"
+                style={{
+                  background: 'transparent',
+                  color: (pages.length === 0 || zoom >= 2.0) ? '#414752' : '#9898B8',
+                  border: 'none',
+                  padding: '6px',
+                  borderRadius: '4px',
+                  cursor: (pages.length === 0 || zoom >= 2.0) ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <ZoomIn size={16} />
+              </button>
             </div>
 
             {/* Separator */}
@@ -1066,191 +1381,30 @@ export function EditPdfPage() {
             </div>
 
             {/* Separator */}
-            {pages.length > 0 && <div style={{ width: '1px', height: '24px', background: '#2A2A3E' }} />}
+            <div style={{ width: '1px', height: '24px', background: '#2A2A3E' }} />
 
-            {/* Contextual Controls based on active tool */}
-            {pages.length > 0 && (
-              <div className="flex items-center gap-4 text-xs text-[#9898B8] ml-auto">
-                {/* Pen / Highlighter contextual controls */}
-                {(activeTool === 'pen' || activeTool === 'highlighter') && (
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-xs">Stroke</span>
-                    {/* Color Presets */}
-                    <div className="flex items-center gap-1.5">
-                      {['#4A9EFF', '#ff6b6b', '#51cf66', '#fcc419', '#ffffff', '#000000'].map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => setColor(preset)}
-                          style={{
-                            width: '18px',
-                            height: '18px',
-                            borderRadius: '50%',
-                            background: preset,
-                            border: color === preset ? '2px solid #E8E8F0' : '1px solid #2A2A3E',
-                            cursor: 'pointer',
-                            padding: 0,
-                          }}
-                        />
-                      ))}
-                      {/* Color Picker input */}
-                      <input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setColor(e.target.value)}
-                        style={{
-                          width: '20px',
-                          height: '20px',
-                          border: 'none',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          padding: 0,
-                        }}
-                      />
-                    </div>
-                    {/* Width Slider */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="20"
-                        value={strokeWidth}
-                        onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                        style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                      />
-                      <span className="text-mono px-1.5 py-0.5 rounded bg-[#1E1E2E] border border-[#2A2A3E] text-[#E8E8F0]">
-                        {strokeWidth}px
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Text contextual controls */}
-                {activeTool === 'text' && (
-                  <div className="flex items-center gap-3">
-                    {/* Font Dropdown */}
-                    <select
-                      value={fontFamily}
-                      onChange={(e) => setFontFamily(e.target.value)}
-                      style={{
-                        background: '#1E1E2E',
-                        border: '1px solid #2A2A3E',
-                        color: '#E8E8F0',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        outline: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {FONT_FAMILIES.map((font) => (
-                        <option key={font} value={font} style={{ fontFamily: font }}>
-                          {font}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Font Size Input */}
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        min="8"
-                        max="72"
-                        value={fontSize}
-                        onChange={(e) => setFontSize(Math.max(8, Math.min(72, Number(e.target.value))))}
-                        style={{
-                          width: '46px',
-                          background: '#1E1E2E',
-                          border: '1px solid #2A2A3E',
-                          color: '#E8E8F0',
-                          padding: '4px',
-                          borderRadius: '4px',
-                          textAlign: 'center',
-                          outline: 'none',
-                        }}
-                      />
-                      <span>pt</span>
-                    </div>
-
-                    {/* Bold / Italic Toggles */}
-                    <div className="flex items-center bg-[#1E1E2E] border border-[#2A2A3E] rounded">
-                      <button
-                        onClick={() => setIsBold(!isBold)}
-                        style={{
-                          background: isBold ? '#4A9EFF' : 'transparent',
-                          color: isBold ? '#ffffff' : '#9898B8',
-                          padding: '4px 6px',
-                          border: 'none',
-                          borderRadius: '3px 0 0 3px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Bold size={14} />
-                      </button>
-                      <button
-                        onClick={() => setIsItalic(!isItalic)}
-                        style={{
-                          background: isItalic ? '#4A9EFF' : 'transparent',
-                          color: isItalic ? '#ffffff' : '#9898B8',
-                          padding: '4px 6px',
-                          border: 'none',
-                          borderRadius: '0 3px 3px 0',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Italic size={14} />
-                      </button>
-                    </div>
-
-                    {/* Text Color Picker */}
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      style={{
-                        width: '24px',
-                        height: '24px',
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* Shape / Line contextual controls */}
-                {(activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') && (
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-xs">Shape Outline</span>
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      style={{
-                        width: '20px',
-                        height: '20px',
-                        border: 'none',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        padding: 0,
-                      }}
-                    />
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="20"
-                        value={strokeWidth}
-                        onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                        style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                      />
-                      <span className="text-mono px-1.5 py-0.5 rounded bg-[#1E1E2E] border border-[#2A2A3E] text-[#E8E8F0]">
-                        {strokeWidth}px
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Fit to Width */}
+            <button
+              onClick={handleFitToWidth}
+              disabled={pages.length === 0}
+              title="Fit to Width"
+              style={{
+                background: 'transparent',
+                color: pages.length === 0 ? '#414752' : '#9898B8',
+                border: 'none',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+              }}
+            >
+              <Maximize2 size={16} />
+              <span>Fit to Width</span>
+            </button>
           </div>
 
           {/* Canvas editor pages area */}
