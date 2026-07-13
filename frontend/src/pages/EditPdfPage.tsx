@@ -1036,7 +1036,8 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 );
               }
               return null;
-            })}
+            });
+          })()}
 
             {textDragRect && (
               <KonvaRect
