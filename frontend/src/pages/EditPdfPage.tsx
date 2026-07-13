@@ -50,6 +50,9 @@ interface ShapeObj {
   height: number;
   stroke: string;
   strokeWidth: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  strokeColor?: string;
 }
 
 interface TextObj {
@@ -63,6 +66,7 @@ interface TextObj {
   fill: string;
   fontStyle: string; // 'normal' | 'bold' | 'italic' | 'bold italic'
   visible?: boolean;
+  width?: number | null;
 }
 
 type KonvaObject = DrawingLine | ShapeObj | TextObj;
@@ -193,6 +197,13 @@ interface KonvaPageEditorProps {
     set: (val: number) => void;
   };
   triggerHistoryChange: () => void;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  shapeFillColor: string;
+  shapeFillOpacity: number;
+  shapeStrokeColor: string;
+  shapeStrokeWidth: number;
+  onShapeSelected?: (shape: ShapeObj) => void;
 }
 
 const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
@@ -212,6 +223,13 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       history,
       historyIndex,
       triggerHistoryChange,
+      selectedIds,
+      setSelectedIds,
+      shapeFillColor,
+      shapeFillOpacity,
+      shapeStrokeColor,
+      shapeStrokeWidth,
+      onShapeSelected,
     },
     ref
   ) => {
@@ -220,20 +238,26 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       visible: boolean;
       x: number;
       y: number;
+      width: number | null;
       value: string;
       editingId: string | null;
+      isAreaText?: boolean;
     }>({
       visible: false,
       x: 0,
       y: 0,
+      width: null,
       value: '',
       editingId: null,
+      isAreaText: false,
     });
+    const textDragStartPos = useRef<{ x: number; y: number } | null>(null);
+    const [textDragRect, setTextDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
     const isDrawing = useRef(false);
     const currentShapeId = useRef<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
     const [selectionRect, setSelectionRect] = useState<{
       x1: number;
       y1: number;
@@ -356,7 +380,15 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
         }
         return;
       }
-      if (activeTool === 'text' || textInputState.visible) return;
+      if (activeTool === 'text') {
+        const stage = e.target.getStage();
+        const pos = stage?.getPointerPosition();
+        if (pos) {
+          textDragStartPos.current = pos;
+        }
+        return;
+      }
+      if (textInputState.visible) return;
 
       const stage = e.target.getStage();
       const pos = stage.getPointerPosition();
@@ -384,8 +416,11 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           y: pos.y,
           width: 0,
           height: 0,
-          stroke: color,
-          strokeWidth: strokeWidth,
+          stroke: shapeStrokeColor,
+          strokeWidth: shapeStrokeWidth,
+          fillColor: activeTool === 'line' ? undefined : shapeFillColor,
+          fillOpacity: activeTool === 'line' ? undefined : shapeFillOpacity,
+          strokeColor: shapeStrokeColor,
         };
         setObjects((prev) => [...prev, newShape]);
       }
@@ -405,6 +440,25 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           setSelectionRect((prev) =>
             prev ? { ...prev, x2: pos.x, y2: pos.y } : null
           );
+        }
+        return;
+      }
+      if (activeTool === 'text') {
+        if (!textDragStartPos.current) return;
+        const stage = e.target.getStage();
+        const pos = stage?.getPointerPosition();
+        if (!pos) return;
+
+        const dx = pos.x - textDragStartPos.current.x;
+        const dy = pos.y - textDragStartPos.current.y;
+
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+          setTextDragRect({
+            x: Math.min(pos.x, textDragStartPos.current.x),
+            y: Math.min(pos.y, textDragStartPos.current.y),
+            w: Math.abs(dx),
+            h: Math.abs(dy),
+          });
         }
         return;
       }
@@ -490,6 +544,46 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
         }
 
         setSelectionRect(null);
+        return;
+      }
+      if (activeTool === 'text') {
+        if (!textDragStartPos.current) return;
+        const stage = ref && (ref as any).current;
+        const pos = stage?.getPointerPosition();
+        if (!pos) {
+          textDragStartPos.current = null;
+          setTextDragRect(null);
+          return;
+        }
+
+        const dx = Math.abs(pos.x - textDragStartPos.current.x);
+        const dy = Math.abs(pos.y - textDragStartPos.current.y);
+        const isDrag = dx > 10 || dy > 10;
+
+        if (isDrag && textDragRect) {
+          setTextInputState({
+            visible: true,
+            x: textDragRect.x,
+            y: textDragRect.y,
+            width: textDragRect.w,
+            value: '',
+            editingId: null,
+            isAreaText: true,
+          });
+        } else {
+          setTextInputState({
+            visible: true,
+            x: textDragStartPos.current.x,
+            y: textDragStartPos.current.y,
+            width: null,
+            value: '',
+            editingId: null,
+            isAreaText: false,
+          });
+        }
+
+        textDragStartPos.current = null;
+        setTextDragRect(null);
         return;
       }
       if (!isDrawing.current) return;
@@ -630,6 +724,13 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       if (activeTool === 'select') {
         e.cancelBubble = true;
         setSelectedIds([objId]);
+        
+        const clickedObj = objects.find((o) => o.id === objId);
+        if (clickedObj && clickedObj.type === 'text') {
+          onTextSelected(clickedObj);
+        } else if (clickedObj && (clickedObj.type === 'rect' || clickedObj.type === 'circle' || clickedObj.type === 'line-shape') && onShapeSelected) {
+          onShapeSelected(clickedObj);
+        }
       } else if (activeTool === 'eraser') {
         e.cancelBubble = true;
         const nextObjs = objects.filter((o) => o.id !== objId);
@@ -681,21 +782,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       
       const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
 
-      if (activeTool === 'text') {
-        if (textInputState.visible) return;
-        if (!clickedOnEmpty) return;
-
-        const pointerPos = stage.getPointerPosition();
-        if (!pointerPos) return;
-
-        setTextInputState({
-          visible: true,
-          x: pointerPos.x,
-          y: pointerPos.y,
-          value: '',
-          editingId: null,
-        });
-      } else if (activeTool === 'select') {
+      if (activeTool === 'select') {
         if (clickedOnEmpty) {
           setSelectedIds([]);
         }
@@ -722,8 +809,10 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
         visible: true,
         x: textPosition.x,
         y: textPosition.y,
+        width: textObj.width || null,
         value: textObj.text,
         editingId: textObj.id,
+        isAreaText: !!textObj.width,
       });
     };
 
@@ -760,20 +849,21 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
             id: generateId(),
             type: 'text',
             x: textInputState.x,
-            y: textInputState.y - fontSize / 2, // Center vertically
+            y: textInputState.isAreaText ? textInputState.y : textInputState.y - fontSize / 2, // Center vertically
             text: val,
             fontSize: fontSize,
             fontFamily: fontFamily,
             fill: color,
             fontStyle: fontStyle,
             visible: true,
+            width: textInputState.isAreaText ? textInputState.width : null,
           };
           const nextObjs = [...objects, newText];
           setObjects(nextObjs);
           pushToHistory(nextObjs);
         }
       }
-      setTextInputState({ visible: false, x: 0, y: 0, value: '', editingId: null });
+      setTextInputState({ visible: false, x: 0, y: 0, width: null, value: '', editingId: null, isAreaText: false });
     };
 
     return (
@@ -815,94 +905,111 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
             )}
           </Layer>
           <Layer>
-            {objects.map((obj) => {
-              if (obj.type === 'line') {
-                return (
-                  <KonvaLine
-                    key={obj.id}
-                    id={obj.id}
-                    points={obj.points}
-                    stroke={obj.stroke}
-                    strokeWidth={obj.strokeWidth}
-                    tension={0.5}
-                    lineCap="round"
-                    lineJoin="round"
-                    opacity={obj.opacity}
-                    draggable={activeTool === 'select'}
-                    onClick={(e) => handleObjectClick(e, obj.id)}
-                    onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDragEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
-                    onTransformEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
-                  />
-                );
-              }
-              if (obj.type === 'rect') {
-                return (
-                  <KonvaRect
-                    key={obj.id}
-                    id={obj.id}
-                    x={obj.x}
-                    y={obj.y}
-                    width={obj.width}
-                    height={obj.height}
-                    stroke={obj.stroke}
-                    strokeWidth={obj.strokeWidth}
-                    draggable={activeTool === 'select'}
-                    onClick={(e) => handleObjectClick(e, obj.id)}
-                    onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDragEnd={(e) => handleDragEnd(e, obj.id)}
-                    onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
-                  />
-                );
-              }
-              if (obj.type === 'circle') {
-                return (
-                  <KonvaEllipse
-                    key={obj.id}
-                    id={obj.id}
-                    x={obj.x + obj.width / 2}
-                    y={obj.y + obj.height / 2}
-                    radiusX={Math.abs(obj.width / 2)}
-                    radiusY={Math.abs(obj.height / 2)}
-                    stroke={obj.stroke}
-                    strokeWidth={obj.strokeWidth}
-                    draggable={activeTool === 'select'}
-                    onClick={(e) => handleObjectClick(e, obj.id)}
-                    onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDragEnd={(e) => {
-                      const nextObjs = objects.map((item) => {
-                        if (item.id === obj.id) {
-                          return {
-                            ...item,
-                            x: e.target.x() - obj.width / 2,
-                            y: e.target.y() - obj.height / 2,
-                          };
-                        }
-                        return item;
-                      });
-                      setObjects(nextObjs);
-                      pushToHistory(nextObjs);
-                    }}
-                    onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
-                  />
-                );
-              }
-              if (obj.type === 'line-shape') {
-                return (
-                  <KonvaLine
-                    key={obj.id}
-                    id={obj.id}
-                    points={[obj.x, obj.y, obj.x + obj.width, obj.y + obj.height]}
-                    stroke={obj.stroke}
-                    strokeWidth={obj.strokeWidth}
-                    draggable={activeTool === 'select'}
-                    onClick={(e) => handleObjectClick(e, obj.id)}
-                    onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
-                    onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
-                  />
-                );
-              }
+            {(() => {
+              const hexToRgba = (hex: string, opacity: number) => {
+                if (!hex) return 'transparent';
+                const r = parseInt(hex.slice(1, 3), 16);
+                const g = parseInt(hex.slice(3, 5), 16);
+                const b = parseInt(hex.slice(5, 7), 16);
+                return `rgba(${r},${g},${b},${opacity / 100})`;
+              };
+
+              return objects.map((obj) => {
+                if (obj.type === 'line') {
+                  return (
+                    <KonvaLine
+                      key={obj.id}
+                      id={obj.id}
+                      points={obj.points}
+                      stroke={obj.stroke}
+                      strokeWidth={obj.strokeWidth}
+                      tension={0.5}
+                      lineCap="round"
+                      lineJoin="round"
+                      opacity={obj.opacity}
+                      draggable={activeTool === 'select'}
+                      onClick={(e) => handleObjectClick(e, obj.id)}
+                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                      onDragEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
+                      onTransformEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
+                    />
+                  );
+                }
+                if (obj.type === 'rect') {
+                  const fillVal = obj.fillColor && obj.fillOpacity !== undefined && obj.fillOpacity > 0
+                    ? hexToRgba(obj.fillColor, obj.fillOpacity)
+                    : 'transparent';
+                  return (
+                    <KonvaRect
+                      key={obj.id}
+                      id={obj.id}
+                      x={obj.x}
+                      y={obj.y}
+                      width={obj.width}
+                      height={obj.height}
+                      stroke={obj.strokeColor || obj.stroke}
+                      strokeWidth={obj.strokeWidth}
+                      fill={fillVal}
+                      draggable={activeTool === 'select'}
+                      onClick={(e) => handleObjectClick(e, obj.id)}
+                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                      onDragEnd={(e) => handleDragEnd(e, obj.id)}
+                      onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
+                    />
+                  );
+                }
+                if (obj.type === 'circle') {
+                  const fillVal = obj.fillColor && obj.fillOpacity !== undefined && obj.fillOpacity > 0
+                    ? hexToRgba(obj.fillColor, obj.fillOpacity)
+                    : 'transparent';
+                  return (
+                    <KonvaEllipse
+                      key={obj.id}
+                      id={obj.id}
+                      x={obj.x + obj.width / 2}
+                      y={obj.y + obj.height / 2}
+                      radiusX={Math.abs(obj.width / 2)}
+                      radiusY={Math.abs(obj.height / 2)}
+                      stroke={obj.strokeColor || obj.stroke}
+                      strokeWidth={obj.strokeWidth}
+                      fill={fillVal}
+                      draggable={activeTool === 'select'}
+                      onClick={(e) => handleObjectClick(e, obj.id)}
+                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                      onDragEnd={(e) => {
+                        const nextObjs = objects.map((item) => {
+                          if (item.id === obj.id) {
+                            return {
+                              ...item,
+                              x: e.target.x() - obj.width / 2,
+                              y: e.target.y() - obj.height / 2,
+                            };
+                          }
+                          return item;
+                        });
+                        setObjects(nextObjs);
+                        pushToHistory(nextObjs);
+                      }}
+                      onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
+                    />
+                  );
+                }
+                if (obj.type === 'line-shape') {
+                  return (
+                    <KonvaLine
+                      key={obj.id}
+                      id={obj.id}
+                      points={[obj.x, obj.y, obj.x + obj.width, obj.y + obj.height]}
+                      stroke={obj.strokeColor || obj.stroke}
+                      strokeWidth={obj.strokeWidth}
+                      draggable={activeTool === 'select'}
+                      onClick={(e) => handleObjectClick(e, obj.id)}
+                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                      onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
+                      onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
+                    />
+                  );
+                }
               if (obj.type === 'text') {
                 return (
                   <KonvaText
@@ -915,6 +1022,8 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                     fontFamily={obj.fontFamily}
                     fontStyle={obj.fontStyle}
                     fill={obj.fill}
+                    width={obj.width || undefined}
+                    wrap={obj.width ? 'word' : 'none'}
                     visible={obj.visible !== false}
                     draggable={activeTool === 'select'}
                     onClick={(e) => handleObjectClick(e, obj.id)}
@@ -929,11 +1038,25 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
               return null;
             })}
 
+            {textDragRect && (
+              <KonvaRect
+                x={textDragRect.x}
+                y={textDragRect.y}
+                width={textDragRect.w}
+                height={textDragRect.h}
+                stroke="#4A9EFF"
+                strokeWidth={1}
+                dash={[4, 4]}
+                fill="rgba(74,158,255,0.05)"
+                listening={false}
+              />
+            )}
+
             {selectionRect && selectionRect.visible && (
               <KonvaRect
                 x={Math.min(selectionRect.x1, selectionRect.x2)}
-                y={Math.min(selectionRect.y1, selectionRect.y2)}
                 width={Math.abs(selectionRect.x1 - selectionRect.x2)}
+                y={Math.min(selectionRect.y1, selectionRect.y2)}
                 height={Math.abs(selectionRect.y1 - selectionRect.y2)}
                 stroke="#4A9EFF"
                 strokeWidth={1}
@@ -962,9 +1085,16 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
             onChange={(e) => setTextInputState((prev) => ({ ...prev, value: e.target.value }))}
             onBlur={commitTextInput}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                commitTextInput();
+              if (e.key === 'Enter') {
+                if (textInputState.isAreaText) {
+                  if (!e.shiftKey) {
+                    e.preventDefault();
+                    commitTextInput();
+                  }
+                } else {
+                  e.preventDefault();
+                  commitTextInput();
+                }
               } else if (e.key === 'Escape') {
                 e.preventDefault();
                 if (textInputState.editingId) {
@@ -977,7 +1107,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                   });
                   setObjects(nextObjs);
                 }
-                setTextInputState({ visible: false, x: 0, y: 0, value: '', editingId: null });
+                setTextInputState({ visible: false, x: 0, y: 0, width: null, value: '', editingId: null, isAreaText: false });
               }
             }}
             autoFocus
@@ -994,13 +1124,17 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
               fontWeight: isBold ? 'bold' : 'normal',
               fontStyle: isItalic ? 'italic' : 'normal',
               outline: 'none',
-              resize: 'none',
               zIndex: 1000,
-              minWidth: '120px',
-              minHeight: '32px',
               padding: '4px',
               overflow: 'hidden',
               pointerEvents: 'all',
+              width: textInputState.isAreaText ? `${textInputState.width}px` : 'auto',
+              minWidth: textInputState.isAreaText ? undefined : '120px',
+              height: 'auto',
+              minHeight: `${fontSize + 8}px`,
+              whiteSpace: textInputState.isAreaText ? 'pre-wrap' : 'nowrap',
+              wordWrap: textInputState.isAreaText ? 'break-word' : undefined,
+              resize: 'none',
             }}
           />
         )}
@@ -1035,6 +1169,12 @@ export function EditPdfPage() {
   const [pageObjects, setPageObjects] = useState<Record<number, KonvaObject[]>>({});
 
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [shapeFillColor, setShapeFillColor] = useState<string>('#ffffff');
+  const [shapeFillOpacity, setShapeFillOpacity] = useState<number>(0);
+  const [shapeStrokeColor, setShapeStrokeColor] = useState<string>('#4A9EFF');
+  const [shapeStrokeWidth, setShapeStrokeWidth] = useState<number>(2);
 
   // Sync active settings when activeTool changes
   useEffect(() => {
@@ -1052,6 +1192,99 @@ export function EditPdfPage() {
       setStrokeWidth(2);
     }
   }, [activeTool]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+        if (selectedIds.length === 0) return;
+
+        setPageObjects((prev) => {
+          const currentObjs = prev[activePageIndex] || [];
+          const nextObjs = currentObjs.filter((obj) => !selectedIds.includes(obj.id));
+          
+          const nextHistory = (pageHistory.current[activePageIndex] || [[]]).slice(0, (pageHistoryIndex.current[activePageIndex] ?? 0) + 1);
+          nextHistory.push(nextObjs);
+          if (nextHistory.length > 50) {
+            nextHistory.shift();
+          } else {
+            pageHistoryIndex.current[activePageIndex] = nextHistory.length - 1;
+          }
+          pageHistory.current[activePageIndex] = nextHistory;
+          setHistoryTrigger((t) => t + 1);
+
+          return {
+            ...prev,
+            [activePageIndex]: nextObjs,
+          };
+        });
+        setSelectedIds([]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedIds, activePageIndex]);
+
+  useEffect(() => {
+    if (selectedIds.length !== 1) return;
+
+    setPageObjects((prev) => {
+      const currentObjs = prev[activePageIndex] || [];
+      const updatedObjs = currentObjs.map((obj) => {
+        if (obj.id !== selectedIds[0] || obj.type !== 'text') return obj;
+        const fontStyle = `${isItalic ? 'italic' : ''} ${isBold ? 'bold' : ''}`.trim() || 'normal';
+        
+        if (
+          obj.fontFamily === fontFamily &&
+          obj.fontSize === fontSize &&
+          obj.fontStyle === fontStyle &&
+          obj.fill === color
+        ) {
+          return obj;
+        }
+
+        return {
+          ...obj,
+          fontFamily,
+          fontSize,
+          fontStyle,
+          fill: color,
+        };
+      });
+
+      if (JSON.stringify(currentObjs) === JSON.stringify(updatedObjs)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [activePageIndex]: updatedObjs,
+      };
+    });
+  }, [fontFamily, fontSize, isBold, isItalic, color, selectedIds, activePageIndex]);
+
+  useEffect(() => {
+    if (pages.length === 0) return;
+    if (!canvasViewportRef.current) return;
+    
+    const timer = setTimeout(() => {
+      if (!canvasViewportRef.current) return;
+      const viewportWidth = canvasViewportRef.current.clientWidth - 48; // padding
+      const pageWidth = pages[0].width;
+      
+      const fitZoom = viewportWidth / pageWidth;
+      const roundedZoom = Math.min(
+        Math.floor(fitZoom / 0.25) * 0.25,
+        1.0
+      );
+      setZoomLevel(Math.max(roundedZoom, 0.25));
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [pages]);
 
   const handleZoomIn = () => {
     setZoomLevel((prev) => Math.min(prev + 0.25, 2.0));
@@ -1072,6 +1305,7 @@ export function EditPdfPage() {
 
   const stageRefs = useRef<Record<number, any>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
 
   // Call API to convert PDF to base64 PNG pages
   const convertPdfToPages = async (pdfFile: File) => {
@@ -1230,6 +1464,53 @@ export function EditPdfPage() {
     setIsBold(textObj.fontStyle.includes('bold'));
     setIsItalic(textObj.fontStyle.includes('italic'));
   };
+
+  const handleShapeSelected = (shape: ShapeObj) => {
+    if (shape.fillColor) setShapeFillColor(shape.fillColor);
+    if (shape.fillOpacity !== undefined) setShapeFillOpacity(shape.fillOpacity);
+    if (shape.strokeColor) setShapeStrokeColor(shape.strokeColor);
+    else if (shape.stroke) setShapeStrokeColor(shape.stroke);
+    setShapeStrokeWidth(shape.strokeWidth);
+  };
+
+  useEffect(() => {
+    if (selectedIds.length !== 1) return;
+
+    setPageObjects((prev) => {
+      const currentObjs = prev[activePageIndex] || [];
+      const updatedObjs = currentObjs.map((obj) => {
+        if (obj.id !== selectedIds[0] || (obj.type !== 'rect' && obj.type !== 'circle' && obj.type !== 'line-shape')) return obj;
+        
+        const isLine = obj.type === 'line-shape';
+        
+        if (
+          obj.strokeColor === shapeStrokeColor &&
+          obj.strokeWidth === shapeStrokeWidth &&
+          (isLine || (obj.fillColor === shapeFillColor && obj.fillOpacity === shapeFillOpacity))
+        ) {
+          return obj;
+        }
+
+        return {
+          ...obj,
+          stroke: shapeStrokeColor,
+          strokeColor: shapeStrokeColor,
+          strokeWidth: shapeStrokeWidth,
+          fillColor: isLine ? undefined : shapeFillColor,
+          fillOpacity: isLine ? undefined : shapeFillOpacity,
+        };
+      });
+
+      if (JSON.stringify(currentObjs) === JSON.stringify(updatedObjs)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [activePageIndex]: updatedObjs,
+      };
+    });
+  }, [shapeFillColor, shapeFillOpacity, shapeStrokeColor, shapeStrokeWidth, selectedIds, activePageIndex]);
 
   // Save flow
   const handleSave = async () => {
@@ -1561,30 +1842,59 @@ export function EditPdfPage() {
               {(activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                    <span className="text-xs font-semibold text-[#9898B8]">Stroke Color</span>
                     <input
                       type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
+                      value={shapeStrokeColor}
+                      onChange={(e) => setShapeStrokeColor(e.target.value)}
                       style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
                     />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Border Size</span>
+                      <span className="text-xs font-semibold text-[#9898B8]">Stroke Width</span>
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {strokeWidth}px
+                        {shapeStrokeWidth}px
                       </span>
                     </div>
                     <input
                       type="range"
                       min="1"
-                      max="10"
-                      value={strokeWidth}
-                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                      max="20"
+                      value={shapeStrokeWidth}
+                      onChange={(e) => setShapeStrokeWidth(Number(e.target.value))}
                       style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
                     />
                   </div>
+                  {activeTool !== 'line' && (
+                    <>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <span className="text-xs font-semibold text-[#9898B8]">Fill Color</span>
+                        <input
+                          type="color"
+                          value={shapeFillColor}
+                          onChange={(e) => setShapeFillColor(e.target.value)}
+                          style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-[#9898B8]">Fill Opacity</span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                            {shapeFillOpacity}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={shapeFillOpacity}
+                          onChange={(e) => setShapeFillOpacity(Number(e.target.value))}
+                          style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -1795,6 +2105,7 @@ export function EditPdfPage() {
 
           {/* Canvas editor pages area */}
           <div
+            ref={canvasViewportRef}
             style={{
               flex: 1,
               overflowY: 'auto',
@@ -1833,48 +2144,57 @@ export function EditPdfPage() {
                       height={p.height}
                       active={isLazy}
                     >
-                      <KonvaPageEditor
-                        ref={(el) => {
-                          if (el) {
-                            stageRefs.current[p.index] = el;
-                          } else {
-                            delete stageRefs.current[p.index];
-                          }
-                        }}
-                        page={p}
-                        objects={pageObjects[p.index] || []}
-                        setObjects={(action) => {
-                          setPageObjects((prev) => {
-                            const currentObjs = prev[p.index] || [];
-                            const nextObjs = typeof action === 'function' ? action(currentObjs) : action;
-                            return {
-                              ...prev,
-                              [p.index]: nextObjs,
-                            };
-                          });
-                        }}
-                        activeTool={activeTool}
-                        color={color}
-                        strokeWidth={strokeWidth}
-                        fontFamily={fontFamily}
-                        fontSize={fontSize}
-                        isBold={isBold}
-                        isItalic={isItalic}
-                        onTextSelected={handleTextSelected}
-                        history={{
-                          get: () => pageHistory.current[p.index] || [[]],
-                          set: (val) => {
-                            pageHistory.current[p.index] = val;
-                          },
-                        }}
-                        historyIndex={{
-                          get: () => pageHistoryIndex.current[p.index] ?? 0,
-                          set: (val) => {
-                            pageHistoryIndex.current[p.index] = val;
-                          },
-                        }}
-                        triggerHistoryChange={triggerHistoryChange}
-                      />
+                      <div onMouseDown={() => setActivePageIndex(p.index)} onTouchStart={() => setActivePageIndex(p.index)}>
+                        <KonvaPageEditor
+                          ref={(el) => {
+                            if (el) {
+                              stageRefs.current[p.index] = el;
+                            } else {
+                              delete stageRefs.current[p.index];
+                            }
+                          }}
+                          page={p}
+                          objects={pageObjects[p.index] || []}
+                          setObjects={(action) => {
+                            setPageObjects((prev) => {
+                              const currentObjs = prev[p.index] || [];
+                              const nextObjs = typeof action === 'function' ? action(currentObjs) : action;
+                              return {
+                                ...prev,
+                                [p.index]: nextObjs,
+                              };
+                            });
+                          }}
+                          activeTool={activeTool}
+                          color={color}
+                          strokeWidth={strokeWidth}
+                          fontFamily={fontFamily}
+                          fontSize={fontSize}
+                          isBold={isBold}
+                          isItalic={isItalic}
+                          onTextSelected={handleTextSelected}
+                          history={{
+                            get: () => pageHistory.current[p.index] || [[]],
+                            set: (val) => {
+                              pageHistory.current[p.index] = val;
+                            },
+                          }}
+                          historyIndex={{
+                            get: () => pageHistoryIndex.current[p.index] ?? 0,
+                            set: (val) => {
+                              pageHistoryIndex.current[p.index] = val;
+                            },
+                          }}
+                          triggerHistoryChange={triggerHistoryChange}
+                          selectedIds={selectedIds}
+                          setSelectedIds={setSelectedIds}
+                          shapeFillColor={shapeFillColor}
+                          shapeFillOpacity={shapeFillOpacity}
+                          shapeStrokeColor={shapeStrokeColor}
+                          shapeStrokeWidth={shapeStrokeWidth}
+                          onShapeSelected={handleShapeSelected}
+                        />
+                      </div>
                     </LazyPageContainer>
                   );
                 })}
