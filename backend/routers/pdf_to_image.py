@@ -127,8 +127,8 @@ async def pdf_to_image_pages_endpoint(
         pages_data = []
         total_pages = doc.page_count
         
-        # Render each page to PNG at DPI 150
-        dpi = 150
+        # Render each page to PNG at DPI 200
+        dpi = 200
         for i in range(total_pages):
             page = doc[i]
             # Render to pixmap with white background

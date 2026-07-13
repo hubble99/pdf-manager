@@ -19,7 +19,7 @@ import {
   ZoomOut,
   Maximize2,
 } from 'lucide-react';
-import { Stage, Layer, Image as KonvaImage, Line as KonvaLine, Rect as KonvaRect, Ellipse as KonvaEllipse, Text as KonvaText } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Line as KonvaLine, Rect as KonvaRect, Ellipse as KonvaEllipse, Text as KonvaText, Transformer } from 'react-konva';
 import useImage from 'use-image';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
@@ -233,12 +233,52 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
     const currentShapeId = useRef<string | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [selectionRect, setSelectionRect] = useState<{
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      visible: boolean;
+    } | null>(null);
+    const [isErasing, setIsErasing] = useState(false);
+    const transformerRef = useRef<any>(null);
+    const selectedShapeRef = useRef<any>(null);
+
+    useEffect(() => {
+      if (selectedIds.length > 0 && transformerRef.current) {
+        const stage = transformerRef.current.getStage();
+        if (stage) {
+          const nodes = selectedIds.map((id) => stage.findOne(`#${id}`)).filter(Boolean);
+          transformerRef.current.nodes(nodes);
+        }
+        transformerRef.current.getLayer()?.batchDraw();
+      } else if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+        transformerRef.current.getLayer()?.batchDraw();
+      }
+    }, [selectedIds]);
+
+    useEffect(() => {
+      if (activeTool !== 'select') {
+        setSelectedIds([]);
+      }
+    }, [activeTool]);
+
     useEffect(() => {
       if (textInputState.visible && textareaRef.current) {
         textareaRef.current.style.height = 'auto';
         textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
       }
     }, [textInputState.value, textInputState.visible]);
+
+    useEffect(() => {
+      if (textInputState.visible && textareaRef.current) {
+        setTimeout(() => {
+          textareaRef.current?.focus();
+        }, 0);
+      }
+    }, [fontFamily, fontSize, isBold, isItalic, color, textInputState.visible]);
 
     // Save to history
     const pushToHistory = useCallback((nextState: KonvaObject[]) => {
@@ -256,8 +296,67 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       triggerHistoryChange();
     }, [history, historyIndex, triggerHistoryChange]);
 
+    const eraseObjectAtPoint = (e: any) => {
+      const stage = e.target.getStage();
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+
+      const filtered = objects.filter(obj => {
+        let objX = obj.x ?? 0;
+        let objY = obj.y ?? 0;
+        let objW = (obj as any).width ?? 20;
+        let objH = (obj as any).height ?? 20;
+
+        if (obj.type === 'line') {
+          const xs = obj.points.filter((_, i) => i % 2 === 0);
+          const ys = obj.points.filter((_, i) => i % 2 !== 0);
+          if (xs.length === 0 || ys.length === 0) return true;
+          objX = Math.min(...xs);
+          objY = Math.min(...ys);
+          objW = Math.max(...xs) - objX;
+          objH = Math.max(...ys) - objY;
+        }
+
+        return !(
+          pos.x >= objX - 10 &&
+          pos.x <= objX + objW + 10 &&
+          pos.y >= objY - 10 &&
+          pos.y <= objY + objH + 10
+        );
+      });
+
+      if (filtered.length !== objects.length) {
+        setObjects(filtered);
+        pushToHistory(filtered);
+      }
+    };
+
     const handleMouseDown = (e: any) => {
-      if (activeTool === 'select' || activeTool === 'eraser' || activeTool === 'text' || textInputState.visible) return;
+      if (activeTool === 'eraser') {
+        setIsErasing(true);
+        eraseObjectAtPoint(e);
+        return;
+      }
+      if (activeTool === 'select') {
+        const stage = e.target.getStage();
+        const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
+        if (clickedOnEmpty) {
+          const pos = stage.getPointerPosition();
+          if (pos) {
+            setSelectionRect({
+              x1: pos.x,
+              y1: pos.y,
+              x2: pos.x,
+              y2: pos.y,
+              visible: true,
+            });
+            setSelectedIds([]);
+          }
+        }
+        return;
+      }
+      if (activeTool === 'text' || textInputState.visible) return;
 
       const stage = e.target.getStage();
       const pos = stage.getPointerPosition();
@@ -289,35 +388,26 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
           strokeWidth: strokeWidth,
         };
         setObjects((prev) => [...prev, newShape]);
-      } else if (activeTool === 'text') {
-        isDrawing.current = false;
-        const fontStyle = `${isBold ? 'bold' : ''} ${isItalic ? 'italic' : ''}`.trim() || 'normal';
-        const newText: TextObj = {
-          id: newId,
-          type: 'text',
-          x: pos.x,
-          y: pos.y - fontSize / 2, // Center vertically
-          text: 'Text',
-          fontSize: fontSize,
-          fontFamily: fontFamily,
-          fill: color,
-          fontStyle: fontStyle,
-          visible: false,
-        };
-        const nextObjs = [...objects, newText];
-        setObjects(nextObjs);
-        
-        setEditingText({
-          id: newId,
-          x: pos.x,
-          y: pos.y - fontSize / 2,
-          text: '',
-          isNew: true,
-        });
       }
     };
 
     const handleMouseMove = (e: any) => {
+      if (activeTool === 'eraser') {
+        if (isErasing) {
+          eraseObjectAtPoint(e);
+        }
+        return;
+      }
+      if (activeTool === 'select' && selectionRect && selectionRect.visible) {
+        const stage = e.target.getStage();
+        const pos = stage.getPointerPosition();
+        if (pos) {
+          setSelectionRect((prev) =>
+            prev ? { ...prev, x2: pos.x, y2: pos.y } : null
+          );
+        }
+        return;
+      }
       if (!isDrawing.current) return;
 
       const stage = e.target.getStage();
@@ -353,14 +443,194 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
     };
 
     const handleMouseUp = () => {
+      if (activeTool === 'eraser') {
+        setIsErasing(false);
+        return;
+      }
+      if (activeTool === 'select' && selectionRect && selectionRect.visible) {
+        const x = Math.min(selectionRect.x1, selectionRect.x2);
+        const y = Math.min(selectionRect.y1, selectionRect.y2);
+        const w = Math.abs(selectionRect.x1 - selectionRect.x2);
+        const h = Math.abs(selectionRect.y1 - selectionRect.y2);
+
+        if (w > 2 && h > 2) {
+          const newlySelected: string[] = [];
+
+          objects.forEach((obj) => {
+            let objX = obj.x ?? 0;
+            let objY = obj.y ?? 0;
+            let objW = (obj as any).width ?? 20;
+            let objH = (obj as any).height ?? 20;
+
+            if (obj.type === 'line') {
+              const xs = obj.points.filter((_, i) => i % 2 === 0);
+              const ys = obj.points.filter((_, i) => i % 2 !== 0);
+              if (xs.length > 0 && ys.length > 0) {
+                objX = Math.min(...xs);
+                objY = Math.min(...ys);
+                objW = Math.max(...xs) - objX;
+                objH = Math.max(...ys) - objY;
+              }
+            }
+
+            const isInside =
+              objX >= x &&
+              objX + objW <= x + w &&
+              objY >= y &&
+              objY + objH <= y + h;
+
+            if (isInside) {
+              newlySelected.push(obj.id);
+            }
+          });
+
+          setSelectedIds(newlySelected);
+        } else {
+          setSelectedIds([]);
+        }
+
+        setSelectionRect(null);
+        return;
+      }
       if (!isDrawing.current) return;
       isDrawing.current = false;
       currentShapeId.current = null;
       pushToHistory(objects);
     };
 
+    const handleTextTransformEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      
+      // Reset scale
+      node.scaleX(1);
+      node.scaleY(1);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'text') {
+          const newFontSize = Math.max(1, Math.round(obj.fontSize * scaleX));
+          return {
+            ...obj,
+            fontSize: newFontSize,
+            x: node.x(),
+            y: node.y(),
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
+    const handleRectTransformEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      
+      node.scaleX(1);
+      node.scaleY(1);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'rect') {
+          return {
+            ...obj,
+            x: node.x(),
+            y: node.y(),
+            width: Math.max(5, node.width() * scaleX),
+            height: Math.max(5, node.height() * scaleY),
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
+    const handleCircleTransformEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      
+      node.scaleX(1);
+      node.scaleY(1);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'circle') {
+          return {
+            ...obj,
+            x: node.x(),
+            y: node.y(),
+            width: Math.max(5, obj.width * scaleX),
+            height: Math.max(5, obj.height * scaleY),
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
+    const handleLineTransformEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      
+      node.scaleX(1);
+      node.scaleY(1);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'line-shape') {
+          return {
+            ...obj,
+            x: node.x(),
+            y: node.y(),
+            width: obj.width * scaleX,
+            height: obj.height * scaleY,
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
+    const handleFreehandLineTransformEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      const nodeX = node.x();
+      const nodeY = node.y();
+      
+      node.scaleX(1);
+      node.scaleY(1);
+      node.x(0);
+      node.y(0);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'line') {
+          const newPoints = obj.points.map((val, idx) => {
+            if (idx % 2 === 0) {
+              return val * scaleX + nodeX;
+            } else {
+              return val * scaleY + nodeY;
+            }
+          });
+          return {
+            ...obj,
+            points: newPoints,
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
     const handleObjectClick = (e: any, objId: string) => {
-      if (activeTool === 'eraser') {
+      if (activeTool === 'select') {
+        e.cancelBubble = true;
+        setSelectedIds([objId]);
+      } else if (activeTool === 'eraser') {
         e.cancelBubble = true;
         const nextObjs = objects.filter((o) => o.id !== objId);
         setObjects(nextObjs);
@@ -383,27 +653,53 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
       pushToHistory(nextObjs);
     };
 
-    const handleStageClick = (e: any) => {
-      if (activeTool !== 'text') return;
-      if (textInputState.visible) return;
+    const handleLineDragEnd = (e: any, objId: string) => {
+      const node = e.target;
+      const dx = node.x();
+      const dy = node.y();
       
+      node.x(0);
+      node.y(0);
+      
+      const nextObjs = objects.map((obj) => {
+        if (obj.id === objId && obj.type === 'line-shape') {
+          return {
+            ...obj,
+            x: obj.x + dx,
+            y: obj.y + dy,
+          };
+        }
+        return obj;
+      });
+      setObjects(nextObjs);
+      pushToHistory(nextObjs);
+    };
+
+    const handleStageClick = (e: any) => {
       const stage = e.target.getStage();
       if (!stage) return;
       
-      // Let handleTextDoubleClick handle clicks on text objects
       const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
-      if (!clickedOnEmpty) return;
 
-      const pointerPos = stage.getPointerPosition();
-      if (!pointerPos) return;
+      if (activeTool === 'text') {
+        if (textInputState.visible) return;
+        if (!clickedOnEmpty) return;
 
-      setTextInputState({
-        visible: true,
-        x: pointerPos.x,
-        y: pointerPos.y,
-        value: '',
-        editingId: null,
-      });
+        const pointerPos = stage.getPointerPosition();
+        if (!pointerPos) return;
+
+        setTextInputState({
+          visible: true,
+          x: pointerPos.x,
+          y: pointerPos.y,
+          value: '',
+          editingId: null,
+        });
+      } else if (activeTool === 'select') {
+        if (clickedOnEmpty) {
+          setSelectedIds([]);
+        }
+      }
     };
 
     const handleTextDoubleClick = (e: any, textObj: TextObj) => {
@@ -524,6 +820,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 return (
                   <KonvaLine
                     key={obj.id}
+                    id={obj.id}
                     points={obj.points}
                     stroke={obj.stroke}
                     strokeWidth={obj.strokeWidth}
@@ -531,8 +828,11 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                     lineCap="round"
                     lineJoin="round"
                     opacity={obj.opacity}
+                    draggable={activeTool === 'select'}
                     onClick={(e) => handleObjectClick(e, obj.id)}
                     onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                    onDragEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
+                    onTransformEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
                   />
                 );
               }
@@ -540,6 +840,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 return (
                   <KonvaRect
                     key={obj.id}
+                    id={obj.id}
                     x={obj.x}
                     y={obj.y}
                     width={obj.width}
@@ -550,6 +851,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                     onClick={(e) => handleObjectClick(e, obj.id)}
                     onTouchEnd={(e) => handleObjectClick(e, obj.id)}
                     onDragEnd={(e) => handleDragEnd(e, obj.id)}
+                    onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
                   />
                 );
               }
@@ -557,6 +859,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 return (
                   <KonvaEllipse
                     key={obj.id}
+                    id={obj.id}
                     x={obj.x + obj.width / 2}
                     y={obj.y + obj.height / 2}
                     radiusX={Math.abs(obj.width / 2)}
@@ -580,6 +883,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                       setObjects(nextObjs);
                       pushToHistory(nextObjs);
                     }}
+                    onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
                   />
                 );
               }
@@ -587,13 +891,15 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 return (
                   <KonvaLine
                     key={obj.id}
+                    id={obj.id}
                     points={[obj.x, obj.y, obj.x + obj.width, obj.y + obj.height]}
                     stroke={obj.stroke}
                     strokeWidth={obj.strokeWidth}
                     draggable={activeTool === 'select'}
                     onClick={(e) => handleObjectClick(e, obj.id)}
                     onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDragEnd={(e) => handleDragEnd(e, obj.id)}
+                    onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
+                    onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
                   />
                 );
               }
@@ -601,6 +907,7 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                 return (
                   <KonvaText
                     key={obj.id}
+                    id={obj.id}
                     x={obj.x}
                     y={obj.y}
                     text={obj.text}
@@ -615,11 +922,36 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                     onDblClick={(e) => handleTextDoubleClick(e, obj)}
                     onDblTap={(e) => handleTextDoubleClick(e, obj)}
                     onDragEnd={(e) => handleDragEnd(e, obj.id)}
+                    onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
                   />
                 );
               }
               return null;
             })}
+
+            {selectionRect && selectionRect.visible && (
+              <KonvaRect
+                x={Math.min(selectionRect.x1, selectionRect.x2)}
+                y={Math.min(selectionRect.y1, selectionRect.y2)}
+                width={Math.abs(selectionRect.x1 - selectionRect.x2)}
+                height={Math.abs(selectionRect.y1 - selectionRect.y2)}
+                stroke="#4A9EFF"
+                strokeWidth={1}
+                dash={[4, 4]}
+                fill="rgba(74,158,255,0.1)"
+              />
+            )}
+
+            {selectedIds.length > 0 && (
+              <Transformer
+                ref={transformerRef}
+                rotateEnabled={false}
+                boundBoxFunc={(oldBox, newBox) => {
+                  if (newBox.width < 10 || newBox.height < 10) return oldBox;
+                  return newBox;
+                }}
+              />
+            )}
           </Layer>
         </Stage>
 
@@ -911,8 +1243,8 @@ export function EditPdfPage() {
       for (const p of pages) {
         const stage = stageRefs.current[p.index];
         if (stage) {
-          // pixelRatio: 2 for print-quality rendering
-          const dataUrl = stage.toDataURL({ pixelRatio: 2 });
+          // pixelRatio: 3 for print-quality rendering
+          const dataUrl = stage.toDataURL({ pixelRatio: 3 });
           exportedPages.push(dataUrl);
         } else {
           // Fallback if page stage is not loaded yet (rendered as lazy placeholder)
@@ -1193,10 +1525,10 @@ export function EditPdfPage() {
                     <span className="text-xs font-semibold text-[#9898B8]">Size</span>
                     <input
                       type="number"
-                      min="8"
-                      max="72"
+                      min="1"
+                      step={1}
                       value={fontSize}
-                      onChange={(e) => setFontSize(Math.max(8, Math.min(72, Number(e.target.value))))}
+                      onChange={(e) => setFontSize(Math.max(1, Number(e.target.value)))}
                       style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', fontSize: '13px' }}
                     />
                   </div>
