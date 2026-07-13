@@ -991,6 +991,21 @@ User opens app
 
 ---
 
+### Session 27 — 2026-07-13 (Transformer Shape and Text Resize Fixes)
+
+**Selesai:**
+- ✅ TASK 1: Memperbaiki bug ukuran ganda (doubling size) saat meresize Shape (Rect & Circle) dengan membetulkan urutan imperative reset scale (`node.scaleX(1); node.scaleY(1);`) pada node Konva yang sekarang dieksekusi secara instan sebelum state React di-update dengan nilai dimensi final.
+- ✅ TASK 2: Memperbaiki resize Text. Memisahkan logika resize menjadi Point Text (`width === null`) yang mengubah `fontSize` secara proporsional, dan Area Text (`width !== null`) yang hanya merubah `width` kontainer (font size tetap, memicu word reflow).
+- ✅ TASK 3: Mengatur properti `<Transformer>` dengan `boundBoxFunc` yang memiliki batasan minimal lebar/tinggi sebesar `20px` untuk menjaga kelancaran interaksi scaling visual.
+- ✅ TASK VERIFIKASI: Verifikasi `tsc --noEmit` sukses dengan 0 compile errors dan `pytest tests/` sukses dengan 32/32 tests passed.
+- ✅ TASK COMMIT: Commit dan git push semua perubahan di atas sukses didorong ke branch remote `origin main`.
+
+**Root Cause:**
+- **Shape Resize Doubling**: Reset scale dilakukan setelah atau bersamaan dengan siklus state update React, sehingga scale transform Konva menumpuk di atas base width/height baru.
+- **Text Area Stretching**: Transformer memodifikasi visual scale node teks area secara seragam, bukannya memperlebar area box pembungkusnya, sehingga tulisan menjadi stretched/gepeng.
+
+---
+
 ## Cara Menjalankan (Development)
 
 ### Backend
