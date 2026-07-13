@@ -599,7 +599,7 @@ export function EditPdfPage() {
     formData.append('file', pdfFile);
 
     try {
-      const res = await apiClient.post<ConversionResponse>('/pdf-to-image/pages', formData, {
+      const res = await apiClient.post<ConversionResponse>('/api/v1/pdf-to-image/pages', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setPages(res.data.pages);
@@ -777,7 +777,7 @@ export function EditPdfPage() {
         output_filename: outputFilename || 'edited_document',
       };
 
-      const response = await apiClient.post('/edit-pdf/save', payload, {
+      const response = await apiClient.post('/api/v1/edit-pdf/save', payload, {
         responseType: 'blob',
       });
 
@@ -842,16 +842,22 @@ export function EditPdfPage() {
               style={{
                 border: '2px dashed #2A2A3E',
                 borderRadius: '8px',
-                padding: '30px 16px',
+                padding: '16px',
                 textAlign: 'center',
                 background: '#12121A',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
+                height: '160px',
+                maxHeight: '160px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
               }}
             >
-              <Upload className="mx-auto mb-3 text-[#9898B8]" size={36} />
-              <p className="text-sm font-medium text-[#E8E8F0] mb-1">Drag & Drop PDF</p>
-              <span className="text-xs text-[#9898B8]">or click to browse local files</span>
+              <Upload className="mx-auto mb-2 text-[#9898B8]" size={24} />
+              <p style={{ fontSize: '0.875rem', fontWeight: 500, color: '#E8E8F0', marginBottom: '4px' }}>Drag & Drop PDF</p>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>or click to browse local files</span>
               <input
                 type="file"
                 ref={fileInputRef}
