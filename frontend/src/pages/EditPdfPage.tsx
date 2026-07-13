@@ -14,8 +14,6 @@ import {
   Italic,
   Upload,
   Loader2,
-  FolderOpen,
-  CheckCircle,
 } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Line as KonvaLine, Rect as KonvaRect, Ellipse as KonvaEllipse, Text as KonvaText } from 'react-konva';
 import useImage from 'use-image';
@@ -180,9 +178,15 @@ interface KonvaPageEditorProps {
   isBold: boolean;
   isItalic: boolean;
   onTextSelected: (text: TextObj) => void;
-  // History refs managed at page level
-  history: React.MutableRefObject<KonvaObject[][]>;
-  historyIndex: React.MutableRefObject<number>;
+  // History structure using get/set
+  history: {
+    get: () => KonvaObject[][];
+    set: (val: KonvaObject[][]) => void;
+  };
+  historyIndex: {
+    get: () => number;
+    set: (val: number) => void;
+  };
   triggerHistoryChange: () => void;
 }
 
@@ -213,17 +217,17 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
 
     // Save to history
     const pushToHistory = useCallback((nextState: KonvaObject[]) => {
-      const nextHistory = history.current.slice(0, historyIndex.current + 1);
+      const nextHistory = history.get().slice(0, historyIndex.get() + 1);
       nextHistory.push(nextState);
       
       // Limit to 50 steps
       if (nextHistory.length > 50) {
         nextHistory.shift();
       } else {
-        historyIndex.current = nextHistory.length - 1;
+        historyIndex.set(nextHistory.length - 1);
       }
       
-      history.current = nextHistory;
+      history.set(nextHistory);
       triggerHistoryChange();
     }, [history, historyIndex, triggerHistoryChange]);
 
@@ -348,7 +352,6 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
 
     const handleTextDoubleClick = (e: any, textObj: TextObj) => {
       e.cancelBubble = true;
-      const stage = e.target.getStage();
       const textPosition = e.target.getAbsolutePosition();
       
       // Update Toolbar state to match this text
@@ -469,8 +472,8 @@ const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
                         if (item.id === obj.id) {
                           return {
                             ...item,
-                            x: e.target.x() - item.width / 2,
-                            y: e.target.y() - item.height / 2,
+                            x: e.target.x() - obj.width / 2,
+                            y: e.target.y() - obj.height / 2,
                           };
                         }
                         return item;
@@ -584,7 +587,7 @@ export function EditPdfPage() {
   // History system per page index
   const pageHistory = useRef<Record<number, KonvaObject[][]>>({});
   const pageHistoryIndex = useRef<Record<number, number>>({});
-  const [historyTrigger, setHistoryTrigger] = useState(0); // Trigger re-render for Undo/Redo button disable state
+  const [, setHistoryTrigger] = useState(0); // Trigger re-render for Undo/Redo button disable state
 
   const stageRefs = useRef<Record<number, any>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1300,15 +1303,14 @@ export function EditPdfPage() {
                       isItalic={isItalic}
                       onTextSelected={handleTextSelected}
                       history={{
-                        current: pageHistory.current[p.index] || [[]],
-                        // Use inline setter to bypass TS compiler check on immutable object assignment
-                        set current(val) {
+                        get: () => pageHistory.current[p.index] || [[]],
+                        set: (val) => {
                           pageHistory.current[p.index] = val;
                         },
                       }}
                       historyIndex={{
-                        current: pageHistoryIndex.current[p.index] ?? 0,
-                        set current(val) {
+                        get: () => pageHistoryIndex.current[p.index] ?? 0,
+                        set: (val) => {
                           pageHistoryIndex.current[p.index] = val;
                         },
                       }}
