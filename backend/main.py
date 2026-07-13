@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
-from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, metadata, protect, preview
+from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, metadata, protect, preview, edit_pdf
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -169,6 +169,7 @@ app.include_router(organize.router, prefix="/api/v1")
 app.include_router(metadata.router, prefix="/api/v1")
 app.include_router(protect.router, prefix="/api/v1")
 app.include_router(preview.router, prefix="/api/v1")
+app.include_router(edit_pdf.router, prefix="/api/v1")
 
 # ── Health Check ────────────────────────────────────────────────────────────────
 @app.get("/health", response_model=SuccessResponse, tags=["system"])

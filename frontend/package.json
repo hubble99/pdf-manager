@@ -20,10 +20,13 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.16.1",
+    "konva": "^10.3.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.16.0"
+    "react-konva": "^19.2.5",
+    "react-router-dom": "^7.16.0",
+    "use-image": "^1.1.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

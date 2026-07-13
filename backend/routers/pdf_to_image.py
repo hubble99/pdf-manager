@@ -1,7 +1,9 @@
 """PDF to Image router — POST /api/v1/pdf-to-image/"""
 import logging
+import base64
 from typing import Optional
 from pathlib import Path
+import fitz
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
@@ -91,5 +93,79 @@ async def pdf_to_image_endpoint(
             ).model_dump(),
         )
     finally:
+        if temp_path:
+            cleanup_temp_file(temp_path)
+
+
+@router.post("/pages")
+async def pdf_to_image_pages_endpoint(
+    file: UploadFile = File(...),
+):
+    """
+    Convert all pages of a PDF to base64 PNG images for the editor canvas.
+    
+    - **file**: PDF file
+    
+    Returns a JSON array of base64 encoded PNG images with page dimensions.
+    """
+    temp_path: Optional[Path] = None
+    doc: Optional[fitz.Document] = None
+    try:
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Uploaded file must be a PDF.")
+
+        temp_path = await save_upload(file, subdir="pdf_to_image_pages")
+        
+        try:
+            doc = fitz.open(str(temp_path))
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"Cannot open PDF: {e}")
+
+        if doc.is_encrypted:
+            raise HTTPException(status_code=422, detail="PDF is encrypted and cannot be processed.")
+
+        pages_data = []
+        total_pages = doc.page_count
+        
+        # Render each page to PNG at DPI 150
+        dpi = 150
+        for i in range(total_pages):
+            page = doc[i]
+            # Render to pixmap with white background
+            pix = page.get_pixmap(dpi=dpi, alpha=False)
+            
+            # Get PNG bytes
+            img_bytes = pix.tobytes("png")
+            
+            # Encode to base64 string
+            base64_data = base64.b64encode(img_bytes).decode("utf-8")
+            
+            pages_data.append({
+                "index": i,
+                "width": pix.width,
+                "height": pix.height,
+                "data": base64_data,
+            })
+            
+        return {
+            "pages": pages_data,
+            "total": total_pages
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"pdf_to_image_pages error: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content=ErrorResponse(
+                status="error",
+                message="PDF page conversion failed.",
+                detail=str(e),
+            ).model_dump(),
+        )
+    finally:
+        if doc:
+            doc.close()
         if temp_path:
             cleanup_temp_file(temp_path)

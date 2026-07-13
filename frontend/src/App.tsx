@@ -10,6 +10,7 @@ import { PdfToImagePage } from './pages/PdfToImagePage';
 import { ImageToPdfPage } from './pages/ImageToPdfPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { InsertPage } from './pages/InsertPage';
+import { EditPdfPage } from './pages/EditPdfPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OrganizePage } from './pages/OrganizePage';
 import { MetadataPage } from './pages/MetadataPage';
@@ -135,6 +136,7 @@ export default function App() {
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />
                 <Route path="/insert"        element={<InsertPage />} />
+                <Route path="/edit-pdf"      element={<EditPdfPage />} />
                 <Route path="/settings"      element={<SettingsPage />} />
               </Routes>
             </MainContent>

@@ -15,6 +15,7 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  PenLine,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../../types';
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'image-to-pdf',  label: 'Image to PDF',    icon: FileImage,  path: '/image-to-pdf' },
   { id: 'qr-barcode',    label: 'QR & Barcode',    icon: QrCode,     path: '/qr-barcode' },
   { id: 'insert',        label: 'Insert Content',  icon: FilePlus,   path: '/insert', badge: 'ADV' },
+  { id: 'edit-pdf',      label: 'Edit PDF',        icon: PenLine,    path: '/edit-pdf' },
 ];
 
 export function Sidebar() {
