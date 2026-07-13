@@ -682,14 +682,15 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     node.scaleX(1);
     node.scaleY(1);
 
+    const newWidth = Math.max(5, node.width() * scaleX);
+    const newHeight = Math.max(5, node.height() * scaleY);
+
     setPages(prev => {
       const nextPages = prev.map(p => {
         if (p.index !== page.index) return p;
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'rect') return obj;
-          const nextWidth = Math.max(5, obj.width * scaleX);
-          const nextHeight = Math.max(5, obj.height * scaleY);
-          return { ...obj, x: node.x(), y: node.y(), width: nextWidth, height: nextHeight } as CanvasObject;
+          return { ...obj, x: node.x(), y: node.y(), width: newWidth, height: newHeight } as CanvasObject;
         });
         return { ...p, objects: nextObjs };
       });
@@ -733,14 +734,15 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     node.scaleX(1);
     node.scaleY(1);
 
+    const newWidth = Math.max(5, node.width() * scaleX);
+    const newHeight = Math.max(5, node.height() * scaleY);
+
     setPages(prev => {
       const nextPages = prev.map(p => {
         if (p.index !== page.index) return p;
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'circle') return obj;
-          const nextWidth = Math.max(5, obj.width * scaleX);
-          const nextHeight = Math.max(5, obj.height * scaleY);
-          return { ...obj, x: node.x(), y: node.y(), width: nextWidth, height: nextHeight } as CanvasObject;
+          return { ...obj, x: node.x(), y: node.y(), width: newWidth, height: newHeight } as CanvasObject;
         });
         return { ...p, objects: nextObjs };
       });
@@ -851,9 +853,26 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
         if (p.index !== page.index) return p;
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'text') return obj;
-          const newFontSize = Math.max(8, Math.round(obj.fontSize * scaleX));
-          const newWidth = obj.width ? Math.max(20, obj.width * scaleX) : null;
-          return { ...obj, x: node.x(), y: node.y(), fontSize: newFontSize, width: newWidth } as CanvasObject;
+
+          if (obj.width === null) {
+            // Point Text: change font size
+            const newFontSize = Math.max(8, Math.round(obj.fontSize * scaleX));
+            return {
+              ...obj,
+              x: node.x(),
+              y: node.y(),
+              fontSize: newFontSize
+            } as CanvasObject;
+          } else {
+            // Area Text: change container width
+            const newWidth = Math.max(20, obj.width * scaleX);
+            return {
+              ...obj,
+              x: node.x(),
+              y: node.y(),
+              width: newWidth
+            } as CanvasObject;
+          }
         });
         return { ...p, objects: nextObjs };
       });
@@ -894,6 +913,15 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     if (activeTool === 'select') {
       e.cancelBubble = true;
       setSelectedObjectId(objId);
+    }
+  };
+
+  const handleStageClick = (e: any) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
+    if (clickedOnEmpty && activeTool === 'select') {
+      setSelectedObjectId(null);
     }
   };
 
@@ -1075,7 +1103,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
               ref={transformerRef}
               rotateEnabled={false}
               boundBoxFunc={(oldBox, newBox) => {
-                if (newBox.width < 10 || newBox.height < 10) return oldBox;
+                if (newBox.width < 20 || newBox.height < 20) return oldBox;
                 return newBox;
               }}
             />
