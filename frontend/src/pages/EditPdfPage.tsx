@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   MousePointer,
   Pen,
@@ -30,46 +30,63 @@ import { Filename } from '../components/Filename';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tool = 'select' | 'pen' | 'highlighter' | 'text' | 'rect' | 'circle' | 'line' | 'eraser';
+type CanvasObjectType = 'pen' | 'highlighter' | 'text' | 'rect' | 'circle' | 'line';
 
-interface DrawingLine {
+interface BaseCanvasObject {
   id: string;
-  type: 'line';
-  points: number[];
-  stroke: string;
-  strokeWidth: number;
-  opacity: number;
-}
-
-interface ShapeObj {
-  id: string;
-  type: 'rect' | 'circle' | 'line-shape';
+  type: CanvasObjectType;
   x: number;
   y: number;
+}
+
+interface FreehandObject extends BaseCanvasObject {
+  type: 'pen' | 'highlighter';
+  points: number[];
+  strokeColor: string;
+  strokeWidth: number;
+  opacity: number; // 1 for pen, 0.4 for highlighter
+}
+
+interface TextObject extends BaseCanvasObject {
+  type: 'text';
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  bold: boolean;
+  italic: boolean;
+  color: string;
+  width: number | null; // null = auto-expand (point text), number = fixed (area text)
+  visible?: boolean;
+}
+
+interface ShapeObject extends BaseCanvasObject {
+  type: 'rect' | 'circle';
   width: number;
   height: number;
-  stroke: string;
+  fillColor: string;
+  fillOpacity: number; // 0-100
+  strokeColor: string;
   strokeWidth: number;
-  fillColor?: string;
-  fillOpacity?: number;
-  strokeColor?: string;
 }
 
-interface TextObj {
-  id: string;
-  type: 'text';
-  x: number;
-  y: number;
-  text: string;
-  fontSize: number;
-  fontFamily: string;
-  fill: string;
-  fontStyle: string; // 'normal' | 'bold' | 'italic' | 'bold italic'
-  visible?: boolean;
-  width?: number | null;
+interface LineObject extends BaseCanvasObject {
+  type: 'line';
+  points: number[]; // [x1, y1, x2, y2]
+  strokeColor: string;
+  strokeWidth: number;
 }
 
-type KonvaObject = DrawingLine | ShapeObj | TextObj;
+type CanvasObject = FreehandObject | TextObject | ShapeObject | LineObject;
+
+interface PageData {
+  index: number;
+  width: number;  // actual rendered width dari backend (misal 1654)
+  height: number;
+  imageUrl: string;
+  objects: CanvasObject[];
+  history: CanvasObject[][]; // snapshot untuk undo/redo
+  historyIndex: number;
+}
 
 interface PdfPageData {
   index: number;
@@ -81,6 +98,20 @@ interface PdfPageData {
 interface ConversionResponse {
   pages: PdfPageData[];
   total: number;
+}
+
+interface TextEditingState {
+  id: string | null;
+  x: number;
+  y: number;
+  width: number | null;
+  value: string;
+  fontSize: number;
+  fontFamily: string;
+  bold: boolean;
+  italic: boolean;
+  color: string;
+  isAreaText: boolean;
 }
 
 // ── Windows Font Options ──────────────────────────────────────────────────────
@@ -174,1164 +205,1209 @@ function LazyPageContainer({
   return <div ref={containerRef}>{children}</div>;
 }
 
-// ── Individual Konva Page Editor ──────────────────────────────────────────────
-interface KonvaPageEditorProps {
-  page: PdfPageData;
-  objects: KonvaObject[];
-  setObjects: (objs: KonvaObject[] | ((prev: KonvaObject[]) => KonvaObject[])) => void;
-  activeTool: Tool;
-  color: string;
-  strokeWidth: number;
-  fontFamily: string;
-  fontSize: number;
-  isBold: boolean;
-  isItalic: boolean;
-  onTextSelected: (text: TextObj) => void;
-  // History structure using get/set
-  history: {
-    get: () => KonvaObject[][];
-    set: (val: KonvaObject[][]) => void;
-  };
-  historyIndex: {
-    get: () => number;
-    set: (val: number) => void;
-  };
-  triggerHistoryChange: () => void;
-  selectedIds: string[];
-  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
-  shapeFillColor: string;
-  shapeFillOpacity: number;
-  shapeStrokeColor: string;
-  shapeStrokeWidth: number;
-  onShapeSelected?: (shape: ShapeObj) => void;
+// ── PageCanvas Component ──────────────────────────────────────────────────────
+interface PageCanvasProps {
+  page: PageData;
+  activeTool: 'select' | CanvasObjectType | 'eraser';
+  selectedObjectId: string | null;
+  setSelectedObjectId: (id: string | null) => void;
+  updateSelectedObject: (patch: Partial<CanvasObject>) => void;
+  commitPageObjectsToHistory: (pageIndex: number, finalObjects: CanvasObject[]) => void;
+  stageRefs: React.MutableRefObject<Record<number, any>>;
+  setPages: React.Dispatch<React.SetStateAction<PageData[]>>;
+  defaultTextProps: { fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string };
+  defaultShapeProps: { fillColor: string; fillOpacity: number; strokeColor: string; strokeWidth: number };
+  defaultStrokeProps: { strokeColor: string; strokeWidth: number };
+  hexToRgba: (hex: string, opacity: number) => string;
 }
 
-const KonvaPageEditor = React.forwardRef<any, KonvaPageEditorProps>(
-  (
-    {
-      page,
-      objects,
-      setObjects,
-      activeTool,
-      color,
-      strokeWidth,
-      fontFamily,
-      fontSize,
-      isBold,
-      isItalic,
-      onTextSelected,
-      history,
-      historyIndex,
-      triggerHistoryChange,
-      selectedIds,
-      setSelectedIds,
-      shapeFillColor,
-      shapeFillOpacity,
-      shapeStrokeColor,
-      shapeStrokeWidth,
-      onShapeSelected,
-    },
-    ref
-  ) => {
-    const [image] = useImage(`data:image/png;base64,${page.data}`);
-    const [textInputState, setTextInputState] = useState<{
-      visible: boolean;
-      x: number;
-      y: number;
-      width: number | null;
-      value: string;
-      editingId: string | null;
-      isAreaText?: boolean;
-    }>({
-      visible: false,
-      x: 0,
-      y: 0,
-      width: null,
-      value: '',
-      editingId: null,
-      isAreaText: false,
+const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
+  const {
+    page,
+    activeTool,
+    selectedObjectId,
+    setSelectedObjectId,
+    updateSelectedObject,
+    commitPageObjectsToHistory,
+    stageRefs,
+    setPages,
+    defaultTextProps,
+    defaultShapeProps,
+    defaultStrokeProps,
+    hexToRgba,
+  } = props;
+
+  const [image] = useImage(page.imageUrl);
+  const [textEditor, setTextEditor] = useState<TextEditingState | null>(null);
+
+  const isDrawing = useRef(false);
+  const activeObjectId = useRef<string | null>(null);
+  const textDragStartPos = useRef<{ x: number; y: number } | null>(null);
+  const [textDragRect, setTextDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  const transformerRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textEditor && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [textEditor]);
+
+  useEffect(() => {
+    if (textEditor && textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [textEditor?.value]);
+
+  useEffect(() => {
+    if (selectedObjectId && transformerRef.current) {
+      const stage = transformerRef.current.getStage();
+      if (stage) {
+        const node = stage.findOne(`#${selectedObjectId}`);
+        if (node) {
+          transformerRef.current.nodes([node]);
+          transformerRef.current.getLayer()?.batchDraw();
+        } else {
+          transformerRef.current.nodes([]);
+        }
+      }
+    } else if (transformerRef.current) {
+      transformerRef.current.nodes([]);
+      transformerRef.current.getLayer()?.batchDraw();
+    }
+  }, [selectedObjectId, page.objects]);
+
+  const commitText = () => {
+    if (!textEditor) return;
+    const val = textEditor.value.trim();
+
+    if (textEditor.id) {
+      // Edit existing TextObject
+      const finalObjects = page.objects.map(obj => {
+        if (obj.id === textEditor.id) {
+          if (!val) return null;
+          return {
+            ...obj,
+            text: val,
+            visible: true
+          } as TextObject;
+        }
+        return obj;
+      }).filter(Boolean) as CanvasObject[];
+
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
+      commitPageObjectsToHistory(page.index, finalObjects);
+    } else {
+      // Create new TextObject
+      if (val) {
+        const newText: TextObject = {
+          id: generateId(),
+          type: 'text',
+          x: textEditor.x,
+          y: textEditor.y,
+          text: val,
+          fontFamily: textEditor.fontFamily,
+          fontSize: textEditor.fontSize,
+          bold: textEditor.bold,
+          italic: textEditor.italic,
+          color: textEditor.color,
+          width: textEditor.width
+        };
+        const finalObjects = [...page.objects, newText];
+        setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
+        commitPageObjectsToHistory(page.index, finalObjects);
+      }
+    }
+    setTextEditor(null);
+  };
+
+  const cancelText = () => {
+    if (!textEditor) return;
+    if (textEditor.id) {
+      // Restore visibility of existing TextObject
+      const finalObjects = page.objects.map(obj =>
+        obj.id === textEditor.id ? { ...obj, visible: true } as CanvasObject : obj
+      );
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
+    }
+    setTextEditor(null);
+  };
+
+  const eraseObjectAtPoint = (stage: any) => {
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
+
+    const tolerance = 10;
+    const nextObjects = page.objects.filter(obj => {
+      let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+
+      if (obj.type === 'pen' || obj.type === 'highlighter') {
+        const xs = obj.points.filter((_, i) => i % 2 === 0);
+        const ys = obj.points.filter((_, i) => i % 2 !== 0);
+        if (xs.length === 0 || ys.length === 0) return true;
+        x1 = Math.min(...xs);
+        y1 = Math.min(...ys);
+        x2 = Math.max(...xs);
+        y2 = Math.max(...ys);
+      } else if (obj.type === 'line') {
+        x1 = Math.min(obj.points[0], obj.points[2]);
+        y1 = Math.min(obj.points[1], obj.points[3]);
+        x2 = Math.max(obj.points[0], obj.points[2]);
+        y2 = Math.max(obj.points[1], obj.points[3]);
+      } else if (obj.type === 'rect' || obj.type === 'circle') {
+        x1 = Math.min(obj.x, obj.x + obj.width);
+        y1 = Math.min(obj.y, obj.y + obj.height);
+        x2 = Math.max(obj.x, obj.x + obj.width);
+        y2 = Math.max(obj.y, obj.y + obj.height);
+      } else if (obj.type === 'text') {
+        x1 = obj.x;
+        y1 = obj.y;
+        const textWidth = obj.width || (obj.text.length * obj.fontSize * 0.6);
+        x2 = obj.x + textWidth;
+        y2 = obj.y + obj.fontSize;
+      }
+
+      const collides = (
+        pos.x >= x1 - tolerance &&
+        pos.x <= x2 + tolerance &&
+        pos.y >= y1 - tolerance &&
+        pos.y <= y2 + tolerance
+      );
+
+      return !collides;
     });
-    const textDragStartPos = useRef<{ x: number; y: number } | null>(null);
-    const [textDragRect, setTextDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-    const isDrawing = useRef(false);
-    const currentShapeId = useRef<string | null>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    if (nextObjects.length !== page.objects.length) {
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
+      commitPageObjectsToHistory(page.index, nextObjects);
+    }
+  };
 
-    const [selectionRect, setSelectionRect] = useState<{
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      visible: boolean;
-    } | null>(null);
-    const [isErasing, setIsErasing] = useState(false);
-    const transformerRef = useRef<any>(null);
-    const selectedShapeRef = useRef<any>(null);
+  const handleMouseDown = (e: any) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
 
-    useEffect(() => {
-      if (selectedIds.length > 0 && transformerRef.current) {
-        const stage = transformerRef.current.getStage();
-        if (stage) {
-          const nodes = selectedIds.map((id) => stage.findOne(`#${id}`)).filter(Boolean);
-          transformerRef.current.nodes(nodes);
-        }
-        transformerRef.current.getLayer()?.batchDraw();
-      } else if (transformerRef.current) {
-        transformerRef.current.nodes([]);
-        transformerRef.current.getLayer()?.batchDraw();
-      }
-    }, [selectedIds]);
-
-    useEffect(() => {
-      if (activeTool !== 'select') {
-        setSelectedIds([]);
-      }
-    }, [activeTool]);
-
-    useEffect(() => {
-      if (textInputState.visible && textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      }
-    }, [textInputState.value, textInputState.visible]);
-
-    useEffect(() => {
-      if (textInputState.visible && textareaRef.current) {
-        setTimeout(() => {
-          textareaRef.current?.focus();
-        }, 0);
-      }
-    }, [fontFamily, fontSize, isBold, isItalic, color, textInputState.visible]);
-
-    // Save to history
-    const pushToHistory = useCallback((nextState: KonvaObject[]) => {
-      const nextHistory = history.get().slice(0, historyIndex.get() + 1);
-      nextHistory.push(nextState);
-      
-      // Limit to 50 steps
-      if (nextHistory.length > 50) {
-        nextHistory.shift();
-      } else {
-        historyIndex.set(nextHistory.length - 1);
-      }
-      
-      history.set(nextHistory);
-      triggerHistoryChange();
-    }, [history, historyIndex, triggerHistoryChange]);
-
-    const eraseObjectAtPoint = (e: any) => {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
-
-      const filtered = objects.filter(obj => {
-        let objX = obj.x ?? 0;
-        let objY = obj.y ?? 0;
-        let objW = (obj as any).width ?? 20;
-        let objH = (obj as any).height ?? 20;
-
-        if (obj.type === 'line') {
-          const xs = obj.points.filter((_, i) => i % 2 === 0);
-          const ys = obj.points.filter((_, i) => i % 2 !== 0);
-          if (xs.length === 0 || ys.length === 0) return true;
-          objX = Math.min(...xs);
-          objY = Math.min(...ys);
-          objW = Math.max(...xs) - objX;
-          objH = Math.max(...ys) - objY;
-        }
-
-        return !(
-          pos.x >= objX - 10 &&
-          pos.x <= objX + objW + 10 &&
-          pos.y >= objY - 10 &&
-          pos.y <= objY + objH + 10
-        );
-      });
-
-      if (filtered.length !== objects.length) {
-        setObjects(filtered);
-        pushToHistory(filtered);
-      }
-    };
-
-    const handleMouseDown = (e: any) => {
-      if (activeTool === 'eraser') {
-        setIsErasing(true);
-        eraseObjectAtPoint(e);
-        return;
-      }
-      if (activeTool === 'select') {
-        const stage = e.target.getStage();
-        const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
-        if (clickedOnEmpty) {
-          const pos = stage.getPointerPosition();
-          if (pos) {
-            setSelectionRect({
-              x1: pos.x,
-              y1: pos.y,
-              x2: pos.x,
-              y2: pos.y,
-              visible: true,
-            });
-            setSelectedIds([]);
-          }
-        }
-        return;
-      }
-      if (activeTool === 'text') {
-        const stage = e.target.getStage();
-        const pos = stage?.getPointerPosition();
-        if (pos) {
-          textDragStartPos.current = pos;
-        }
-        return;
-      }
-      if (textInputState.visible) return;
-
-      const stage = e.target.getStage();
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
-
+    if (activeTool === 'eraser') {
       isDrawing.current = true;
-      const newId = generateId();
+      eraseObjectAtPoint(stage);
+      return;
+    }
 
-      if (activeTool === 'pen' || activeTool === 'highlighter') {
-        const newLine: DrawingLine = {
-          id: newId,
-          type: 'line',
-          points: [pos.x, pos.y],
-          stroke: color,
-          strokeWidth: activeTool === 'highlighter' ? strokeWidth * 2 : strokeWidth,
-          opacity: activeTool === 'highlighter' ? 0.4 : 1.0,
-        };
-        setObjects((prev) => [...prev, newLine]);
-      } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
-        currentShapeId.current = newId;
-        const newShape: ShapeObj = {
-          id: newId,
-          type: activeTool === 'line' ? 'line-shape' : activeTool,
-          x: pos.x,
-          y: pos.y,
-          width: 0,
-          height: 0,
-          stroke: shapeStrokeColor,
-          strokeWidth: shapeStrokeWidth,
-          fillColor: activeTool === 'line' ? undefined : shapeFillColor,
-          fillOpacity: activeTool === 'line' ? undefined : shapeFillOpacity,
-          strokeColor: shapeStrokeColor,
-        };
-        setObjects((prev) => [...prev, newShape]);
+    if (activeTool === 'select') {
+      const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
+      if (clickedOnEmpty) {
+        setSelectedObjectId(null);
       }
-    };
+      return;
+    }
 
-    const handleMouseMove = (e: any) => {
-      if (activeTool === 'eraser') {
-        if (isErasing) {
-          eraseObjectAtPoint(e);
-        }
-        return;
+    if (activeTool === 'text') {
+      const pos = stage.getPointerPosition();
+      if (pos) {
+        textDragStartPos.current = pos;
       }
-      if (activeTool === 'select' && selectionRect && selectionRect.visible) {
-        const stage = e.target.getStage();
-        const pos = stage.getPointerPosition();
-        if (pos) {
-          setSelectionRect((prev) =>
-            prev ? { ...prev, x2: pos.x, y2: pos.y } : null
-          );
-        }
-        return;
-      }
-      if (activeTool === 'text') {
-        if (!textDragStartPos.current) return;
-        const stage = e.target.getStage();
-        const pos = stage?.getPointerPosition();
-        if (!pos) return;
+      return;
+    }
 
-        const dx = pos.x - textDragStartPos.current.x;
-        const dy = pos.y - textDragStartPos.current.y;
+    if (textEditor) return;
 
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-          setTextDragRect({
-            x: Math.min(pos.x, textDragStartPos.current.x),
-            y: Math.min(pos.y, textDragStartPos.current.y),
-            w: Math.abs(dx),
-            h: Math.abs(dy),
-          });
-        }
-        return;
-      }
-      if (!isDrawing.current) return;
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
 
-      const stage = e.target.getStage();
+    isDrawing.current = true;
+    const newId = generateId();
+    activeObjectId.current = newId;
+
+    if (activeTool === 'pen' || activeTool === 'highlighter') {
+      const isHighlighter = activeTool === 'highlighter';
+      const newObj: FreehandObject = {
+        id: newId,
+        type: isHighlighter ? 'highlighter' : 'pen',
+        x: 0,
+        y: 0,
+        points: [pos.x, pos.y],
+        strokeColor: defaultStrokeProps.strokeColor,
+        strokeWidth: isHighlighter ? 12 : defaultStrokeProps.strokeWidth,
+        opacity: isHighlighter ? 0.4 : 1.0
+      };
+      const nextObjects = [...page.objects, newObj];
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
+    } else if (activeTool === 'rect' || activeTool === 'circle') {
+      const newObj: ShapeObject = {
+        id: newId,
+        type: activeTool,
+        x: pos.x,
+        y: pos.y,
+        width: 0,
+        height: 0,
+        fillColor: defaultShapeProps.fillColor,
+        fillOpacity: defaultShapeProps.fillOpacity,
+        strokeColor: defaultShapeProps.strokeColor,
+        strokeWidth: defaultShapeProps.strokeWidth
+      };
+      const nextObjects = [...page.objects, newObj];
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
+    } else if (activeTool === 'line') {
+      const newObj: LineObject = {
+        id: newId,
+        type: 'line',
+        x: 0,
+        y: 0,
+        points: [pos.x, pos.y, pos.x, pos.y],
+        strokeColor: defaultStrokeProps.strokeColor,
+        strokeWidth: defaultStrokeProps.strokeWidth
+      };
+      const nextObjects = [...page.objects, newObj];
+      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
+    }
+  };
+
+  const handleMouseMove = (e: any) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+
+    if (activeTool === 'eraser' && isDrawing.current) {
+      eraseObjectAtPoint(stage);
+      return;
+    }
+
+    if (activeTool === 'text') {
+      if (!textDragStartPos.current) return;
       const pos = stage.getPointerPosition();
       if (!pos) return;
 
-      if (activeTool === 'pen' || activeTool === 'highlighter') {
-        setObjects((prev) => {
-          return prev.map((obj) => {
-            if (obj.type === 'line' && obj.id === prev[prev.length - 1]?.id) {
-              return {
-                ...obj,
-                points: [...obj.points, pos.x, pos.y],
-              };
-            }
-            return obj;
-          });
-        });
-      } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
-        setObjects((prev) => {
-          return prev.map((obj) => {
-            if (obj.id === currentShapeId.current && (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'line-shape')) {
-              return {
-                ...obj,
-                width: pos.x - obj.x,
-                height: pos.y - obj.y,
-              };
-            }
-            return obj;
-          });
+      const dx = pos.x - textDragStartPos.current.x;
+      const dy = pos.y - textDragStartPos.current.y;
+
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+        setTextDragRect({
+          x: Math.min(pos.x, textDragStartPos.current.x),
+          y: Math.min(pos.y, textDragStartPos.current.y),
+          w: Math.abs(dx),
+          h: Math.abs(dy)
         });
       }
-    };
+      return;
+    }
 
-    const handleMouseUp = () => {
-      if (activeTool === 'eraser') {
-        setIsErasing(false);
-        return;
-      }
-      if (activeTool === 'select' && selectionRect && selectionRect.visible) {
-        const x = Math.min(selectionRect.x1, selectionRect.x2);
-        const y = Math.min(selectionRect.y1, selectionRect.y2);
-        const w = Math.abs(selectionRect.x1 - selectionRect.x2);
-        const h = Math.abs(selectionRect.y1 - selectionRect.y2);
+    if (!isDrawing.current || !activeObjectId.current) return;
+    const pos = stage.getPointerPosition();
+    if (!pos) return;
 
-        if (w > 2 && h > 2) {
-          const newlySelected: string[] = [];
+    setPages(prev => prev.map(p => {
+      if (p.index !== page.index) return p;
+      return {
+        ...p,
+        objects: p.objects.map(obj => {
+          if (obj.id !== activeObjectId.current) return obj;
 
-          objects.forEach((obj) => {
-            let objX = obj.x ?? 0;
-            let objY = obj.y ?? 0;
-            let objW = (obj as any).width ?? 20;
-            let objH = (obj as any).height ?? 20;
+          if (obj.type === 'pen' || obj.type === 'highlighter') {
+            return {
+              ...obj,
+              points: [...obj.points, pos.x, pos.y]
+            } as FreehandObject;
+          } else if (obj.type === 'rect' || obj.type === 'circle') {
+            return {
+              ...obj,
+              width: pos.x - obj.x,
+              height: pos.y - obj.y
+            } as ShapeObject;
+          } else if (obj.type === 'line') {
+            return {
+              ...obj,
+              points: [obj.points[0], obj.points[1], pos.x, pos.y]
+            } as LineObject;
+          }
+          return obj;
+        })
+      };
+    }));
+  };
 
-            if (obj.type === 'line') {
-              const xs = obj.points.filter((_, i) => i % 2 === 0);
-              const ys = obj.points.filter((_, i) => i % 2 !== 0);
-              if (xs.length > 0 && ys.length > 0) {
-                objX = Math.min(...xs);
-                objY = Math.min(...ys);
-                objW = Math.max(...xs) - objX;
-                objH = Math.max(...ys) - objY;
-              }
-            }
+  const handleMouseUp = (e: any) => {
+    const stage = e.target.getStage();
+    if (activeTool === 'eraser') {
+      isDrawing.current = false;
+      return;
+    }
 
-            const isInside =
-              objX >= x &&
-              objX + objW <= x + w &&
-              objY >= y &&
-              objY + objH <= y + h;
-
-            if (isInside) {
-              newlySelected.push(obj.id);
-            }
-          });
-
-          setSelectedIds(newlySelected);
-        } else {
-          setSelectedIds([]);
-        }
-
-        setSelectionRect(null);
-        return;
-      }
-      if (activeTool === 'text') {
-        if (!textDragStartPos.current) return;
-        const stage = ref && (ref as any).current;
-        const pos = stage?.getPointerPosition();
-        if (!pos) {
-          textDragStartPos.current = null;
-          setTextDragRect(null);
-          return;
-        }
-
-        const dx = Math.abs(pos.x - textDragStartPos.current.x);
-        const dy = Math.abs(pos.y - textDragStartPos.current.y);
-        const isDrag = dx > 10 || dy > 10;
-
-        if (isDrag && textDragRect) {
-          setTextInputState({
-            visible: true,
-            x: textDragRect.x,
-            y: textDragRect.y,
-            width: textDragRect.w,
-            value: '',
-            editingId: null,
-            isAreaText: true,
-          });
-        } else {
-          setTextInputState({
-            visible: true,
-            x: textDragStartPos.current.x,
-            y: textDragStartPos.current.y,
-            width: null,
-            value: '',
-            editingId: null,
-            isAreaText: false,
-          });
-        }
-
+    if (activeTool === 'text') {
+      if (!textDragStartPos.current) return;
+      const pos = stage ? stage.getPointerPosition() : null;
+      if (!pos) {
         textDragStartPos.current = null;
         setTextDragRect(null);
         return;
       }
-      if (!isDrawing.current) return;
-      isDrawing.current = false;
-      currentShapeId.current = null;
-      pushToHistory(objects);
-    };
 
-    const handleTextTransformEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      
-      // Reset scale
-      node.scaleX(1);
-      node.scaleY(1);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'text') {
-          const newFontSize = Math.max(1, Math.round(obj.fontSize * scaleX));
-          return {
-            ...obj,
-            fontSize: newFontSize,
-            x: node.x(),
-            y: node.y(),
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
+      const dx = Math.abs(pos.x - textDragStartPos.current.x);
+      const dy = Math.abs(pos.y - textDragStartPos.current.y);
+      const isDrag = dx > 10 || dy > 10;
 
-    const handleRectTransformEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      const scaleY = node.scaleY();
-      
-      node.scaleX(1);
-      node.scaleY(1);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'rect') {
-          return {
-            ...obj,
-            x: node.x(),
-            y: node.y(),
-            width: Math.max(5, node.width() * scaleX),
-            height: Math.max(5, node.height() * scaleY),
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleCircleTransformEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      const scaleY = node.scaleY();
-      
-      node.scaleX(1);
-      node.scaleY(1);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'circle') {
-          return {
-            ...obj,
-            x: node.x(),
-            y: node.y(),
-            width: Math.max(5, obj.width * scaleX),
-            height: Math.max(5, obj.height * scaleY),
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleLineTransformEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      const scaleY = node.scaleY();
-      
-      node.scaleX(1);
-      node.scaleY(1);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'line-shape') {
-          return {
-            ...obj,
-            x: node.x(),
-            y: node.y(),
-            width: obj.width * scaleX,
-            height: obj.height * scaleY,
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleFreehandLineTransformEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const scaleX = node.scaleX();
-      const scaleY = node.scaleY();
-      const nodeX = node.x();
-      const nodeY = node.y();
-      
-      node.scaleX(1);
-      node.scaleY(1);
-      node.x(0);
-      node.y(0);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'line') {
-          const newPoints = obj.points.map((val, idx) => {
-            if (idx % 2 === 0) {
-              return val * scaleX + nodeX;
-            } else {
-              return val * scaleY + nodeY;
-            }
-          });
-          return {
-            ...obj,
-            points: newPoints,
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleObjectClick = (e: any, objId: string) => {
-      if (activeTool === 'select') {
-        e.cancelBubble = true;
-        setSelectedIds([objId]);
-        
-        const clickedObj = objects.find((o) => o.id === objId);
-        if (clickedObj && clickedObj.type === 'text') {
-          onTextSelected(clickedObj);
-        } else if (clickedObj && (clickedObj.type === 'rect' || clickedObj.type === 'circle' || clickedObj.type === 'line-shape') && onShapeSelected) {
-          onShapeSelected(clickedObj);
-        }
-      } else if (activeTool === 'eraser') {
-        e.cancelBubble = true;
-        const nextObjs = objects.filter((o) => o.id !== objId);
-        setObjects(nextObjs);
-        pushToHistory(nextObjs);
-      }
-    };
-
-    const handleDragEnd = (e: any, objId: string) => {
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId) {
-          return {
-            ...obj,
-            x: e.target.x(),
-            y: e.target.y(),
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleLineDragEnd = (e: any, objId: string) => {
-      const node = e.target;
-      const dx = node.x();
-      const dy = node.y();
-      
-      node.x(0);
-      node.y(0);
-      
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === objId && obj.type === 'line-shape') {
-          return {
-            ...obj,
-            x: obj.x + dx,
-            y: obj.y + dy,
-          };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      pushToHistory(nextObjs);
-    };
-
-    const handleStageClick = (e: any) => {
-      const stage = e.target.getStage();
-      if (!stage) return;
-      
-      const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
-
-      if (activeTool === 'select') {
-        if (clickedOnEmpty) {
-          setSelectedIds([]);
-        }
-      }
-    };
-
-    const handleTextDoubleClick = (e: any, textObj: TextObj) => {
-      e.cancelBubble = true;
-      const textPosition = e.target.getAbsolutePosition();
-      
-      // Hide original Konva text object during edit
-      const nextObjs = objects.map((obj) => {
-        if (obj.id === textObj.id) {
-          return { ...obj, visible: false };
-        }
-        return obj;
-      });
-      setObjects(nextObjs);
-      
-      // Update Toolbar state to match this text
-      onTextSelected(textObj);
-      
-      setTextInputState({
-        visible: true,
-        x: textPosition.x,
-        y: textPosition.y,
-        width: textObj.width || null,
-        value: textObj.text,
-        editingId: textObj.id,
-        isAreaText: !!textObj.width,
-      });
-    };
-
-    const commitTextInput = () => {
-      if (!textInputState.visible) return;
-      const val = textInputState.value.trim();
-      
-      if (textInputState.editingId) {
-        if (!val) {
-          // Delete the Konva object if empty
-          const nextObjs = objects.filter((o) => o.id !== textInputState.editingId);
-          setObjects(nextObjs);
-          pushToHistory(nextObjs);
-        } else {
-          // Update existing text
-          const nextObjs = objects.map((obj) => {
-            if (obj.id === textInputState.editingId && obj.type === 'text') {
-              return {
-                ...obj,
-                text: val,
-                visible: true,
-              };
-            }
-            return obj;
-          });
-          setObjects(nextObjs);
-          pushToHistory(nextObjs);
-        }
+      if (isDrag && textDragRect) {
+        setTextEditor({
+          id: null,
+          x: textDragRect.x,
+          y: textDragRect.y,
+          width: textDragRect.w,
+          value: '',
+          fontSize: defaultTextProps.fontSize,
+          fontFamily: defaultTextProps.fontFamily,
+          bold: defaultTextProps.bold,
+          italic: defaultTextProps.italic,
+          color: defaultTextProps.color,
+          isAreaText: true
+        });
       } else {
-        // Create new text
-        if (val) {
-          const fontStyle = `${isBold ? 'bold' : ''} ${isItalic ? 'italic' : ''}`.trim() || 'normal';
-          const newText: TextObj = {
-            id: generateId(),
-            type: 'text',
-            x: textInputState.x,
-            y: textInputState.isAreaText ? textInputState.y : textInputState.y - fontSize / 2, // Center vertically
-            text: val,
-            fontSize: fontSize,
-            fontFamily: fontFamily,
-            fill: color,
-            fontStyle: fontStyle,
-            visible: true,
-            width: textInputState.isAreaText ? textInputState.width : null,
-          };
-          const nextObjs = [...objects, newText];
-          setObjects(nextObjs);
-          pushToHistory(nextObjs);
-        }
+        setTextEditor({
+          id: null,
+          x: textDragStartPos.current.x,
+          y: textDragStartPos.current.y,
+          width: null,
+          value: '',
+          fontSize: defaultTextProps.fontSize,
+          fontFamily: defaultTextProps.fontFamily,
+          bold: defaultTextProps.bold,
+          italic: defaultTextProps.italic,
+          color: defaultTextProps.color,
+          isAreaText: false
+        });
       }
-      setTextInputState({ visible: false, x: 0, y: 0, width: null, value: '', editingId: null, isAreaText: false });
-    };
 
-    return (
-      <div
-        className="pdf-page-editor-container"
-        style={{
-          position: 'relative',
-          width: `${page.width}px`,
-          height: `${page.height}px`,
-          margin: '0 auto',
-          background: '#ffffff',
-          borderRadius: '4px',
-          boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)',
-          border: '1px solid #2A2A3E',
+      textDragStartPos.current = null;
+      setTextDragRect(null);
+      return;
+    }
+
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    activeObjectId.current = null;
+
+    setPages(prev => {
+      const updatedPage = prev.find(p => p.index === page.index);
+      if (updatedPage) {
+        commitPageObjectsToHistory(page.index, updatedPage.objects);
+      }
+      return prev;
+    });
+  };
+
+  const handleFreehandDragEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const dx = node.x();
+    const dy = node.y();
+    node.x(0);
+    node.y(0);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || (obj.type !== 'pen' && obj.type !== 'highlighter')) return obj;
+          const newPoints = obj.points.map((val, idx) => idx % 2 === 0 ? val + dx : val + dy);
+          return { ...obj, points: newPoints } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleFreehandTransformEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+    const nodeX = node.x();
+    const nodeY = node.y();
+
+    node.scaleX(1);
+    node.scaleY(1);
+    node.x(0);
+    node.y(0);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || (obj.type !== 'pen' && obj.type !== 'highlighter')) return obj;
+          const newPoints = obj.points.map((val, idx) => idx % 2 === 0 ? val * scaleX + nodeX : val * scaleY + nodeY);
+          return { ...obj, points: newPoints } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleRectDragEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const newX = node.x();
+    const newY = node.y();
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId) return obj;
+          return { ...obj, x: newX, y: newY } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleRectTransformEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+
+    node.scaleX(1);
+    node.scaleY(1);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'rect') return obj;
+          const nextWidth = Math.max(5, obj.width * scaleX);
+          const nextHeight = Math.max(5, obj.height * scaleY);
+          return { ...obj, x: node.x(), y: node.y(), width: nextWidth, height: nextHeight } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleCircleDragEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const centerResX = node.x();
+    const centerResY = node.y();
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'circle') return obj;
+          return { ...obj, x: centerResX - obj.width / 2, y: centerResY - obj.height / 2 } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleCircleTransformEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+
+    node.scaleX(1);
+    node.scaleY(1);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'circle') return obj;
+          const nextWidth = Math.max(5, obj.width * scaleX);
+          const nextHeight = Math.max(5, obj.height * scaleY);
+          return { ...obj, x: node.x(), y: node.y(), width: nextWidth, height: nextHeight } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleLineDragEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const dx = node.x();
+    const dy = node.y();
+    node.x(0);
+    node.y(0);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'line') return obj;
+          const newPoints = [
+            obj.points[0] + dx,
+            obj.points[1] + dy,
+            obj.points[2] + dx,
+            obj.points[3] + dy
+          ];
+          return { ...obj, points: newPoints } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleLineTransformEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+
+    node.scaleX(1);
+    node.scaleY(1);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'line') return obj;
+          const newPoints = [
+            obj.points[0],
+            obj.points[1],
+            obj.points[0] + (obj.points[2] - obj.points[0]) * scaleX,
+            obj.points[1] + (obj.points[3] - obj.points[1]) * scaleY
+          ];
+          return { ...obj, x: node.x(), y: node.y(), points: newPoints } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleTextDragEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const newX = node.x();
+    const newY = node.y();
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId) return obj;
+          return { ...obj, x: newX, y: newY } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleTextTransformEnd = (e: any, objId: string) => {
+    const node = e.target;
+    const scaleX = node.scaleX();
+
+    node.scaleX(1);
+    node.scaleY(1);
+
+    setPages(prev => {
+      const nextPages = prev.map(p => {
+        if (p.index !== page.index) return p;
+        const nextObjs = p.objects.map(obj => {
+          if (obj.id !== objId || obj.type !== 'text') return obj;
+          const newFontSize = Math.max(8, Math.round(obj.fontSize * scaleX));
+          const newWidth = obj.width ? Math.max(20, obj.width * scaleX) : null;
+          return { ...obj, x: node.x(), y: node.y(), fontSize: newFontSize, width: newWidth } as CanvasObject;
+        });
+        return { ...p, objects: nextObjs };
+      });
+
+      const activePage = nextPages.find(p => p.index === page.index);
+      if (activePage) {
+        commitPageObjectsToHistory(page.index, activePage.objects);
+      }
+      return nextPages;
+    });
+  };
+
+  const handleTextDoubleClick = (e: any, textObj: TextObject) => {
+    e.cancelBubble = true;
+    setSelectedObjectId(textObj.id);
+
+    setTextEditor({
+      id: textObj.id,
+      x: textObj.x,
+      y: textObj.y,
+      width: textObj.width,
+      value: textObj.text,
+      fontSize: textObj.fontSize,
+      fontFamily: textObj.fontFamily,
+      bold: textObj.bold,
+      italic: textObj.italic,
+      color: textObj.color,
+      isAreaText: textObj.width !== null
+    });
+
+    setPages(prev => prev.map(p => p.index === page.index ? {
+      ...p,
+      objects: p.objects.map(obj => obj.id === textObj.id ? { ...obj, visible: false } as CanvasObject : obj)
+    } : p));
+  };
+
+  const handleObjectClick = (e: any, objId: string) => {
+    if (activeTool === 'select') {
+      e.cancelBubble = true;
+      setSelectedObjectId(objId);
+    }
+  };
+
+  const stageCursor = activeTool === 'select' ? 'default' : activeTool === 'eraser' ? 'cell' : 'crosshair';
+
+  return (
+    <div
+      className="pdf-page-editor-container"
+      style={{
+        position: 'relative',
+        width: `${page.width}px`,
+        height: `${page.height}px`,
+        margin: '0 auto',
+        background: '#ffffff',
+        borderRadius: '4px',
+        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)',
+        border: '1px solid #2A2A3E',
+      }}
+    >
+      <Stage
+        ref={(el) => {
+          if (el) {
+            stageRefs.current[page.index] = el;
+          } else {
+            delete stageRefs.current[page.index];
+          }
         }}
+        width={page.width}
+        height={page.height}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onTouchStart={handleMouseDown}
+        onTouchMove={handleMouseMove}
+        onTouchEnd={handleMouseUp}
+        onClick={handleStageClick}
+        onTap={handleStageClick}
+        style={{ cursor: stageCursor }}
       >
-        <Stage
-          ref={ref}
-          width={page.width}
-          height={page.height}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onTouchStart={handleMouseDown}
-          onTouchMove={handleMouseMove}
-          onTouchEnd={handleMouseUp}
-          onClick={handleStageClick}
-          onTap={handleStageClick}
-          style={{ cursor: activeTool === 'select' ? 'default' : activeTool === 'eraser' ? 'cell' : 'crosshair' }}
-        >
-          <Layer>
-            {image && (
-              <KonvaImage
-                image={image}
-                width={page.width}
-                height={page.height}
-                listenUpload={false}
-              />
-            )}
-          </Layer>
-          <Layer>
-            {(() => {
-              const hexToRgba = (hex: string, opacity: number) => {
-                if (!hex) return 'transparent';
-                const r = parseInt(hex.slice(1, 3), 16);
-                const g = parseInt(hex.slice(3, 5), 16);
-                const b = parseInt(hex.slice(5, 7), 16);
-                return `rgba(${r},${g},${b},${opacity / 100})`;
-              };
+        <Layer>
+          {image && (
+            <KonvaImage
+              image={image}
+              width={page.width}
+              height={page.height}
+              listenUpload={false}
+            />
+          )}
+        </Layer>
+        <Layer>
+          {page.objects.map((obj) => {
+            if (obj.type === 'pen' || obj.type === 'highlighter') {
+              return (
+                <KonvaLine
+                  key={obj.id}
+                  id={obj.id}
+                  points={obj.points}
+                  stroke={obj.strokeColor}
+                  strokeWidth={obj.strokeWidth}
+                  tension={0.5}
+                  lineCap="round"
+                  lineJoin="round"
+                  opacity={obj.opacity}
+                  draggable={activeTool === 'select'}
+                  onClick={(e) => handleObjectClick(e, obj.id)}
+                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                  onDragEnd={(e) => handleFreehandDragEnd(e, obj.id)}
+                  onTransformEnd={(e) => handleFreehandTransformEnd(e, obj.id)}
+                />
+              );
+            }
+            if (obj.type === 'rect') {
+              const fillVal = obj.fillColor && obj.fillOpacity > 0
+                ? hexToRgba(obj.fillColor, obj.fillOpacity)
+                : 'transparent';
+              return (
+                <KonvaRect
+                  key={obj.id}
+                  id={obj.id}
+                  x={obj.x}
+                  y={obj.y}
+                  width={obj.width}
+                  height={obj.height}
+                  stroke={obj.strokeColor}
+                  strokeWidth={obj.strokeWidth}
+                  fill={fillVal}
+                  draggable={activeTool === 'select'}
+                  onClick={(e) => handleObjectClick(e, obj.id)}
+                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                  onDragEnd={(e) => handleRectDragEnd(e, obj.id)}
+                  onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
+                />
+              );
+            }
+            if (obj.type === 'circle') {
+              const fillVal = obj.fillColor && obj.fillOpacity > 0
+                ? hexToRgba(obj.fillColor, obj.fillOpacity)
+                : 'transparent';
+              return (
+                <KonvaEllipse
+                  key={obj.id}
+                  id={obj.id}
+                  x={obj.x + obj.width / 2}
+                  y={obj.y + obj.height / 2}
+                  radiusX={Math.abs(obj.width / 2)}
+                  radiusY={Math.abs(obj.height / 2)}
+                  stroke={obj.strokeColor}
+                  strokeWidth={obj.strokeWidth}
+                  fill={fillVal}
+                  draggable={activeTool === 'select'}
+                  onClick={(e) => handleObjectClick(e, obj.id)}
+                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                  onDragEnd={(e) => handleCircleDragEnd(e, obj.id)}
+                  onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
+                />
+              );
+            }
+            if (obj.type === 'line') {
+              return (
+                <KonvaLine
+                  key={obj.id}
+                  id={obj.id}
+                  points={obj.points}
+                  stroke={obj.strokeColor}
+                  strokeWidth={obj.strokeWidth}
+                  draggable={activeTool === 'select'}
+                  onClick={(e) => handleObjectClick(e, obj.id)}
+                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                  onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
+                  onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
+                />
+              );
+            }
+            if (obj.type === 'text') {
+              const fontStyle = `${obj.italic ? 'italic' : ''} ${obj.bold ? 'bold' : ''}`.trim() || 'normal';
+              return (
+                <KonvaText
+                  key={obj.id}
+                  id={obj.id}
+                  x={obj.x}
+                  y={obj.y}
+                  text={obj.text}
+                  fontSize={obj.fontSize}
+                  fontFamily={obj.fontFamily}
+                  fontStyle={fontStyle}
+                  fill={obj.color}
+                  width={obj.width || undefined}
+                  wrap={obj.width ? 'word' : 'none'}
+                  visible={obj.visible !== false}
+                  draggable={activeTool === 'select'}
+                  onClick={(e) => handleObjectClick(e, obj.id)}
+                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
+                  onDblClick={(e) => handleTextDoubleClick(e, obj)}
+                  onDblTap={(e) => handleTextDoubleClick(e, obj)}
+                  onDragEnd={(e) => handleTextDragEnd(e, obj.id)}
+                  onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
+                />
+              );
+            }
+            return null;
+          })}
 
-              return objects.map((obj) => {
-                if (obj.type === 'line') {
-                  return (
-                    <KonvaLine
-                      key={obj.id}
-                      id={obj.id}
-                      points={obj.points}
-                      stroke={obj.stroke}
-                      strokeWidth={obj.strokeWidth}
-                      tension={0.5}
-                      lineCap="round"
-                      lineJoin="round"
-                      opacity={obj.opacity}
-                      draggable={activeTool === 'select'}
-                      onClick={(e) => handleObjectClick(e, obj.id)}
-                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                      onDragEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
-                      onTransformEnd={(e) => handleFreehandLineTransformEnd(e, obj.id)}
-                    />
-                  );
-                }
-                if (obj.type === 'rect') {
-                  const fillVal = obj.fillColor && obj.fillOpacity !== undefined && obj.fillOpacity > 0
-                    ? hexToRgba(obj.fillColor, obj.fillOpacity)
-                    : 'transparent';
-                  return (
-                    <KonvaRect
-                      key={obj.id}
-                      id={obj.id}
-                      x={obj.x}
-                      y={obj.y}
-                      width={obj.width}
-                      height={obj.height}
-                      stroke={obj.strokeColor || obj.stroke}
-                      strokeWidth={obj.strokeWidth}
-                      fill={fillVal}
-                      draggable={activeTool === 'select'}
-                      onClick={(e) => handleObjectClick(e, obj.id)}
-                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                      onDragEnd={(e) => handleDragEnd(e, obj.id)}
-                      onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
-                    />
-                  );
-                }
-                if (obj.type === 'circle') {
-                  const fillVal = obj.fillColor && obj.fillOpacity !== undefined && obj.fillOpacity > 0
-                    ? hexToRgba(obj.fillColor, obj.fillOpacity)
-                    : 'transparent';
-                  return (
-                    <KonvaEllipse
-                      key={obj.id}
-                      id={obj.id}
-                      x={obj.x + obj.width / 2}
-                      y={obj.y + obj.height / 2}
-                      radiusX={Math.abs(obj.width / 2)}
-                      radiusY={Math.abs(obj.height / 2)}
-                      stroke={obj.strokeColor || obj.stroke}
-                      strokeWidth={obj.strokeWidth}
-                      fill={fillVal}
-                      draggable={activeTool === 'select'}
-                      onClick={(e) => handleObjectClick(e, obj.id)}
-                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                      onDragEnd={(e) => {
-                        const nextObjs = objects.map((item) => {
-                          if (item.id === obj.id) {
-                            return {
-                              ...item,
-                              x: e.target.x() - obj.width / 2,
-                              y: e.target.y() - obj.height / 2,
-                            };
-                          }
-                          return item;
-                        });
-                        setObjects(nextObjs);
-                        pushToHistory(nextObjs);
-                      }}
-                      onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
-                    />
-                  );
-                }
-                if (obj.type === 'line-shape') {
-                  return (
-                    <KonvaLine
-                      key={obj.id}
-                      id={obj.id}
-                      points={[obj.x, obj.y, obj.x + obj.width, obj.y + obj.height]}
-                      stroke={obj.strokeColor || obj.stroke}
-                      strokeWidth={obj.strokeWidth}
-                      draggable={activeTool === 'select'}
-                      onClick={(e) => handleObjectClick(e, obj.id)}
-                      onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                      onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
-                      onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
-                    />
-                  );
-                }
-              if (obj.type === 'text') {
-                return (
-                  <KonvaText
-                    key={obj.id}
-                    id={obj.id}
-                    x={obj.x}
-                    y={obj.y}
-                    text={obj.text}
-                    fontSize={obj.fontSize}
-                    fontFamily={obj.fontFamily}
-                    fontStyle={obj.fontStyle}
-                    fill={obj.fill}
-                    width={obj.width || undefined}
-                    wrap={obj.width ? 'word' : 'none'}
-                    visible={obj.visible !== false}
-                    draggable={activeTool === 'select'}
-                    onClick={(e) => handleObjectClick(e, obj.id)}
-                    onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                    onDblClick={(e) => handleTextDoubleClick(e, obj)}
-                    onDblTap={(e) => handleTextDoubleClick(e, obj)}
-                    onDragEnd={(e) => handleDragEnd(e, obj.id)}
-                    onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
-                  />
-                );
-              }
-              return null;
-            });
-          })()}
+          {textDragRect && (
+            <KonvaRect
+              x={textDragRect.x}
+              y={textDragRect.y}
+              width={textDragRect.w}
+              height={textDragRect.h}
+              stroke="#4A9EFF"
+              strokeWidth={1}
+              dash={[4, 4]}
+              fill="rgba(74,158,255,0.05)"
+              listening={false}
+            />
+          )}
 
-            {textDragRect && (
-              <KonvaRect
-                x={textDragRect.x}
-                y={textDragRect.y}
-                width={textDragRect.w}
-                height={textDragRect.h}
-                stroke="#4A9EFF"
-                strokeWidth={1}
-                dash={[4, 4]}
-                fill="rgba(74,158,255,0.05)"
-                listening={false}
-              />
-            )}
+          {selectedObjectId && (
+            <Transformer
+              ref={transformerRef}
+              rotateEnabled={false}
+              boundBoxFunc={(oldBox, newBox) => {
+                if (newBox.width < 10 || newBox.height < 10) return oldBox;
+                return newBox;
+              }}
+            />
+          )}
+        </Layer>
+      </Stage>
 
-            {selectionRect && selectionRect.visible && (
-              <KonvaRect
-                x={Math.min(selectionRect.x1, selectionRect.x2)}
-                width={Math.abs(selectionRect.x1 - selectionRect.x2)}
-                y={Math.min(selectionRect.y1, selectionRect.y2)}
-                height={Math.abs(selectionRect.y1 - selectionRect.y2)}
-                stroke="#4A9EFF"
-                strokeWidth={1}
-                dash={[4, 4]}
-                fill="rgba(74,158,255,0.1)"
-              />
-            )}
-
-            {selectedIds.length > 0 && (
-              <Transformer
-                ref={transformerRef}
-                rotateEnabled={false}
-                boundBoxFunc={(oldBox, newBox) => {
-                  if (newBox.width < 10 || newBox.height < 10) return oldBox;
-                  return newBox;
-                }}
-              />
-            )}
-          </Layer>
-        </Stage>
-
-        {textInputState.visible && (
-          <textarea
-            ref={textareaRef}
-            value={textInputState.value}
-            onChange={(e) => setTextInputState((prev) => ({ ...prev, value: e.target.value }))}
-            onBlur={commitTextInput}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                if (textInputState.isAreaText) {
-                  if (!e.shiftKey) {
-                    e.preventDefault();
-                    commitTextInput();
-                  }
-                } else {
+      {textEditor && (
+        <textarea
+          ref={textareaRef}
+          value={textEditor.value}
+          onChange={(e) => setTextEditor((prev) => prev ? { ...prev, value: e.target.value } : null)}
+          onBlur={commitText}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              if (textEditor.isAreaText) {
+                if (!e.shiftKey) {
                   e.preventDefault();
-                  commitTextInput();
+                  commitText();
                 }
-              } else if (e.key === 'Escape') {
+              } else {
                 e.preventDefault();
-                if (textInputState.editingId) {
-                  // Restore text visibility
-                  const nextObjs = objects.map((obj) => {
-                    if (obj.id === textInputState.editingId) {
-                      return { ...obj, visible: true };
-                    }
-                    return obj;
-                  });
-                  setObjects(nextObjs);
-                }
-                setTextInputState({ visible: false, x: 0, y: 0, width: null, value: '', editingId: null, isAreaText: false });
+                commitText();
               }
-            }}
-            autoFocus
-            style={{
-              position: 'absolute',
-              top: `${textInputState.y}px`,
-              left: `${textInputState.x}px`,
-              background: 'transparent',
-              color: color,
-              border: '1px solid #4A9EFF',
-              borderRadius: '4px',
-              fontFamily: fontFamily,
-              fontSize: `${fontSize}px`,
-              fontWeight: isBold ? 'bold' : 'normal',
-              fontStyle: isItalic ? 'italic' : 'normal',
-              outline: 'none',
-              zIndex: 1000,
-              padding: '4px',
-              overflow: 'hidden',
-              pointerEvents: 'all',
-              width: textInputState.isAreaText ? `${textInputState.width}px` : 'auto',
-              minWidth: textInputState.isAreaText ? undefined : '120px',
-              height: 'auto',
-              minHeight: `${fontSize + 8}px`,
-              whiteSpace: textInputState.isAreaText ? 'pre-wrap' : 'nowrap',
-              wordWrap: textInputState.isAreaText ? 'break-word' : undefined,
-              resize: 'none',
-            }}
-          />
-        )}
-      </div>
-    );
-  }
-);
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelText();
+            }
+          }}
+          autoFocus
+          style={{
+            position: 'absolute',
+            top: `${textEditor.y}px`,
+            left: `${textEditor.x}px`,
+            background: 'transparent',
+            color: textEditor.color,
+            border: '1px solid #4A9EFF',
+            borderRadius: '4px',
+            fontFamily: textEditor.fontFamily,
+            fontSize: `${textEditor.fontSize}px`,
+            fontWeight: textEditor.bold ? 'bold' : 'normal',
+            fontStyle: textEditor.italic ? 'italic' : 'normal',
+            outline: 'none',
+            zIndex: 1000,
+            padding: '4px',
+            overflow: 'hidden',
+            pointerEvents: 'all',
+            width: textEditor.isAreaText && textEditor.width ? `${textEditor.width}px` : 'auto',
+            minWidth: textEditor.isAreaText ? undefined : '120px',
+            height: 'auto',
+            minHeight: `${textEditor.fontSize + 8}px`,
+            whiteSpace: textEditor.isAreaText ? 'pre-wrap' : 'nowrap',
+            wordWrap: textEditor.isAreaText ? 'break-word' : undefined,
+            resize: 'none',
+          }}
+        />
+      )}
+    </div>
+  );
+});
 
-KonvaPageEditor.displayName = 'KonvaPageEditor';
+PageCanvas.displayName = 'PageCanvas';
 
-// ── Main Page Component ───────────────────────────────────────────────────────
+// ── Main EditPdfPage Component ────────────────────────────────────────────────
 export function EditPdfPage() {
   const { showToast } = useToast();
   const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('edit-pdf');
 
-  const [pages, setPages] = useState<PdfPageData[]>([]);
+  const [pages, setPages] = useState<PageData[]>([]);
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [activeTool, setActiveTool] = useState<'select' | CanvasObjectType | 'eraser'>('select');
+  const [zoomLevel, setZoomLevel] = useState(1.0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outputFilename, setOutputFilename] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Tools & States
-  const [activeTool, setActiveTool] = useState<Tool>('select');
-  const [color, setColor] = useState('#4A9EFF');
-  const [strokeWidth, setStrokeWidth] = useState(4);
-  const [fontFamily, setFontFamily] = useState('Arial');
-  const [fontSize, setFontSize] = useState(24);
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
+  // Default properties untuk object BARU yang akan dibuat (saat tidak ada selection)
+  const [defaultTextProps, setDefaultTextProps] = useState({
+    fontFamily: 'Arial', fontSize: 16, bold: false, italic: false, color: '#000000'
+  });
+  const [defaultShapeProps, setDefaultShapeProps] = useState({
+    fillColor: '#4A9EFF', fillOpacity: 0, strokeColor: '#4A9EFF', strokeWidth: 2
+  });
+  const [defaultStrokeProps, setDefaultStrokeProps] = useState({
+    strokeColor: '#4A9EFF', strokeWidth: 3
+  });
 
-  // Store annotation objects per page index
-  const [pageObjects, setPageObjects] = useState<Record<number, KonvaObject[]>>({});
+  const stageRefs = useRef<Record<number, any>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const debounceTimeoutRef = useRef<number | null>(null);
 
-  const [zoomLevel, setZoomLevel] = useState(1.0);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activePageIndex, setActivePageIndex] = useState<number>(0);
-  const [shapeFillColor, setShapeFillColor] = useState<string>('#ffffff');
-  const [shapeFillOpacity, setShapeFillOpacity] = useState<number>(0);
-  const [shapeStrokeColor, setShapeStrokeColor] = useState<string>('#4A9EFF');
-  const [shapeStrokeWidth, setShapeStrokeWidth] = useState<number>(2);
+  // Derived Selected Object
+  const selectedObject = useMemo(() => {
+    if (!selectedObjectId) return null;
+    return pages[activePageIndex]?.objects.find(o => o.id === selectedObjectId) ?? null;
+  }, [selectedObjectId, pages, activePageIndex]);
 
-  // Sync active settings when activeTool changes
-  useEffect(() => {
-    if (activeTool === 'pen') {
-      setColor('#4A9EFF');
-      setStrokeWidth(3);
-    } else if (activeTool === 'highlighter') {
-      setColor('#FFFF00');
-      setStrokeWidth(12);
-    } else if (activeTool === 'text') {
-      setColor('#000000');
-      setFontSize(16);
-    } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
-      setColor('#4A9EFF');
-      setStrokeWidth(2);
-    }
-  }, [activeTool]);
+  // Unified properties update handler with debounced history push
+  const updateSelectedObject = useCallback((patch: Partial<CanvasObject>) => {
+    if (!selectedObjectId) return;
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    setPages(prev => {
+      const updatedPages = prev.map((page, idx) => {
+        if (idx !== activePageIndex) return page;
+        const nextObjects = page.objects.map(obj => {
+          if (obj.id === selectedObjectId) {
+            return { ...obj, ...patch } as CanvasObject;
+          }
+          return obj;
+        });
+        return {
+          ...page,
+          objects: nextObjects
+        };
+      });
 
-        if (selectedIds.length === 0) return;
+      // Debounce history push (300-500ms, using 400ms)
+      if (debounceTimeoutRef.current) {
+        window.clearTimeout(debounceTimeoutRef.current);
+      }
 
-        setPageObjects((prev) => {
-          const currentObjs = prev[activePageIndex] || [];
-          const nextObjs = currentObjs.filter((obj) => !selectedIds.includes(obj.id));
-          
-          const nextHistory = (pageHistory.current[activePageIndex] || [[]]).slice(0, (pageHistoryIndex.current[activePageIndex] ?? 0) + 1);
-          nextHistory.push(nextObjs);
+      debounceTimeoutRef.current = window.setTimeout(() => {
+        setPages(curr => curr.map((page, idx) => {
+          if (idx !== activePageIndex) return page;
+          const currentObjects = page.objects;
+          const lastSnapshot = page.history[page.historyIndex];
+
+          if (JSON.stringify(lastSnapshot) === JSON.stringify(currentObjects)) {
+            return page;
+          }
+
+          const nextHistory = page.history.slice(0, page.historyIndex + 1);
+          nextHistory.push(currentObjects);
           if (nextHistory.length > 50) {
             nextHistory.shift();
-          } else {
-            pageHistoryIndex.current[activePageIndex] = nextHistory.length - 1;
           }
-          pageHistory.current[activePageIndex] = nextHistory;
-          setHistoryTrigger((t) => t + 1);
-
           return {
-            ...prev,
-            [activePageIndex]: nextObjs,
+            ...page,
+            history: nextHistory,
+            historyIndex: nextHistory.length - 1
           };
-        });
-        setSelectedIds([]);
+        }));
+      }, 400);
+
+      return updatedPages;
+    });
+  }, [selectedObjectId, activePageIndex]);
+
+  // Instantly commits current objects state of page to history (for drag/transform/draw finishes)
+  const commitPageObjectsToHistory = useCallback((pageIndex: number, finalObjects: CanvasObject[]) => {
+    setPages(prev => prev.map((page, idx) => {
+      if (idx !== pageIndex) return page;
+      const lastSnapshot = page.history[page.historyIndex];
+      if (JSON.stringify(lastSnapshot) === JSON.stringify(finalObjects)) {
+        return page;
+      }
+      const nextHistory = page.history.slice(0, page.historyIndex + 1);
+      nextHistory.push(finalObjects);
+      if (nextHistory.length > 50) {
+        nextHistory.shift();
+      }
+      return {
+        ...page,
+        objects: finalObjects,
+        history: nextHistory,
+        historyIndex: nextHistory.length - 1
+      };
+    }));
+  }, []);
+
+  // Undo/Redo trigger
+  const handleUndo = useCallback(() => {
+    setPages(prev => prev.map((page, idx) => {
+      if (idx !== activePageIndex) return page;
+      if (page.historyIndex > 0) {
+        const nextIndex = page.historyIndex - 1;
+        return {
+          ...page,
+          objects: page.history[nextIndex],
+          historyIndex: nextIndex
+        };
+      }
+      return page;
+    }));
+  }, [activePageIndex]);
+
+  const handleRedo = useCallback(() => {
+    setPages(prev => prev.map((page, idx) => {
+      if (idx !== activePageIndex) return page;
+      if (page.historyIndex < page.history.length - 1) {
+        const nextIndex = page.historyIndex + 1;
+        return {
+          ...page,
+          objects: page.history[nextIndex],
+          historyIndex: nextIndex
+        };
+      }
+      return page;
+    }));
+  }, [activePageIndex]);
+
+  // Derived disabled states for Undo/Redo
+  const isUndoDisabled = useMemo(() => {
+    const activePage = pages[activePageIndex];
+    if (!activePage) return true;
+    return activePage.historyIndex <= 0;
+  }, [pages, activePageIndex]);
+
+  const isRedoDisabled = useMemo(() => {
+    const activePage = pages[activePageIndex];
+    if (!activePage) return true;
+    return activePage.historyIndex >= activePage.history.length - 1;
+  }, [pages, activePageIndex]);
+
+  // Global hotkeys for delete, undo, redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.getAttribute('contenteditable') === 'true')) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          handleUndo();
+        } else if (e.key.toLowerCase() === 'y') {
+          e.preventDefault();
+          handleRedo();
+        }
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedObjectId) {
+          setPages(prev => prev.map((page, idx) => {
+            if (idx !== activePageIndex) return page;
+            const nextObjects = page.objects.filter(obj => obj.id !== selectedObjectId);
+            const newHistory = page.history.slice(0, page.historyIndex + 1);
+            newHistory.push(nextObjects);
+            if (newHistory.length > 50) newHistory.shift();
+
+            return {
+              ...page,
+              objects: nextObjects,
+              history: newHistory,
+              historyIndex: newHistory.length - 1
+            };
+          }));
+          setSelectedObjectId(null);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, activePageIndex]);
+  }, [handleUndo, handleRedo, selectedObjectId, activePageIndex]);
 
+  // Tool default configurations sync
   useEffect(() => {
-    if (selectedIds.length !== 1) return;
+    if (activeTool === 'pen') {
+      setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 3 }));
+    } else if (activeTool === 'highlighter') {
+      setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 12 }));
+    } else if (activeTool === 'text') {
+      setDefaultTextProps(prev => ({ ...prev, fontSize: 16 }));
+    } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
+      setDefaultShapeProps(prev => ({ ...prev, strokeWidth: 2 }));
+    }
+  }, [activeTool]);
 
-    setPageObjects((prev) => {
-      const currentObjs = prev[activePageIndex] || [];
-      const updatedObjs = currentObjs.map((obj) => {
-        if (obj.id !== selectedIds[0] || obj.type !== 'text') return obj;
-        const fontStyle = `${isItalic ? 'italic' : ''} ${isBold ? 'bold' : ''}`.trim() || 'normal';
-        
-        if (
-          obj.fontFamily === fontFamily &&
-          obj.fontSize === fontSize &&
-          obj.fontStyle === fontStyle &&
-          obj.fill === color
-        ) {
-          return obj;
-        }
+  // BASE DISPLAY SCALE AND ZOOM CALCULATIONS
+  const BASE_DISPLAY_WIDTH = 800; // px
 
-        return {
-          ...obj,
-          fontFamily,
-          fontSize,
-          fontStyle,
-          fill: color,
-        };
-      });
-
-      if (JSON.stringify(currentObjs) === JSON.stringify(updatedObjs)) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [activePageIndex]: updatedObjs,
-      };
-    });
-  }, [fontFamily, fontSize, isBold, isItalic, color, selectedIds, activePageIndex]);
-
-  useEffect(() => {
-    if (pages.length === 0) return;
-    if (!canvasViewportRef.current) return;
-    
-    const timer = setTimeout(() => {
-      if (!canvasViewportRef.current) return;
-      const viewportWidth = canvasViewportRef.current.clientWidth - 48; // padding
-      const pageWidth = pages[0].width;
-      
-      const fitZoom = viewportWidth / pageWidth;
-      const roundedZoom = Math.min(
-        Math.floor(fitZoom / 0.25) * 0.25,
-        1.0
-      );
-      setZoomLevel(Math.max(roundedZoom, 0.25));
-    }, 100);
-
-    return () => clearTimeout(timer);
+  const baseDisplayScale = useMemo(() => {
+    if (pages.length === 0) return 1;
+    return BASE_DISPLAY_WIDTH / pages[0].width;
   }, [pages]);
 
-  const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(prev + 0.25, 2.0));
-  };
+  const finalScale = baseDisplayScale * zoomLevel;
 
-  const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(prev - 0.25, 0.25));
-  };
+  // Viewport resize and shrink detection
+  useEffect(() => {
+    if (pages.length === 0 || !canvasViewportRef.current) return;
+    const viewportWidth = canvasViewportRef.current.clientWidth - 48;
+    if (viewportWidth < BASE_DISPLAY_WIDTH) {
+      setZoomLevel(Math.max(viewportWidth / BASE_DISPLAY_WIDTH, 0.25));
+    } else {
+      setZoomLevel(1.0);
+    }
+  }, [pages]);
 
-  const handleFitToWidth = () => {
-    setZoomLevel(1);
-  };
+  // Convert hex color and opacity (0-100) to rgba string
+  const hexToRgba = useCallback((hex: string, opacity: number) => {
+    if (!hex) return 'transparent';
+    if (hex.startsWith('rgba') || hex === 'transparent') return hex;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+  }, []);
 
-  // History system per page index
-  const pageHistory = useRef<Record<number, KonvaObject[][]>>({});
-  const pageHistoryIndex = useRef<Record<number, number>>({});
-  const [, setHistoryTrigger] = useState(0); // Trigger re-render for Undo/Redo button disable state
-
-  const stageRefs = useRef<Record<number, any>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasViewportRef = useRef<HTMLDivElement>(null);
-
-  // Call API to convert PDF to base64 PNG pages
+  // API Call: pdf to pages conversion
   const convertPdfToPages = async (pdfFile: File) => {
     setLoading(true);
     const formData = new FormData();
-    formData.append('file', pdfFile);
+    formData.append('file', pdfFile, pdfFile.name || 'preview.pdf');
 
     try {
       const res = await apiClient.post<ConversionResponse>('/api/v1/pdf-to-image/pages', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setPages(res.data.pages);
-      
-      // Initialize objects & history for each page
-      const initialObjects: Record<number, KonvaObject[]> = {};
-      res.data.pages.forEach((p) => {
-        initialObjects[p.index] = [];
-        pageHistory.current[p.index] = [[]];
-        pageHistoryIndex.current[p.index] = 0;
-      });
-      setPageObjects(initialObjects);
-      
+
+      const formatted: PageData[] = res.data.pages.map((p) => ({
+        index: p.index,
+        width: p.width,
+        height: p.height,
+        imageUrl: `data:image/png;base64,${p.data}`,
+        objects: [],
+        history: [[]],
+        historyIndex: 0
+      }));
+
+      setPages(formatted);
+      setActivePageIndex(0);
+      setSelectedObjectId(null);
+
       const stem = pdfFile.name.replace(/\.[^/.]+$/, '');
       setOutputFilename(stem);
-      
+
       showToast({
         type: 'success',
         title: 'PDF Loaded Successfully',
@@ -1349,7 +1425,6 @@ export function EditPdfPage() {
     }
   };
 
-  // Auto conversion if file was dropped / restored
   useEffect(() => {
     if (file && pages.length === 0) {
       convertPdfToPages(file);
@@ -1390,130 +1465,22 @@ export function EditPdfPage() {
   const handleRemoveFile = () => {
     setFile(null);
     setPages([]);
-    setPageObjects({});
-    pageHistory.current = {};
-    pageHistoryIndex.current = {};
+    setSelectedObjectId(null);
   };
 
-  const triggerHistoryChange = () => {
-    setHistoryTrigger((prev) => prev + 1);
+  const handleZoomIn = () => {
+    setZoomLevel((prev) => Math.min(prev + 0.25, 2.0));
   };
 
-  // Global Undo / Redo helpers that look at the first page or could be active page
-  // For simplicity, we undo/redo the page history that has active undo available.
-  const handleUndo = () => {
-    // Check if we have undo on any page, usually the user wants to undo on pages they edited.
-    // We can just undo for all pages that have history index > 0.
-    let undone = false;
-    const nextObjects = { ...pageObjects };
-    
-    Object.keys(pageHistory.current).forEach((key) => {
-      const idx = Number(key);
-      const histIdx = pageHistoryIndex.current[idx] ?? 0;
-      if (histIdx > 0) {
-        const prevIdx = histIdx - 1;
-        pageHistoryIndex.current[idx] = prevIdx;
-        nextObjects[idx] = pageHistory.current[idx][prevIdx];
-        undone = true;
-      }
-    });
-
-    if (undone) {
-      setPageObjects(nextObjects);
-      triggerHistoryChange();
-    }
+  const handleZoomOut = () => {
+    setZoomLevel((prev) => Math.max(prev - 0.25, 0.25));
   };
 
-  const handleRedo = () => {
-    let redone = false;
-    const nextObjects = { ...pageObjects };
-    
-    Object.keys(pageHistory.current).forEach((key) => {
-      const idx = Number(key);
-      const histIdx = pageHistoryIndex.current[idx] ?? 0;
-      const histLen = pageHistory.current[idx]?.length ?? 0;
-      if (histIdx < histLen - 1) {
-        const nextIdx = histIdx + 1;
-        pageHistoryIndex.current[idx] = nextIdx;
-        nextObjects[idx] = pageHistory.current[idx][nextIdx];
-        redone = true;
-      }
-    });
-
-    if (redone) {
-      setPageObjects(nextObjects);
-      triggerHistoryChange();
-    }
+  const handleFitToWidth = () => {
+    setZoomLevel(1.0);
   };
 
-  // Check if Undo/Redo is disabled
-  const isUndoDisabled = !Object.keys(pageHistoryIndex.current).some(
-    (key) => (pageHistoryIndex.current[Number(key)] ?? 0) > 0
-  );
-
-  const isRedoDisabled = !Object.keys(pageHistoryIndex.current).some(
-    (key) =>
-      (pageHistoryIndex.current[Number(key)] ?? 0) <
-      (pageHistory.current[Number(key)]?.length ?? 0) - 1
-  );
-
-  const handleTextSelected = (textObj: TextObj) => {
-    // Sync toolbar contextual controls to this text object
-    setFontFamily(textObj.fontFamily);
-    setFontSize(textObj.fontSize);
-    setColor(textObj.fill);
-    setIsBold(textObj.fontStyle.includes('bold'));
-    setIsItalic(textObj.fontStyle.includes('italic'));
-  };
-
-  const handleShapeSelected = (shape: ShapeObj) => {
-    if (shape.fillColor) setShapeFillColor(shape.fillColor);
-    if (shape.fillOpacity !== undefined) setShapeFillOpacity(shape.fillOpacity);
-    if (shape.strokeColor) setShapeStrokeColor(shape.strokeColor);
-    else if (shape.stroke) setShapeStrokeColor(shape.stroke);
-    setShapeStrokeWidth(shape.strokeWidth);
-  };
-
-  useEffect(() => {
-    if (selectedIds.length !== 1) return;
-
-    setPageObjects((prev) => {
-      const currentObjs = prev[activePageIndex] || [];
-      const updatedObjs = currentObjs.map((obj) => {
-        if (obj.id !== selectedIds[0] || (obj.type !== 'rect' && obj.type !== 'circle' && obj.type !== 'line-shape')) return obj;
-        
-        const isLine = obj.type === 'line-shape';
-        
-        if (
-          obj.strokeColor === shapeStrokeColor &&
-          obj.strokeWidth === shapeStrokeWidth &&
-          (isLine || (obj.fillColor === shapeFillColor && obj.fillOpacity === shapeFillOpacity))
-        ) {
-          return obj;
-        }
-
-        return {
-          ...obj,
-          stroke: shapeStrokeColor,
-          strokeColor: shapeStrokeColor,
-          strokeWidth: shapeStrokeWidth,
-          fillColor: isLine ? undefined : shapeFillColor,
-          fillOpacity: isLine ? undefined : shapeFillOpacity,
-        };
-      });
-
-      if (JSON.stringify(currentObjs) === JSON.stringify(updatedObjs)) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [activePageIndex]: updatedObjs,
-      };
-    });
-  }, [shapeFillColor, shapeFillOpacity, shapeStrokeColor, shapeStrokeWidth, selectedIds, activePageIndex]);
-
-  // Save flow
+  // Compile & save document flow
   const handleSave = async () => {
     if (!file || pages.length === 0) return;
     setSaving(true);
@@ -1521,17 +1488,13 @@ export function EditPdfPage() {
     try {
       const exportedPages: string[] = [];
 
-      // Export each Konva Stage as high-res base64 PNG
       for (const p of pages) {
         const stage = stageRefs.current[p.index];
         if (stage) {
-          // pixelRatio: 3 for print-quality rendering
           const dataUrl = stage.toDataURL({ pixelRatio: 3 });
           exportedPages.push(dataUrl);
         } else {
-          // Fallback if page stage is not loaded yet (rendered as lazy placeholder)
-          // We can use the original base64 page directly
-          exportedPages.push(`data:image/png;base64,${p.data}`);
+          exportedPages.push(p.imageUrl);
         }
       }
 
@@ -1573,7 +1536,7 @@ export function EditPdfPage() {
     <div className="page-body" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div className="feature-split-layout" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         
-        {/* Left Panel: 320px fixed controls */}
+        {/* Left Panel */}
         <div
           className="feature-controls"
           style={{
@@ -1603,7 +1566,7 @@ export function EditPdfPage() {
             className="hidden"
           />
 
-          {/* Zona 1 — File Info (only when file is uploaded) */}
+          {/* Zona 1 — File Info */}
           {file && (
             <div
               className="card"
@@ -1634,7 +1597,7 @@ export function EditPdfPage() {
             </div>
           )}
 
-          {/* Zona 2 — Drop Zone (only when no file is uploaded) */}
+          {/* Zona 2 — Drop Zone */}
           {!file && (
             <div
               className={`drop-zone ${isDragOver ? 'drag-over' : ''}`}
@@ -1664,7 +1627,6 @@ export function EditPdfPage() {
             </div>
           )}
 
-          {/* Loading status under file card */}
           {file && loading && (
             <div className="flex items-center gap-2 text-[#9898B8] text-xs">
               <Loader2 className="animate-spin text-[#4A9EFF]" size={14} />
@@ -1689,7 +1651,10 @@ export function EditPdfPage() {
               return (
                 <button
                   key={t.id}
-                  onClick={() => setActiveTool(t.id as Tool)}
+                  onClick={() => {
+                    setActiveTool(t.id as any);
+                    setSelectedObjectId(null); // Deselect on tool switch
+                  }}
                   disabled={pages.length === 0}
                   style={{
                     width: '100%',
@@ -1727,73 +1692,27 @@ export function EditPdfPage() {
           {/* Zona 4 — Contextual Controls */}
           {pages.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {activeTool === 'pen' && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Size</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {strokeWidth}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={strokeWidth}
-                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                    />
-                  </div>
-                </>
-              )}
+              
+              <div className="text-[11px] uppercase tracking-wider text-[#4A9EFF] font-bold mb-2">
+                {selectedObject 
+                  ? `Editing: Selected ${selectedObject.type}` 
+                  : `Editing defaults: ${activeTool}`}
+              </div>
 
-              {activeTool === 'highlighter' && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Size</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {strokeWidth}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="5"
-                      max="30"
-                      value={strokeWidth}
-                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                    />
-                  </div>
-                </>
-              )}
-
-              {activeTool === 'text' && (
+              {/* TEXT PROPERTIES (either selected TextObject or default Text tool properties) */}
+              {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span className="text-xs font-semibold text-[#9898B8]">Font</span>
                     <select
-                      value={fontFamily}
-                      onChange={(e) => setFontFamily(e.target.value)}
+                      value={selectedObject ? (selectedObject as TextObject).fontFamily : defaultTextProps.fontFamily}
+                      onChange={(e) => {
+                        if (selectedObject) {
+                          updateSelectedObject({ fontFamily: e.target.value });
+                        } else {
+                          setDefaultTextProps(prev => ({ ...prev, fontFamily: e.target.value }));
+                        }
+                      }}
                       style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', cursor: 'pointer', fontSize: '13px' }}
                     >
                       {FONT_FAMILIES.map((font) => (
@@ -1809,21 +1728,62 @@ export function EditPdfPage() {
                       type="number"
                       min="1"
                       step={1}
-                      value={fontSize}
-                      onChange={(e) => setFontSize(Math.max(1, Number(e.target.value)))}
+                      value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
+                      onChange={(e) => {
+                        const val = Math.max(1, Number(e.target.value));
+                        if (selectedObject) {
+                          updateSelectedObject({ fontSize: val });
+                        } else {
+                          setDefaultTextProps(prev => ({ ...prev, fontSize: val }));
+                        }
+                      }}
                       style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', fontSize: '13px' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      onClick={() => setIsBold(!isBold)}
-                      style={{ flex: 1, height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isBold ? '#4A9EFF' : '#12121A', border: '1px solid #2A2A3E', borderRadius: '6px', color: isBold ? '#ffffff' : '#9898B8', cursor: 'pointer' }}
+                      onClick={() => {
+                        if (selectedObject) {
+                          updateSelectedObject({ bold: !(selectedObject as TextObject).bold });
+                        } else {
+                          setDefaultTextProps(prev => ({ ...prev, bold: !prev.bold }));
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#4A9EFF' : '#12121A',
+                        border: '1px solid #2A2A3E',
+                        borderRadius: '6px',
+                        color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#ffffff' : '#9898B8',
+                        cursor: 'pointer'
+                      }}
                     >
                       <Bold size={16} />
                     </button>
                     <button
-                      onClick={() => setIsItalic(!isItalic)}
-                      style={{ flex: 1, height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isItalic ? '#4A9EFF' : '#12121A', border: '1px solid #2A2A3E', borderRadius: '6px', color: isItalic ? '#ffffff' : '#9898B8', cursor: 'pointer' }}
+                      onClick={() => {
+                        if (selectedObject) {
+                          updateSelectedObject({ italic: !(selectedObject as TextObject).italic });
+                        } else {
+                          setDefaultTextProps(prev => ({ ...prev, italic: !prev.italic }));
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#4A9EFF' : '#12121A',
+                        border: '1px solid #2A2A3E',
+                        borderRadius: '6px',
+                        color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#ffffff' : '#9898B8',
+                        cursor: 'pointer'
+                      }}
                     >
                       <Italic size={16} />
                     </button>
@@ -1832,22 +1792,36 @@ export function EditPdfPage() {
                     <span className="text-xs font-semibold text-[#9898B8]">Color</span>
                     <input
                       type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
+                      value={selectedObject ? (selectedObject as TextObject).color : defaultTextProps.color}
+                      onChange={(e) => {
+                        if (selectedObject) {
+                          updateSelectedObject({ color: e.target.value });
+                        } else {
+                          setDefaultTextProps(prev => ({ ...prev, color: e.target.value }));
+                        }
+                      }}
                       style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
                     />
                   </div>
                 </>
               )}
 
-              {(activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') && (
+              {/* SHAPE PROPERTIES (rect, circle) */}
+              {((selectedObject && (selectedObject.type === 'rect' || selectedObject.type === 'circle')) ||
+                (!selectedObject && (activeTool === 'rect' || activeTool === 'circle'))) && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <span className="text-xs font-semibold text-[#9898B8]">Stroke Color</span>
                     <input
                       type="color"
-                      value={shapeStrokeColor}
-                      onChange={(e) => setShapeStrokeColor(e.target.value)}
+                      value={selectedObject ? (selectedObject as ShapeObject).strokeColor : defaultShapeProps.strokeColor}
+                      onChange={(e) => {
+                        if (selectedObject) {
+                          updateSelectedObject({ strokeColor: e.target.value });
+                        } else {
+                          setDefaultShapeProps(prev => ({ ...prev, strokeColor: e.target.value }));
+                        }
+                      }}
                       style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
                     />
                   </div>
@@ -1855,51 +1829,112 @@ export function EditPdfPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-semibold text-[#9898B8]">Stroke Width</span>
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {shapeStrokeWidth}px
+                        {selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}px
                       </span>
                     </div>
                     <input
                       type="range"
                       min="1"
                       max="20"
-                      value={shapeStrokeWidth}
-                      onChange={(e) => setShapeStrokeWidth(Number(e.target.value))}
+                      value={selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (selectedObject) {
+                          updateSelectedObject({ strokeWidth: val });
+                        } else {
+                          setDefaultShapeProps(prev => ({ ...prev, strokeWidth: val }));
+                        }
+                      }}
                       style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
                     />
                   </div>
-                  {activeTool !== 'line' && (
-                    <>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <span className="text-xs font-semibold text-[#9898B8]">Fill Color</span>
-                        <input
-                          type="color"
-                          value={shapeFillColor}
-                          onChange={(e) => setShapeFillColor(e.target.value)}
-                          style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-semibold text-[#9898B8]">Fill Opacity</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                            {shapeFillOpacity}%
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={shapeFillOpacity}
-                          onChange={(e) => setShapeFillOpacity(Number(e.target.value))}
-                          style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Fill Color</span>
+                    <input
+                      type="color"
+                      value={selectedObject ? (selectedObject as ShapeObject).fillColor : defaultShapeProps.fillColor}
+                      onChange={(e) => {
+                        if (selectedObject) {
+                          updateSelectedObject({ fillColor: e.target.value });
+                        } else {
+                          setDefaultShapeProps(prev => ({ ...prev, fillColor: e.target.value }));
+                        }
+                      }}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#9898B8]">Fill Opacity</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                        {selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (selectedObject) {
+                          updateSelectedObject({ fillOpacity: val });
+                        } else {
+                          setDefaultShapeProps(prev => ({ ...prev, fillOpacity: val }));
+                        }
+                      }}
+                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    />
+                  </div>
                 </>
               )}
 
-              {activeTool === 'select' && (
+              {/* LINE / FREEHAND PROPERTIES (line, pen, highlighter) */}
+              {((selectedObject && (selectedObject.type === 'line' || selectedObject.type === 'pen' || selectedObject.type === 'highlighter')) ||
+                (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <span className="text-xs font-semibold text-[#9898B8]">Stroke Color</span>
+                    <input
+                      type="color"
+                      value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeColor : defaultStrokeProps.strokeColor}
+                      onChange={(e) => {
+                        if (selectedObject) {
+                          updateSelectedObject({ strokeColor: e.target.value });
+                        } else {
+                          setDefaultStrokeProps(prev => ({ ...prev, strokeColor: e.target.value }));
+                        }
+                      }}
+                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#9898B8]">Stroke Width</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
+                        {selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        if (selectedObject) {
+                          updateSelectedObject({ strokeWidth: val });
+                        } else {
+                          setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: val }));
+                        }
+                      }}
+                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {activeTool === 'select' && !selectedObject && (
                 <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
                   Click object to select. Drag to move.
                 </span>
@@ -1907,7 +1942,7 @@ export function EditPdfPage() {
 
               {activeTool === 'eraser' && (
                 <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
-                  Click any object to delete it.
+                  Click or drag over any object to delete it.
                 </span>
               )}
             </div>
@@ -1971,7 +2006,7 @@ export function EditPdfPage() {
           </div>
         </div>
 
-        {/* Right Panel: Toolbar + Canvas Editor viewport */}
+        {/* Right Panel */}
         <div
           className="feature-preview"
           style={{
@@ -2125,7 +2160,7 @@ export function EditPdfPage() {
             ) : (
               <div
                 style={{
-                  transform: `scale(${zoomLevel})`,
+                  transform: `scale(${finalScale})`,
                   transformOrigin: 'top center',
                   transition: 'transform 0.15s ease',
                   display: 'flex',
@@ -2145,55 +2180,23 @@ export function EditPdfPage() {
                       height={p.height}
                       active={isLazy}
                     >
-                      <div onMouseDown={() => setActivePageIndex(p.index)} onTouchStart={() => setActivePageIndex(p.index)}>
-                        <KonvaPageEditor
-                          ref={(el) => {
-                            if (el) {
-                              stageRefs.current[p.index] = el;
-                            } else {
-                              delete stageRefs.current[p.index];
-                            }
-                          }}
+                      <div 
+                        onMouseDown={() => setActivePageIndex(p.index)} 
+                        onTouchStart={() => setActivePageIndex(p.index)}
+                      >
+                        <PageCanvas
                           page={p}
-                          objects={pageObjects[p.index] || []}
-                          setObjects={(action) => {
-                            setPageObjects((prev) => {
-                              const currentObjs = prev[p.index] || [];
-                              const nextObjs = typeof action === 'function' ? action(currentObjs) : action;
-                              return {
-                                ...prev,
-                                [p.index]: nextObjs,
-                              };
-                            });
-                          }}
                           activeTool={activeTool}
-                          color={color}
-                          strokeWidth={strokeWidth}
-                          fontFamily={fontFamily}
-                          fontSize={fontSize}
-                          isBold={isBold}
-                          isItalic={isItalic}
-                          onTextSelected={handleTextSelected}
-                          history={{
-                            get: () => pageHistory.current[p.index] || [[]],
-                            set: (val) => {
-                              pageHistory.current[p.index] = val;
-                            },
-                          }}
-                          historyIndex={{
-                            get: () => pageHistoryIndex.current[p.index] ?? 0,
-                            set: (val) => {
-                              pageHistoryIndex.current[p.index] = val;
-                            },
-                          }}
-                          triggerHistoryChange={triggerHistoryChange}
-                          selectedIds={selectedIds}
-                          setSelectedIds={setSelectedIds}
-                          shapeFillColor={shapeFillColor}
-                          shapeFillOpacity={shapeFillOpacity}
-                          shapeStrokeColor={shapeStrokeColor}
-                          shapeStrokeWidth={shapeStrokeWidth}
-                          onShapeSelected={handleShapeSelected}
+                          selectedObjectId={selectedObjectId}
+                          setSelectedObjectId={setSelectedObjectId}
+                          updateSelectedObject={updateSelectedObject}
+                          commitPageObjectsToHistory={commitPageObjectsToHistory}
+                          stageRefs={stageRefs}
+                          setPages={setPages}
+                          defaultTextProps={defaultTextProps}
+                          defaultShapeProps={defaultShapeProps}
+                          defaultStrokeProps={defaultStrokeProps}
+                          hexToRgba={hexToRgba}
                         />
                       </div>
                     </LazyPageContainer>
