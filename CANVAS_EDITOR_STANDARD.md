@@ -69,7 +69,7 @@ const newWidth = Math.max(5, node.width() * scaleX); // jika scaleX belum direse
 Dibedakan berdasarkan arah drag:
 - **Horizontal only**: ubah `width`, fontSize tetap (word reflow)
 - **Vertical only**: ubah `fontSize`, width tetap
-- **Diagonal**: ubah keduanya
+- **Diagonal**: HANYA `fontSize` yang berubah, `width` tidak ikut berubah (Opsi B, keputusan produk untuk konsistensi dengan drag vertikal)
 
 ### 5.3 Threshold Deteksi
 ```typescript
@@ -96,9 +96,11 @@ const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 />
 ```
 
-### 5.6 Freehand/Pen Transform
+### 5.6 Freehand/Pen/Highlighter & Line Transform
 - Reset `node.x(0)`, `node.y(0)` selain scale
-- Translate semua titik points: `val * scaleX + nodeX` / `val * scaleY + nodeY`
+- Translate semua titik points secara relatif: `val * scaleX + nodeX` / `val * scaleY + nodeY`
+- Untuk Line, formula translasi relatif yang sama WAJIB digunakan (jangan mengunci titik awal `points[0]` sebagai anchor).
+- **WAJIB**: Tambahkan `strokeScaleEnabled={false}` pada `<KonvaLine>` untuk semua objek coretan (Pen, Highlighter, Line) agar konsisten dengan shape geometris dan mencegah offset mismatch akibat scaling ketebalan stroke.
 
 ### 5.7 Font Size Desimal & Real-time Reflow
 
@@ -185,6 +187,8 @@ Gunakan checklist ini setiap kali mengubah handler `onTransformEnd` atau logika 
 - [ ] Apakah `node.scaleX(1)` dan `node.scaleY(1)` dipanggil **tanpa syarat** (unconditional) di awal handler?
 - [ ] Apakah reset scale terjadi **SEBELUM** `setPages` / state update apapun?
 - [ ] Apakah basis kalkulasi scale diambil dari **state React** atau `node.width()` yang sudah ter-reset, bukan dari node Konva yang berpotensi membawa scale residual?
+- [ ] Apakah formula Line/Freehand menggunakan translasi relatif terhadap node offset (`val * scaleX + nodeX`), bukan anchor tetap di titik pertama array points?
+- [ ] Apakah semua object dengan stroke (freehand, line, shape) punya `strokeScaleEnabled={false}`?
 - [ ] Apakah handler hanya dipanggil **sekali** per aksi transform (tidak ada duplikasi event listener)?
 - [ ] Apakah `setPages` menggunakan **functional form** (`prev => ...`) untuk menghindari stale closure?
 - [ ] Apakah nilai fontSize di-round ke 1 desimal (`Math.round(val * 10) / 10`), bukan ke integer?

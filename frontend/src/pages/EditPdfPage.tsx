@@ -802,22 +802,23 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     const node = e.target;
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
+    const nodeX = node.x();
+    const nodeY = node.y();
 
     node.scaleX(1);
     node.scaleY(1);
+    node.x(0);
+    node.y(0);
 
     setPages(prev => {
       const nextPages = prev.map(p => {
         if (p.index !== page.index) return p;
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'line') return obj;
-          const newPoints = [
-            obj.points[0],
-            obj.points[1],
-            obj.points[0] + (obj.points[2] - obj.points[0]) * scaleX,
-            obj.points[1] + (obj.points[3] - obj.points[1]) * scaleY
-          ];
-          return { ...obj, x: node.x(), y: node.y(), points: newPoints } as CanvasObject;
+          const newPoints = obj.points.map((val, idx) =>
+            idx % 2 === 0 ? val * scaleX + nodeX : val * scaleY + nodeY
+          );
+          return { ...obj, points: newPoints } as CanvasObject;
         });
         return { ...p, objects: nextObjs };
       });
@@ -880,11 +881,13 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 
             if (horizontalChanged && !verticalChanged) {
-              patch.width = Math.max(20, obj.width * scaleX);
+              // Horizontal murni — width berubah, fontSize tetap
+              patch.width = Math.max(20, node.width() * scaleX);
             } else if (verticalChanged && !horizontalChanged) {
+              // Vertikal murni — fontSize berubah, width tetap
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             } else if (horizontalChanged && verticalChanged) {
-              patch.width = Math.max(20, obj.width * scaleX);
+              // Diagonal — HANYA fontSize yang berubah, width TIDAK digandakan
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             }
           }
@@ -997,6 +1000,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
                   points={obj.points}
                   stroke={obj.strokeColor}
                   strokeWidth={obj.strokeWidth}
+                  strokeScaleEnabled={false}
                   tension={0.5}
                   lineCap="round"
                   lineJoin="round"
