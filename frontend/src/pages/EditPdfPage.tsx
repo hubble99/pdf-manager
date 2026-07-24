@@ -853,6 +853,33 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     });
   };
 
+  const handleTextTransform = (e: any, objId: string) => {
+    const node = e.target;
+    const obj = page.objects.find(o => o.id === objId);
+    if (!obj || obj.type !== 'text' || obj.width === null) return;
+
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
+    const horizontalChanged = Math.abs(scaleX - 1) > 0.01;
+    const verticalChanged = Math.abs(scaleY - 1) > 0.01;
+
+    // Reset scale SEGERA di setiap frame transform, sebelum browser render
+    node.scaleX(1);
+    node.scaleY(1);
+
+    if (horizontalChanged && !verticalChanged) {
+      const newWidth = Math.max(20, node.width() * scaleX);
+      node.width(newWidth); // update langsung ke node Konva, tanpa nunggu React re-render
+      setPages(prev => prev.map(p => {
+        if (p.index !== page.index) return p;
+        return {
+          ...p,
+          objects: p.objects.map(o => o.id === objId ? { ...o, width: newWidth } : o)
+        };
+      }));
+    }
+  };
+
   const handleTextTransformEnd = (e: any, objId: string) => {
     const node = e.target;
     const scaleX = node.scaleX();
@@ -868,7 +895,6 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'text') return obj;
 
-          // Basis kalkulasi SELALU dari state React (obj), bukan dari node Konva langsung
           let patch: Partial<TextObject> = { x: node.x(), y: node.y() };
 
           if (obj.width === null) {
@@ -881,11 +907,11 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 
             if (horizontalChanged && !verticalChanged) {
-              patch.width = Math.max(20, obj.width * scaleX);
+              patch.width = Math.max(20, node.width() * scaleX);
             } else if (verticalChanged && !horizontalChanged) {
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             } else if (horizontalChanged && verticalChanged) {
-              patch.width = Math.max(20, obj.width * scaleX);
+              patch.width = Math.max(20, node.width() * scaleX);
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             }
           }
@@ -1024,6 +1050,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
                   height={obj.height}
                   stroke={obj.strokeColor}
                   strokeWidth={obj.strokeWidth}
+                  strokeScaleEnabled={false}
                   fill={fillVal}
                   draggable={activeTool === 'select'}
                   onClick={(e) => handleObjectClick(e, obj.id)}
@@ -1047,6 +1074,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
                   radiusY={Math.abs(obj.height / 2)}
                   stroke={obj.strokeColor}
                   strokeWidth={obj.strokeWidth}
+                  strokeScaleEnabled={false}
                   fill={fillVal}
                   draggable={activeTool === 'select'}
                   onClick={(e) => handleObjectClick(e, obj.id)}
@@ -1094,6 +1122,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
                   onDblClick={(e) => handleTextDoubleClick(e, obj)}
                   onDblTap={(e) => handleTextDoubleClick(e, obj)}
                   onDragEnd={(e) => handleTextDragEnd(e, obj.id)}
+                  onTransform={(e) => handleTextTransform(e, obj.id)}
                   onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
                 />
               );
@@ -1119,6 +1148,9 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             <Transformer
               ref={transformerRef}
               rotateEnabled={false}
+              anchorSize={16}
+              anchorStrokeWidth={2}
+              anchorCornerRadius={4}
               boundBoxFunc={(oldBox, newBox) => {
                 if (newBox.width < 20 || newBox.height < 20) return oldBox;
                 return newBox;
@@ -1157,7 +1189,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             left: `${textEditor.x}px`,
             background: 'transparent',
             color: textEditor.color,
-            border: '1px solid #4A9EFF',
+            border: '2px dashed #000000',
             borderRadius: '4px',
             fontFamily: textEditor.fontFamily,
             fontSize: `${textEditor.fontSize}px`,
@@ -1194,6 +1226,7 @@ export function EditPdfPage() {
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<'select' | CanvasObjectType | 'eraser'>('select');
   const [zoomLevel, setZoomLevel] = useState(1.0);
+  const prevZoomRef = useRef(zoomLevel);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outputFilename, setOutputFilename] = useState('');
@@ -1201,10 +1234,10 @@ export function EditPdfPage() {
 
   // Default properties untuk object BARU yang akan dibuat (saat tidak ada selection)
   const [defaultTextProps, setDefaultTextProps] = useState({
-    fontFamily: 'Arial', fontSize: 16, bold: false, italic: false, color: '#000000'
+    fontFamily: 'Arial', fontSize: 20, bold: false, italic: false, color: '#000000'
   });
   const [defaultShapeProps, setDefaultShapeProps] = useState({
-    fillColor: '#4A9EFF', fillOpacity: 0, strokeColor: '#4A9EFF', strokeWidth: 2
+    fillColor: '#E8E8E8', fillOpacity: 100, strokeColor: '#4A9EFF', strokeWidth: 2
   });
   const [defaultStrokeProps, setDefaultStrokeProps] = useState({
     strokeColor: '#4A9EFF', strokeWidth: 3
@@ -1388,7 +1421,7 @@ export function EditPdfPage() {
     } else if (activeTool === 'highlighter') {
       setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 12 }));
     } else if (activeTool === 'text') {
-      setDefaultTextProps(prev => ({ ...prev, fontSize: 16 }));
+      setDefaultTextProps(prev => ({ ...prev, fontSize: 20 }));
     } else if (activeTool === 'rect' || activeTool === 'circle') {
       setDefaultShapeProps(prev => ({ ...prev, strokeWidth: 2 }));
     } else if (activeTool === 'line') {
@@ -1411,9 +1444,12 @@ export function EditPdfPage() {
     if (pages.length === 0 || !canvasViewportRef.current) return;
     const viewportWidth = canvasViewportRef.current.clientWidth - 48;
     if (viewportWidth < BASE_DISPLAY_WIDTH) {
-      setZoomLevel(Math.max(viewportWidth / BASE_DISPLAY_WIDTH, 0.25));
+      const newZoom = Math.max(viewportWidth / BASE_DISPLAY_WIDTH, 0.25);
+      setZoomLevel(newZoom);
+      prevZoomRef.current = newZoom;
     } else {
       setZoomLevel(1.0);
+      prevZoomRef.current = 1.0;
     }
   }, [pages]);
 
@@ -1515,16 +1551,36 @@ export function EditPdfPage() {
     setSelectedObjectId(null);
   };
 
+  const applyZoomWithScrollCompensation = (newZoom: number) => {
+    const viewport = canvasViewportRef.current;
+    if (!viewport) {
+      setZoomLevel(newZoom);
+      prevZoomRef.current = newZoom;
+      return;
+    }
+    const oldZoom = prevZoomRef.current;
+    const centerY_viewport = viewport.scrollTop + viewport.clientHeight / 2;
+    const centerY_content = centerY_viewport / oldZoom;
+
+    setZoomLevel(newZoom);
+    prevZoomRef.current = newZoom;
+
+    requestAnimationFrame(() => {
+      const newScrollTop = centerY_content * newZoom - viewport.clientHeight / 2;
+      viewport.scrollTop = Math.max(0, newScrollTop);
+    });
+  };
+
   const handleZoomIn = () => {
-    setZoomLevel((prev) => Math.min(prev + 0.25, 2.0));
+    applyZoomWithScrollCompensation(Math.min(zoomLevel + 0.25, 2.0));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel((prev) => Math.max(prev - 0.25, 0.25));
+    applyZoomWithScrollCompensation(Math.max(zoomLevel - 0.25, 0.25));
   };
 
   const handleFitToWidth = () => {
-    setZoomLevel(1.0);
+    applyZoomWithScrollCompensation(1.0);
   };
 
   // Compile & save document flow

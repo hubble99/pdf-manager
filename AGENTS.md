@@ -1034,7 +1034,27 @@ User opens app
 
 ---
 
+### Session 29 — 2026-07-24 (Canvas UX Refactoring: Zoom Scroll Compensation, Text Defaults, Shape Fill, Anchor Handles, Real-time Text Reflow, Stroke Scale Lock)
+
+**Selesai:**
+- ✅ FIX 1: Mengimplementasikan `applyZoomWithScrollCompensation` menggunakan `requestAnimationFrame` dan viewport center ratio (`centerY_viewport / oldZoom`). Zoom in/out sekarang mempertahankan titik tengah viewport pandang pengguna tanpa pergeseran scroll yang mengganggu.
+- ✅ FIX 2: Meningkatkan default `fontSize` dari `16` ke `20` (L1204, L1391) dan mengubah style border textarea overlay dari `1px solid #4A9EFF` menjadi `2px dashed #000000` agar kotak edit teks jauh lebih terlihat dan jelas.
+- ✅ FIX 3: Mengubah default `fillOpacity` shape (Rect & Circle) dari `0%` ke `100%` dengan `fillColor` netral `#E8E8E8` (abu-abu terang) agar shape baru terlihat solid tanpa mendominasi teks dokumen PDF.
+- ✅ FIX 4: Memperbesar ukuran handle/anchor Transformer dari default 10px menjadi `anchorSize={16}`, `anchorStrokeWidth={2}`, `anchorCornerRadius={4}` agar lebih mudah di-grab pada layar high-DPI.
+- ✅ FIX 5: Menambahkan handler `handleTextTransform` pada event `onTransform` Konva Text untuk Area Text. Reset `node.scaleX(1)` dilakukan di setiap frame drag dan `width` di-update secara real-time ke state (tanpa push history), menghilangkan fase distorsi/gepeng visual teks secara total selama drag. Mengubah `handleTextTransformEnd` untuk menggunakan `node.width() * scaleX` guna menyelesaikan mismatch `node.width()` vs `obj.width` saat word-wrap expand.
+- ✅ FIX 6: Menambahkan `strokeScaleEnabled={false}` pada `<KonvaRect>` dan `<KonvaEllipse>` untuk mencegah ketebalan garis stroke menebal/terdistorsi secara visual saat di-resize.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` (Section 5.7, 6, 10, 11, 12 checklist) dan `AGENTS.md`.
+
+**Root Cause & UX Improvements:**
+- **Zoom Scroll Compensation**: Statis `transformOrigin: 'top center'` membuat konten memuai ke bawah saat zoom in. Mempertahankan center viewport ratio via scroll compensation membatasi loncatan visual viewport.
+- **Real-time Reflow (`onTransform`)**: Sebelumnya Konva meng-apply visual `scaleX` sementara pada node text selama drag, menyebabkan huruf gepeng/stretched sebelum `onTransformEnd` dipanggil. Meng-reset `scaleX(1)` di setiap frame `onTransform` dan meng-update `width` secara instan membuat teks di-reflow secara smooth di setiap pixel gerakan drag.
+- **Word-wrap Width Mismatch**: Fix formula `node.width() * scaleX` memastikan basis perhitungan persis menggunakan nilai internal width Konva node yang sudah ter-reset, aman dari perbedaan antara `node.width()` dan `obj.width`.
+
+---
+
 ## Cara Menjalankan (Development)
+
 
 
 ### Backend

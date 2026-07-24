@@ -47,14 +47,14 @@ Pelanggaran rule ini menyebabkan **exponential/compounding scaling** — resize 
 
 ## Section 4 — Basis Kalkulasi
 
-Semua perhitungan resize **WAJIB** menggunakan nilai dari React state (via `prev` di functional `setPages` atau `getObjectById`), **BUKAN** dari `node.width()`, `node.height()`, `node.fontSize()` Konva.
+Semua perhitungan resize **WAJIB** menggunakan nilai dari React state atau node Konva yang sudah di-reset scale-nya ke 1 (`node.width() * scaleX`), **BUKAN** dari node Konva yang berpotensi membawa scale residual tanpa reset.
 
 ```typescript
-// ✅ BENAR — basis dari React state
-patch.width = Math.max(20, obj.width * scaleX);
+// ✅ BENAR — basis dari React state atau node Konva ter-reset
+patch.width = Math.max(20, node.width() * scaleX);
 
-// ❌ SALAH — basis dari node Konva (berpotensi membawa scale residual)
-const newWidth = Math.max(5, node.width() * scaleX);
+// ❌ SALAH — basis dari node Konva tanpa reset scale
+const newWidth = Math.max(5, node.width() * scaleX); // jika scaleX belum direset ke 1
 ```
 
 ---
@@ -85,6 +85,9 @@ const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 ```typescript
 <Transformer
   rotateEnabled={false}
+  anchorSize={16}
+  anchorStrokeWidth={2}
+  anchorCornerRadius={4}
   boundBoxFunc={(oldBox, newBox) => {
     if (newBox.width < 20 || newBox.height < 20) return oldBox;
     return newBox;
@@ -96,27 +99,27 @@ const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 - Reset `node.x(0)`, `node.y(0)` selain scale
 - Translate semua titik points: `val * scaleX + nodeX` / `val * scaleY + nodeY`
 
-### 5.7 Font Size Desimal
+### 5.7 Font Size Desimal & Real-time Reflow
 
 - `fontSize` mendukung nilai desimal (bukan wajib integer)
 - Rounding ke 1 desimal: `Math.round(val * 10) / 10`
 - Konva `<Text fontSize={...} />` secara native mendukung desimal
 - Input panel: `step={0.5}` untuk presisi manual
-- Default awal (`defaultTextProps.fontSize`) tetap integer (`16`)
-- Desimal hanya muncul sebagai hasil resize dinamis atau input manual user
+- Default awal (`defaultTextProps.fontSize`) adalah `20` (integer)
+- Overlay textarea: border `2px dashed #000000`
+- **Real-time Reflow**: Untuk Area Text, handler `onTransform` meng-update `width` secara real-time di setiap frame drag dengan meng-reset `node.scaleX(1)` secepatnya. Ini mencegah distorsi visual (gepeng/stretch) selama proses drag berlangsung. `onTransformEnd` tetap digunakan untuk commit final ke history snapshot.
 
 ---
 
-## Section 6 — Shape Resize Logic
+## Section 6 — Shape Resize Logic & Styling
 
-### Rect
+### Rect & Circle
 ```typescript
-newWidth = Math.max(5, obj.width * scaleX);   // Basis: React state
+newWidth = Math.max(5, obj.width * scaleX);   // Basis: React state / node width
 newHeight = Math.max(5, obj.height * scaleY);
 ```
-
-### Circle (Ellipse)
-Sama dengan Rect, tapi posisi X/Y dikompensasi `-width/2`, `-height/2` karena offset ellipse center.
+- `strokeScaleEnabled={false}` WAJIB di-set pada `<KonvaRect>` dan `<KonvaEllipse>` agar ketebalan garis (stroke width) tidak ter-distorsi atau menebal secara visual selama proses resize drag.
+- Default fill shape baru: opacity `100%` dengan warna `#E8E8E8` (abu-abu terang netral agar tidak menutupi teks dokumen).
 
 ---
 
@@ -150,7 +153,8 @@ Paint Eraser mode: collision check kontinyu dengan tolerance 10px pada bounding 
 - `baseDisplayScale` = `800 / pageWidth` (normalisasi ke 800px unscaled)
 - `zoomLevel` = user-facing zoom (25%–200%, step 25%)
 - `finalScale` = `baseDisplayScale × zoomLevel`
-- CSS: `transform: scale(finalScale)` pada wrapper halaman canvas
+- CSS: `transform: scale(finalScale)` pada wrapper halaman canvas dengan `transformOrigin: 'top center'`
+- **Scroll Compensation**: Zoom In/Out WAJIB mempertahankan center viewport visual pengguna menggunakan scroll compensation (`applyZoomWithScrollCompensation`) agar posisi pandang user tidak melompat.
 
 ---
 
@@ -161,9 +165,9 @@ Paint Eraser mode: collision check kontinyu dengan tolerance 10px pada bounding 
 | `x`, `y` | `number` | float | Posisi piksel |
 | `width` | `number \| null` | float | null = auto text |
 | `height` | `number` | float | Shape only |
-| `fontSize` | `number` | 1 desimal | Mendukung desimal (e.g. `18.5`). Rounding `Math.round(val * 10) / 10`. Default awal integer. |
+| `fontSize` | `number` | 1 desimal | Mendukung desimal (e.g. `20.5`). Rounding `Math.round(val * 10) / 10`. Default awal `20`. |
 | `strokeWidth` | `number` | integer | Min 1 |
-| `fillOpacity` | `number` | integer 0-100 | Dikonversi ke rgba alpha |
+| `fillOpacity` | `number` | integer 0-100 | Dikonversi ke rgba alpha. Default `100%`. |
 | `points` | `number[]` | float | Koordinat freehand/line |
 
 ---
@@ -174,8 +178,9 @@ Gunakan checklist ini setiap kali mengubah handler `onTransformEnd` atau logika 
 
 - [ ] Apakah `node.scaleX(1)` dan `node.scaleY(1)` dipanggil **tanpa syarat** (unconditional) di awal handler?
 - [ ] Apakah reset scale terjadi **SEBELUM** `setPages` / state update apapun?
-- [ ] Apakah basis kalkulasi scale diambil dari **state React** (`obj.width`, `obj.fontSize` dari `prev`), bukan dari node Konva yang berpotensi membawa scale residual?
+- [ ] Apakah basis kalkulasi scale diambil dari **state React** atau `node.width()` yang sudah ter-reset, bukan dari node Konva yang berpotensi membawa scale residual?
 - [ ] Apakah handler hanya dipanggil **sekali** per aksi transform (tidak ada duplikasi event listener)?
 - [ ] Apakah `setPages` menggunakan **functional form** (`prev => ...`) untuk menghindari stale closure?
 - [ ] Apakah nilai fontSize di-round ke 1 desimal (`Math.round(val * 10) / 10`), bukan ke integer?
 - [ ] Apakah minimum fontSize adalah `1` (bukan `8`)?
+- [ ] Apakah ada distorsi visual sementara selama drag/transform yang seharusnya di-reflow real-time, bukan hanya dikoreksi di akhir?
