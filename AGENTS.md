@@ -1006,7 +1006,36 @@ User opens app
 
 ---
 
+### Session 28 — 2026-07-24 (Text Box Resize Scaling Audit & Decimal FontSize Fix)
+
+**Selesai:**
+- ✅ AUDIT 1: Membaca dan mengaudit `handleTextTransformEnd` secara lengkap (line 856–899) menggunakan MCP Sequential Thinking dengan 7 langkah analisis terstruktur.
+- ✅ AUDIT 2: Verifikasi bahwa `node.scaleX(1)` dan `node.scaleY(1)` sudah dipanggil **unconditional** di semua cabang kondisi (line 861–862) — PASS.
+- ✅ AUDIT 3: Verifikasi bahwa basis kalkulasi (`obj.width`, `obj.fontSize`) sudah dibaca dari **React state** (via `prev` di functional `setPages`), bukan dari node Konva — PASS.
+- ✅ AUDIT 4: Verifikasi bahwa `onTransformEnd` tidak terpanggil dua kali per aksi drag (react-konva deklaratif, key stabil, Konva `transformend` event single-fire) — PASS.
+- ✅ AUDIT 5: Verifikasi tidak ada race condition `setPages` (hanya satu pemanggilan, functional setState menjamin state terbaru) — PASS.
+- ✅ FIX 1: Mengganti `Math.round(obj.fontSize * scale)` dengan `Math.round(obj.fontSize * scale * 10) / 10` — rounding ke 1 desimal, menghilangkan rounding drift kumulatif yang menyebabkan deviasi progresif.
+- ✅ FIX 2: Menurunkan minimum fontSize dari `8` ke `1` untuk kontrol yang lebih presisi.
+- ✅ FIX 3: Mengubah input Font Size di panel kiri dari `step={1}` menjadi `step={0.5}` agar user bisa input manual dengan presisi desimal.
+- ✅ FIX 4: Memverifikasi `defaultTextProps.fontSize` tetap integer (`16`) sebagai default awal.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK COMMIT: Commit `bf8ba3c` dan git push ke `origin main` berhasil.
+
+**Root Cause (dari Audit):**
+- **Primary — Rounding Drift Kumulatif**: `Math.round()` pada setiap resize membulatkan fontSize ke integer, menyebabkan informasi presisi hilang dan error menumpuk setelah resize berturut-turut. Bukan exponential compounding klasik (scale sudah di-reset), tapi rounding drift yang menyebabkan deviasi progresif.
+- **Secondary — Min FontSize Terlalu Tinggi**: `Math.max(8, ...)` menciptakan "loss floor" yang memperbesar apparent compounding saat font mengecil lalu membesar.
+
+**Design Decisions:**
+- **Decimal FontSize**: Konva `<Text fontSize={...} />` secara native mendukung nilai desimal tanpa konversi tambahan.
+- **Rounding 1 Desimal**: `Math.round(x * 10) / 10` dipilih sebagai tradeoff antara presisi (menghilangkan drift) dan keterbacaan display (tidak menampilkan floating point noise berlebihan).
+- **Guard `isTransformingRef` TIDAK ditambahkan**: Audit mengonfirmasi handler tidak pernah double-fire; guard akan menambah kompleksitas tanpa manfaat.
+
+**Catatan:** File `CANVAS_EDITOR_STANDARD.md` belum ada di project dan akan dibuat sebagai dokumen standar baru.
+
+---
+
 ## Cara Menjalankan (Development)
+
 
 ### Backend
 ```powershell
