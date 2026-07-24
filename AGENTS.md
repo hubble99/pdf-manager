@@ -1064,7 +1064,22 @@ User opens app
 
 ---
 
+### Session 31 — 2026-07-24 (Transformer keepRatio Fix for Accurate Corner Drag Resize)
+
+**Selesai:**
+- ✅ AUDIT: Mendiagnosa dan mengonfirmasi hipotesis bahwa default Konva Transformer (`keepRatio: true`) mengunci `scaleX` dan `scaleY` secara proporsional berdasarkan jarak diagonal saat drag dari corner anchors (`top-left`, `top-right`, `bottom-left`, `bottom-right`), bertentangan dengan model resize independen kita (`width` dari `scaleX`, `fontSize` dari `scaleY`).
+- ✅ FIX: Menambahkan prop `keepRatio={false}` pada `<Transformer>` component di `EditPdfPage.tsx`.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` (Section 5.5, 11 note, 12 checklist) dan `AGENTS.md`.
+
+**Root Cause & Analysis:**
+- Default Konva Transformer mengaktifkan `keepRatio: true` jika tidak di-set secara eksplisit. Hal ini memaksa `scaleX` dan `scaleY` bernilai identik sesuai aspect ratio awal bounding box saat drag dari anchor sudut.
+- Ketika diubah ke `keepRatio={false}`, `scaleX` dan `scaleY` dihitung secara independen berdasarkan pergerakan mouse sesungguhnya pada sumbu X dan Y, sehingga corner drag pada Text, Rect, Circle, dan Line menghasilkan respons ukuran yang presisi 1:1 tanpa kunci rasio paksaan.
+
+---
+
 ## Cara Menjalankan (Development)
+
 
 
 

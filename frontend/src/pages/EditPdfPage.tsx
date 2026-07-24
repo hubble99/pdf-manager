@@ -1120,6 +1120,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             <Transformer
               ref={transformerRef}
               rotateEnabled={false}
+              keepRatio={false}
               anchorSize={16}
               anchorStrokeWidth={2}
               anchorCornerRadius={4}

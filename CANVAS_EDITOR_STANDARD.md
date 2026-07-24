@@ -85,6 +85,7 @@ const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 ```typescript
 <Transformer
   rotateEnabled={false}
+  keepRatio={false}
   anchorSize={16}
   anchorStrokeWidth={2}
   anchorCornerRadius={4}
@@ -172,10 +173,15 @@ Paint Eraser mode: collision check kontinyu dengan tolerance 10px pada bounding 
 
 ---
 
+> **Transformer Config Note**: `<Transformer>` WAJIB di-set `keepRatio={false}` — default Konva `keepRatio: true` memaksa `scaleX`/`scaleY` proporsional saat drag dari anchor sudut, bertentangan dengan model resize independen (width dari `scaleX`, fontSize/height dari `scaleY`) yang dipakai di seluruh spec ini.
+
+---
+
 ## Section 12 — Checklist Audit
 
 Gunakan checklist ini setiap kali mengubah handler `onTransformEnd` atau logika resize:
 
+- [ ] Apakah `<Transformer>` di-set `keepRatio={false}` untuk mendukung kalkulasi resize X/Y independen?
 - [ ] Apakah `node.scaleX(1)` dan `node.scaleY(1)` dipanggil **tanpa syarat** (unconditional) di awal handler?
 - [ ] Apakah reset scale terjadi **SEBELUM** `setPages` / state update apapun?
 - [ ] Apakah basis kalkulasi scale diambil dari **state React** atau `node.width()` yang sudah ter-reset, bukan dari node Konva yang berpotensi membawa scale residual?
@@ -183,4 +189,3 @@ Gunakan checklist ini setiap kali mengubah handler `onTransformEnd` atau logika 
 - [ ] Apakah `setPages` menggunakan **functional form** (`prev => ...`) untuk menghindari stale closure?
 - [ ] Apakah nilai fontSize di-round ke 1 desimal (`Math.round(val * 10) / 10`), bukan ke integer?
 - [ ] Apakah minimum fontSize adalah `1` (bukan `8`)?
-- [ ] Apakah ada distorsi visual sementara selama drag/transform yang seharusnya di-reflow real-time, bukan hanya dikoreksi di akhir?
