@@ -853,33 +853,6 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     });
   };
 
-  const handleTextTransform = (e: any, objId: string) => {
-    const node = e.target;
-    const obj = page.objects.find(o => o.id === objId);
-    if (!obj || obj.type !== 'text' || obj.width === null) return;
-
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-    const horizontalChanged = Math.abs(scaleX - 1) > 0.01;
-    const verticalChanged = Math.abs(scaleY - 1) > 0.01;
-
-    // Reset scale SEGERA di setiap frame transform, sebelum browser render
-    node.scaleX(1);
-    node.scaleY(1);
-
-    if (horizontalChanged && !verticalChanged) {
-      const newWidth = Math.max(20, node.width() * scaleX);
-      node.width(newWidth); // update langsung ke node Konva, tanpa nunggu React re-render
-      setPages(prev => prev.map(p => {
-        if (p.index !== page.index) return p;
-        return {
-          ...p,
-          objects: p.objects.map(o => o.id === objId ? { ...o, width: newWidth } : o)
-        };
-      }));
-    }
-  };
-
   const handleTextTransformEnd = (e: any, objId: string) => {
     const node = e.target;
     const scaleX = node.scaleX();
@@ -907,11 +880,11 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
             const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 
             if (horizontalChanged && !verticalChanged) {
-              patch.width = Math.max(20, node.width() * scaleX);
+              patch.width = Math.max(20, obj.width * scaleX);
             } else if (verticalChanged && !horizontalChanged) {
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             } else if (horizontalChanged && verticalChanged) {
-              patch.width = Math.max(20, node.width() * scaleX);
+              patch.width = Math.max(20, obj.width * scaleX);
               patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
             }
           }
@@ -1122,7 +1095,6 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
                   onDblClick={(e) => handleTextDoubleClick(e, obj)}
                   onDblTap={(e) => handleTextDoubleClick(e, obj)}
                   onDragEnd={(e) => handleTextDragEnd(e, obj.id)}
-                  onTransform={(e) => handleTextTransform(e, obj.id)}
                   onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
                 />
               );

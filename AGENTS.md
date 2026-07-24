@@ -1053,7 +1053,19 @@ User opens app
 
 ---
 
+### Session 30 — 2026-07-24 (Audit & Fix Text Resize Failure Bug)
+
+**Selesai:**
+- ✅ AUDIT: Mendiagnosa penyebab Text Box tidak bisa di-resize setelah Session 29.
+- ✅ ROOT CAUSE IDENTIFIED: `handleTextTransform` yang terpasang pada `onTransform` memanggil `node.scaleX(1)` di setiap frame gerakan drag. Hal ini (1) merusak internal matrix Konva Transformer di pertengahan drag, (2) membuat `scaleX` bernilai `1.0` saat `handleTextTransformEnd` dipanggil ketika mouse melepas handle (sehingga `horizontalChanged` bernilai false dan patch tidak disimpan ke React state), dan (3) merusak diagonal & vertical resize karena `handleTextTransform` hanya menangani horizontal-only drag.
+- ✅ FIX: Menghapus `handleTextTransform` dan prop `onTransform` dari `<KonvaText>`. Mengembalikan lifecycle transform Text secara penuh ke `handleTextTransformEnd` (`onTransformEnd`) dengan reset scale yang bersih dan formula React state (`obj.width * scaleX`).
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` Section 5.7 dan `AGENTS.md`.
+
+---
+
 ## Cara Menjalankan (Development)
+
 
 
 

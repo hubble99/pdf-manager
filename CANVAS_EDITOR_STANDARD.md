@@ -107,7 +107,7 @@ const verticalChanged = Math.abs(scaleY - 1) > 0.01;
 - Input panel: `step={0.5}` untuk presisi manual
 - Default awal (`defaultTextProps.fontSize`) adalah `20` (integer)
 - Overlay textarea: border `2px dashed #000000`
-- **Real-time Reflow**: Untuk Area Text, handler `onTransform` meng-update `width` secara real-time di setiap frame drag dengan meng-reset `node.scaleX(1)` secepatnya. Ini mencegah distorsi visual (gepeng/stretch) selama proses drag berlangsung. `onTransformEnd` tetap digunakan untuk commit final ke history snapshot.
+- **Transform Lifecycle**: Penanganan resize Text dilakukan sepenuhnya pada event `onTransformEnd`. DILARANG memasang handler `onTransform` per-frame yang meng-reset scale (`node.scaleX(1)`), karena hal tersebut merusak matriks internal Konva Transformer di pertengahan drag dan membuat `scaleX` bernilai `1.0` saat `onTransformEnd` dipanggil, yang mengakibatkan penyesuaian ukuran (resize) gagal total. `onTransformEnd` membaca scale akhir, mereset scale ke 1, lalu memperbarui state `width` (`obj.width * scaleX`) dan `fontSize` (`obj.fontSize * scaleY`).
 
 ---
 
