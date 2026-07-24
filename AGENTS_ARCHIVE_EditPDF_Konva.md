@@ -859,13 +859,224 @@ User opens app
 - ✅ Rebuild: Menjalankan `npm run tauri build` untuk mem-build ulang installer bundle desktop (EXE dan MSI) dengan React UI terbaru, lalu memindahkannya ke direktori `dist-package/`.
 ---
 
-### Session 20-31 — Edit PDF Feature (Konva.js — Deprecated)
+### Session 20 — 2026-07-13 (Edit PDF Feature with Konva Canvas)
 
-Fitur Edit PDF sempat diimplementasikan menggunakan Konva.js + react-konva dengan canvas editor lengkap (pen, highlighter, text, shapes, eraser, undo/redo, zoom). Setelah berbagai iterasi perbaikan, ditemukan masalah presisi resize yang persisten pada object Text dan Line (hasil resize tidak proporsional 1:1 terhadap drag mouse) serta masalah zoom (scroll tidak menjangkau seluruh area dokumen, tampilan bergeser saat zoom in/out). Root cause bervariasi antar object type dan tidak terselesaikan tuntas meski sudah beberapa kali audit dan fix bertahap.
+**Selesai:**
+- ✅ TASK 1: Menginstal dependencies frontend `konva` (v10.3.0) dan `react-konva` (v19.2.5).
+- ✅ TASK 2: Membuat endpoint backend baru `POST /api/v1/pdf-to-image/pages` di `pdf_to_image.py` untuk mengonversi halaman PDF ke base64 PNG dengan resolusi DPI 150 secara cepat dan mengembalikan data dimensi halaman.
+- ✅ TASK 3: Membuat modul backend baru `backend/routers/edit_pdf.py` dengan endpoint `POST /api/v1/edit-pdf/save` untuk mengonversi base64 PNG kembali ke halaman PDF menggunakan PyMuPDF, menyesuaikan dimensi gambar, mengamankan nama file melalui `sanitize_filename()`, dan mendaftarkan routernya di `main.py`.
+- ✅ TASK 4: Membuat halaman editor UI frontend `EditPdfPage.tsx` lengkap berdasarkan visual Stitch:
+  - Layout Split-panel (Kiri 320px fixed untuk drop zone, input output filename, tombol Save; Kanan canvas area).
+  - Sticky toolbar di atas canvas dengan tool selector (Select, Pen, Highlighter, Text, Rectangle, Circle, Line, Eraser) + contextual controls (presets & custom color picker, stroke width slider, font settings).
+  - Rendering halaman PDF secara vertikal dengan border tipis dan bayangan. Lazy rendering (> 50 halaman) menggunakan IntersectionObserver.
+  - State anotasi per halaman, history undo/redo stack (max 50 langkah per halaman).
+  - Alur simpan dengan ekspor Konva Stage ke PNG (`pixelRatio: 2`), POST `/api/v1/edit-pdf/save`, unduhan otomatis, dan toast notifikasi dengan opsi Open Folder.
+- ✅ TASK 5: Mendaftarkan route `/edit-pdf` di `App.tsx`, menu item "Edit PDF" (ikon `PenLine`) di `Sidebar.tsx`, dan mendaftarkan tipe `NavItemId` di `types/index.ts`.
+- ✅ TASK 6: Membuat unit test baru di `backend/tests/test_edit_pdf.py` dan memverifikasi seluruh fungsionalitas.
+  - `tsc --noEmit` pass (0 errors) ✓
+  - pytest 32/32 tests pass (termasuk pengujian endpoint baru) ✓
 
-**Keputusan:** Migrasi implementasi Edit PDF dari Konva.js ke Fabric.js, karena Fabric.js punya object model (Textbox, dll) yang secara native sudah menangani resize/reflow dengan benar untuk kasus serupa. Kode Konva.js lama akan digantikan total, bukan ditambal.
+**Design Tokens dari Stitch (diaplikasikan di EditPdfPage):**
+- Background utama: `#131318`
+- Surface/Panel kiri: `#1E1E2E`
+- Toolbar background: `#12121A`
+- Border: `#2A2A3E`
+- Accent aktif: `#4A9EFF`
+- Teks utama: `#E8E8F0`
+- Teks sekunder/icon tidak aktif: `#9898B8`
+- Border radius: `8px`
+- Font: Inter
 
-Detail lengkap riwayat percobaan Konva.js (jika dibutuhkan untuk referensi) diarsipkan di `AGENTS_ARCHIVE_EditPDF_Konva.md`.
+---
+
+### Session 21 — 2026-07-13 (Fix Conversion Mismatch & Resize Drop Zone)
+
+**Selesai:**
+- ✅ TASK 1: Mendiagnosa dan memperbaiki error "Conversion Failed — Not Found" pada halaman Edit PDF. Masalah terjadi karena URL pemanggilan axios di frontend `/pdf-to-image/pages` dan `/edit-pdf/save` tidak diawali dengan prefix `/api/v1`, sehingga di-resolve secara salah tanpa prefix `/api/v1` yang didefinisikan oleh FastAPI backend. Diperbaiki dengan mengubah endpoint ke `/api/v1/pdf-to-image/pages` dan `/api/v1/edit-pdf/save`.
+- ✅ TASK 2: Memperkecil Drop Zone di panel kiri halaman Edit PDF. Ketinggian diset ke maksimal `160px` dengan padding `16px`, ukuran ikon upload diperkecil ke `24px`, teks utama berukuran `0.875rem`, teks sekunder berukuran `0.75rem` dengan warna `var(--text-muted)`. Pemuatan berkas secara otomatis menyembunyikan drop zone dan menggantikannya dengan berkas ringkasan kartu (summary card).
+- ✅ TASK 3: Melakukan verifikasi build dengan `tsc --noEmit` yang sukses dengan hasil 0 compile errors.
+- ✅ TASK 4: Melakukan merge branch `feature/edit-pdf` ke `main` dan melakukan git push ke repositori remote `origin main`.
+
+---
+
+### Session 22 — 2026-07-13 (Major UX Refactor for Edit PDF Page)
+
+**Selesai:**
+- ✅ TASK 1: Merombak tata letak panel kiri (320px fixed) menjadi layout 5-zona terstruktur secara vertikal (File Info kompak max 64px dengan tombol Clear PDF, Drop Zone modular max 120px, daftar Tools Vertikal setinggi 36px, Contextual Controls khusus untuk tool aktif, dan Bottom Controls lengket di paling bawah).
+- ✅ TASK 2: Merombak toolbar atas menjadi hanya memuat kendali Zoom (`+` / `-` / persentase), pembatas, tombol Undo / Redo, pembatas, dan tombol "Fit to Width" (ikon `Maximize2`). Mengimplementasikan zoom behavior dengan rentang 25%-200% (kelipatan 25%) yang diterapkan via CSS `transform: scale(zoomLevel)` pada canvas.
+- ✅ TASK 3: Memperbaiki Text Tool agar saat klik di canvas membuat objek Konva Text transparan dengan outline border tipis `#4A9EFF` dan memicu HTML `<textarea>` absolute overlay di atasnya untuk input inline yang otomatis menyesuaikan tinggi (`scrollHeight`), serta mendukung pembatalan (Escape) dan konfirmasi (blur / Enter). Double-click pada teks lama memicu penataan overlay yang serupa.
+- ✅ TASK 4: Memverifikasi build akhir menggunakan `tsc --noEmit` yang sukses dengan hasil 0 compile errors.
+- ✅ TASK 5: Melakukan commit dan git push hasil refactor langsung ke branch remote `origin main`.
+
+**Design Decisions:**
+- **Layout Vertikal**: Memindahkan tool list dari toolbar horizontal atas ke panel kiri vertikal untuk memberikan ruang kerja canvas yang lebih luas dan navigasi yang lebih terfokus.
+- **Color Picker Terpusat**: Setiap tool menggambar didampingi oleh color picker dan stroke size slider langsung di contextual controls panel kiri.
+- **Zoom & Fit to Width**: Mengaktifkan skala transform CSS dinamis yang ter-center dari atas (`top center`) dengan kelipatan 25% dan kalkulasi rasio otomatis untuk mencocokkan canvas dengan lebar layar saat ini.
+
+---
+
+### Session 23 — 2026-07-13 (Zoom & Text Tool Silent Fail Fix)
+
+**Selesai:**
+- ✅ TASK 1: Memperbaiki Zoom In/Out yang tidak berfungsi secara visual. Masalah terjadi karena div wrapper dengan transform scale terlewati dari replace_file_content sebelumnya. Diperbaiki dengan mengarahkan transform CSS `scale(zoomLevel)` ke wrapper div halaman canvas di dalam scrollable container, mengganti variabel state dari `zoom` menjadi `zoomLevel`, dan mengupdate persentase display serta tombol Fit to Width (`setZoomLevel(1)`).
+- ✅ TASK 2: Memperbaiki Text Tool yang silent fail. Diimplementasikan ulang menggunakan React state `textInputState` terlokalisasi di child editor. Menambahkan handler `onClick` pada Konva Stage untuk mendeteksi klik canvas kosong, merender overlay textarea absolut dengan `pointer-events: all` dan z-index tinggi, serta memicu `commitTextInput` pada blur/Enter dan pengembalian visible state teks lama saat Escape.
+- ✅ TASK 3: Memverifikasi build akhir menggunakan `tsc --noEmit` yang sukses dengan hasil 0 compile errors.
+- ✅ TASK 4: Melakukan commit dan git push perbaikan bug zoom dan text langsung ke branch remote `origin main`.
+
+**Root Cause:**
+1. **Zoom Mismatch**: Perubahan markup transform canvas wrapper terlewat pada session sebelumnya karena ketidakakuratan parsial dari replace tool.
+2. **Text Tool Imperative Clash**: Manipulasi objek teks secara imperatif bertubrukan dengan lifecycle render react-konva, dan stage click tidak terikat ke input overlay yang dinamis.
+
+---
+
+### Session 24 — 2026-07-13 (Comprehensive Edit PDF Canvas Fixes)
+
+**Selesai:**
+- ✅ FIX 1: Meningkatkan DPI rendering pada endpoint backend `/api/v1/pdf-to-image/pages` dari `150` menjadi `200`, serta meningkatkan `pixelRatio` ekspor `stage.toDataURL` di frontend dari `2` menjadi `3` untuk hasil cetak berkas resolusi tinggi.
+- ✅ FIX 2: Mengintegrasikan react-konva `<Transformer>` dinamis untuk meresize aneka objek gambar (Text, Rect, Circle, Line-shape, dan coretan bebas Pen/Highlighter). Transform end handler mereset scale objek kembali ke `1` untuk mencegah bug double-scaling.
+- ✅ FIX 3: Menyematkan auto-focus `useEffect` pada input overlay `<textarea>` yang otomatis mengembalikan fokus ke textarea menggunakan `setTimeout` ketika properti font style (Bold, Italic, Family, Size, Color) di panel toolbar diubah oleh pengguna.
+- ✅ FIX 4: Menghapus batas atas `max={72}` pada pengaturan Font Size dan mengganti input range slider menjadi input type `number` dinamis dengan batasan minimal `1` tanpa batas atas.
+- ✅ FIX 5: Merombak fungsionalitas Eraser dari click-to-delete menjadi Paint Eraser (drag & erase kontinyu) dengan menambahkan state `isErasing` dan pengecekan irisan bounding box objek secara real-time.
+- ✅ FIX 6: Mengaktifkan properti `draggable={activeTool === 'select'}` pada objek-objek Konva dan memperbarui koordinat posisi absolut secara permanen saat drag selesai.
+- ✅ FIX 7: Mengimplementasikan Selection Area (box persegi bergaris putus-putus biru) untuk menyeleksi banyak objek (*multi-select*) secara bersamaan saat Select tool aktif dan pengguna melakukan drag di area kosong canvas.
+- ✅ TASK VERIFIKASI: Verifikasi `tsc --noEmit` sukses dengan 0 compile errors dan `pytest tests/` sukses dengan 32/32 tests passed.
+- ✅ TASK COMMIT: Commit dan git push semua perubahan di atas sukses didorong ke branch remote `origin main`.
+
+**Design Decisions:**
+- **Paint Eraser**: Menggunakan penapisan (filtering) array objek berdasarkan overlap bounding box visual untuk responsivitas penghapusan yang instan.
+- **Stage findOne Query**: Memanfaatkan selector `#id` bawaan Stage Konva untuk melacak node-node terpilih secara deklaratif guna penautan Transformer tunggal ke banyak node sekaligus.
+
+---
+
+### Session 25 — 2026-07-13 (Canvas Behavior Improvements & Auto-Fit Zoom)
+
+**Selesai:**
+- ✅ FIX 1: Menambahkan global keyboard listener (`Delete` dan `Backspace`) di parent component untuk menghapus objek-objek terpilih secara instan, lengkap dengan safety guard pendeteksian target input/textarea tag agar tidak bentrok saat mengetik.
+- ✅ FIX 2: Mengimplementasikan sinkronisasi bidirectional (dua arah) untuk Text properties: Klik objek Text di canvas otomatis mempopulasi properties toolbar, dan memodifikasi values di toolbar langsung meng-update properti Text objek terpilih secara real-time.
+- ✅ FIX 3: Mengembangkan mode penulisan teks ganda berdasarkan interaksi mouse: Click menghasilkan Point Text singles-line (`isAreaText: false`, `width: auto`) dan Drag menghasilkan Area Text dengan fixed-width (`isAreaText: true`, `whiteSpace: pre-wrap`, `wordWrap: break-word`).
+- ✅ FIX 4: Menambahkan state & input contextual baru pada sidebar properties untuk bentuk shape (Rect & Circle: Fill Color, Fill Opacity, Stroke Color, Stroke Width; Line: Stroke Color, Stroke Width saja). Menggunakan konversi hex ke `rgba()` untuk fill opacity agar border stroke tidak ikut pudar.
+- ✅ FIX 5: Mengimplementasikan Auto-fit Zoom saat PDF pertama kali dimuat. Menghitung rasio `viewportWidth / pageWidth` secara otomatis (dengan micro-timeout 100ms agar clientWidth ter-render stabil) agar lembar PDF selalu pas menempati layar canvas viewport.
+- ✅ TASK VERIFIKASI: Verifikasi `tsc --noEmit` sukses dengan 0 compile errors dan `pytest tests/` sukses dengan 32/32 tests passed.
+- ✅ TASK COMMIT: Commit dan git push semua perubahan di atas sukses didorong ke branch remote `origin main`.
+
+**Design Decisions:**
+- **Auto-fit Zoom Formula**: Menggunakan `viewportWidth / pageWidth` yang dibulatkan ke kelipatan zoom terdekat (step 0.25) dan dibatasi maksimal 1.0 agar tampilan proporsional.
+- **Hex to RGBA Conversion**: Menghindari opacity bawaan Konva yang memudarkan seluruh objek, diganti dengan manipulasi alpha channel pada string `rgba()` warna fill.
+- **Double-pass Text Mode**: Menyimpan parameter `width` secara terpisah ke state data shapes agar rendering word-wrap di Konva Text dan HTML textarea overlay presisi sama.
+
+---
+
+### Session 26 — 2026-07-13 (Edit PDF Total Refactor & State Unification)
+
+**Selesai:**
+- ✅ TASK 1: Merombak total `frontend/src/pages/EditPdfPage.tsx` dari awal untuk menggunakan arsitektur single source of truth yang robust. Seluruh objek gambar per halaman dimuat dalam list `objects` di state `pages: PageData[]`.
+- ✅ TASK 2: Menyusun panel kiri sebagai pure derived view yang dirender dari `selectedObject` (computed menggunakan `useMemo` berdasarkan `selectedObjectId` dan `activePageIndex`). Saat tidak ada objek yang terpilih, panel kiri menampilkan default properties untuk objek baru.
+- ✅ TASK 3: Mengimplementasikan update properti objek terpilih secara real-time via `updateSelectedObject` yang secara otomatis men-debounce penyimpanan ke history (400ms) untuk mencegah penumpukan step undo/redo saat slider digeser.
+- ✅ TASK 4: Memisahkan perhitungan `baseDisplayScale` (otomatis menyesuaikan ukuran lebar halaman PDF asli ke standar 800px di layar) dari tingkat pembesaran `zoomLevel` (user-facing zoom, e.g. 100%). Menghubungkan CSS `scale(finalScale)` ke halaman canvas agar visualisasi halaman wajar dan proporsional.
+- ✅ TASK 5: Menyusun kelakuan (behavior) presisi untuk setiap alat gambar:
+  - **Select**: Klik objek untuk memilih, pasang Transformer, drag untuk memindahkan koordinat `x, y`, dan resize handles untuk mengubah ukuran `width/height` atau `fontSize` dengan reset scale node ke 1.
+  - **Pen & Highlighter**: Menggambar coretan bebas dengan opacity solid (Pen) dan semi-transparan `0.4` (Highlighter). Menghapus koordinat drift pada drag-end coretan bebas.
+  - **Text**: Mode ganda Point Text (klik) vs Area Text (drag) dengan visualisasi dashed box. Input inline lewat overlay `<textarea>` absolute berfitur auto-focus, Blur/Enter commit, dan Escape cancel, serta double-click untuk edit teks lama.
+  - **Rect & Circle**: Menarik persegi/lingkaran dengan stroke dan fill opacity (hex ke `rgba()`).
+  - **Line**: Menggambar garis lurus antar dua titik dengan drag-end shift yang presisi.
+  - **Eraser**: Paint Eraser dengan collision check berkelanjutan menggunakan tolerance 10px pada bounding box.
+- ✅ TASK 6: Mengintegrasikan history undo/redo per page berbasis hotkeys `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+Z` dan tombol toolbar, serta tombol `Delete`/`Backspace` global untuk menghapus objek terpilih.
+- ✅ TASK VERIFIKASI: Verifikasi `tsc --noEmit` sukses dengan 0 compile errors dan `pytest tests/` sukses dengan 32/32 tests passed.
+- ✅ TASK COMMIT: Commit dan git push semua perubahan di atas sukses didorong ke branch remote `origin main`.
+
+**Design Decisions:**
+- **Debounced Properties History**: Penundaan 400ms pada commit snapshot saat menggeser slider (stroke width, fill opacity) agar history tidak dipenuhi oleh modifikasi mikro berturut-turut.
+- **Base Display Scale Logic**: Skala 800px unscaled lebar awal meluruskan representasi dokumen di layar, membebaskan user dari anomali DPI 200 (~1654px lebar) dan memangkas kerumitan formula auto-fit.
+- **Stage Coordinate Translation**: Menyerahkan pergeseran offset penyeretan coretan bebas dan garis ke penyesuaian delta `dx`/`dy` titik aslinya dan mereset `x`/`y` node Konva ke `0` untuk menghindari penyimpangan visual.
+
+---
+
+### Session 27 — 2026-07-13 (Transformer Shape and Text Resize Fixes)
+
+**Selesai:**
+- ✅ TASK 1: Memperbaiki bug ukuran ganda (doubling size) saat meresize Shape (Rect & Circle) dengan membetulkan urutan imperative reset scale (`node.scaleX(1); node.scaleY(1);`) pada node Konva yang sekarang dieksekusi secara instan sebelum state React di-update dengan nilai dimensi final.
+- ✅ TASK 2: Memperbaiki resize Text. Memisahkan logika resize menjadi Point Text (`width === null`) yang mengubah `fontSize` secara proporsional, dan Area Text (`width !== null`) yang hanya merubah `width` kontainer (font size tetap, memicu word reflow).
+- ✅ TASK 3: Mengatur properti `<Transformer>` dengan `boundBoxFunc` yang memiliki batasan minimal lebar/tinggi sebesar `20px` untuk menjaga kelancaran interaksi scaling visual.
+- ✅ TASK VERIFIKASI: Verifikasi `tsc --noEmit` sukses dengan 0 compile errors dan `pytest tests/` sukses dengan 32/32 tests passed.
+- ✅ TASK COMMIT: Commit dan git push semua perubahan di atas sukses didorong ke branch remote `origin main`.
+
+**Root Cause:**
+- **Shape Resize Doubling**: Reset scale dilakukan setelah atau bersamaan dengan siklus state update React, sehingga scale transform Konva menumpuk di atas base width/height baru.
+- **Text Area Stretching**: Transformer memodifikasi visual scale node teks area secara seragam, bukannya memperlebar area box pembungkusnya, sehingga tulisan menjadi stretched/gepeng.
+
+---
+
+### Session 28 — 2026-07-24 (Text Box Resize Scaling Audit & Decimal FontSize Fix)
+
+**Selesai:**
+- ✅ AUDIT 1: Membaca dan mengaudit `handleTextTransformEnd` secara lengkap (line 856–899) menggunakan MCP Sequential Thinking dengan 7 langkah analisis terstruktur.
+- ✅ AUDIT 2: Verifikasi bahwa `node.scaleX(1)` dan `node.scaleY(1)` sudah dipanggil **unconditional** di semua cabang kondisi (line 861–862) — PASS.
+- ✅ AUDIT 3: Verifikasi bahwa basis kalkulasi (`obj.width`, `obj.fontSize`) sudah dibaca dari **React state** (via `prev` di functional `setPages`), bukan dari node Konva — PASS.
+- ✅ AUDIT 4: Verifikasi bahwa `onTransformEnd` tidak terpanggil dua kali per aksi drag (react-konva deklaratif, key stabil, Konva `transformend` event single-fire) — PASS.
+- ✅ AUDIT 5: Verifikasi tidak ada race condition `setPages` (hanya satu pemanggilan, functional setState menjamin state terbaru) — PASS.
+- ✅ FIX 1: Mengganti `Math.round(obj.fontSize * scale)` dengan `Math.round(obj.fontSize * scale * 10) / 10` — rounding ke 1 desimal, menghilangkan rounding drift kumulatif yang menyebabkan deviasi progresif.
+- ✅ FIX 2: Menurunkan minimum fontSize dari `8` ke `1` untuk kontrol yang lebih presisi.
+- ✅ FIX 3: Mengubah input Font Size di panel kiri dari `step={1}` menjadi `step={0.5}` agar user bisa input manual dengan presisi desimal.
+- ✅ FIX 4: Memverifikasi `defaultTextProps.fontSize` tetap integer (`16`) sebagai default awal.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK COMMIT: Commit `bf8ba3c` dan git push ke `origin main` berhasil.
+
+**Root Cause (dari Audit):**
+- **Primary — Rounding Drift Kumulatif**: `Math.round()` pada setiap resize membulatkan fontSize ke integer, menyebabkan informasi presisi hilang dan error menumpuk setelah resize berturut-turut. Bukan exponential compounding klasik (scale sudah di-reset), tapi rounding drift yang menyebabkan deviasi progresif.
+- **Secondary — Min FontSize Terlalu Tinggi**: `Math.max(8, ...)` menciptakan "loss floor" yang memperbesar apparent compounding saat font mengecil lalu membesar.
+
+**Design Decisions:**
+- **Decimal FontSize**: Konva `<Text fontSize={...} />` secara native mendukung nilai desimal tanpa konversi tambahan.
+- **Rounding 1 Desimal**: `Math.round(x * 10) / 10` dipilih sebagai tradeoff antara presisi (menghilangkan drift) dan keterbacaan display (tidak menampilkan floating point noise berlebihan).
+- **Guard `isTransformingRef` TIDAK ditambahkan**: Audit mengonfirmasi handler tidak pernah double-fire; guard akan menambah kompleksitas tanpa manfaat.
+
+**Catatan:** File `CANVAS_EDITOR_STANDARD.md` belum ada di project dan akan dibuat sebagai dokumen standar baru.
+
+---
+
+### Session 29 — 2026-07-24 (Canvas UX Refactoring: Zoom Scroll Compensation, Text Defaults, Shape Fill, Anchor Handles, Real-time Text Reflow, Stroke Scale Lock)
+
+**Selesai:**
+- ✅ FIX 1: Mengimplementasikan `applyZoomWithScrollCompensation` menggunakan `requestAnimationFrame` dan viewport center ratio (`centerY_viewport / oldZoom`). Zoom in/out sekarang mempertahankan titik tengah viewport pandang pengguna tanpa pergeseran scroll yang mengganggu.
+- ✅ FIX 2: Meningkatkan default `fontSize` dari `16` ke `20` (L1204, L1391) dan mengubah style border textarea overlay dari `1px solid #4A9EFF` menjadi `2px dashed #000000` agar kotak edit teks jauh lebih terlihat dan jelas.
+- ✅ FIX 3: Mengubah default `fillOpacity` shape (Rect & Circle) dari `0%` ke `100%` dengan `fillColor` netral `#E8E8E8` (abu-abu terang) agar shape baru terlihat solid tanpa mendominasi teks dokumen PDF.
+- ✅ FIX 4: Memperbesar ukuran handle/anchor Transformer dari default 10px menjadi `anchorSize={16}`, `anchorStrokeWidth={2}`, `anchorCornerRadius={4}` agar lebih mudah di-grab pada layar high-DPI.
+- ✅ FIX 5: Menambahkan handler `handleTextTransform` pada event `onTransform` Konva Text untuk Area Text. Reset `node.scaleX(1)` dilakukan di setiap frame drag dan `width` di-update secara real-time ke state (tanpa push history), menghilangkan fase distorsi/gepeng visual teks secara total selama drag. Mengubah `handleTextTransformEnd` untuk menggunakan `node.width() * scaleX` guna menyelesaikan mismatch `node.width()` vs `obj.width` saat word-wrap expand.
+- ✅ FIX 6: Menambahkan `strokeScaleEnabled={false}` pada `<KonvaRect>` dan `<KonvaEllipse>` untuk mencegah ketebalan garis stroke menebal/terdistorsi secara visual saat di-resize.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` (Section 5.7, 6, 10, 11, 12 checklist) dan `AGENTS.md`.
+
+**Root Cause & UX Improvements:**
+- **Zoom Scroll Compensation**: Statis `transformOrigin: 'top center'` membuat konten memuai ke bawah saat zoom in. Mempertahankan center viewport ratio via scroll compensation membatasi loncatan visual viewport.
+- **Real-time Reflow (`onTransform`)**: Sebelumnya Konva meng-apply visual `scaleX` sementara pada node text selama drag, menyebabkan huruf gepeng/stretched sebelum `onTransformEnd` dipanggil. Meng-reset `scaleX(1)` di setiap frame `onTransform` dan meng-update `width` secara instan membuat teks di-reflow secara smooth di setiap pixel gerakan drag.
+- **Word-wrap Width Mismatch**: Fix formula `node.width() * scaleX` memastikan basis perhitungan persis menggunakan nilai internal width Konva node yang sudah ter-reset, aman dari perbedaan antara `node.width()` dan `obj.width`.
+
+---
+
+### Session 30 — 2026-07-24 (Audit & Fix Text Resize Failure Bug)
+
+**Selesai:**
+- ✅ AUDIT: Mendiagnosa penyebab Text Box tidak bisa di-resize setelah Session 29.
+- ✅ ROOT CAUSE IDENTIFIED: `handleTextTransform` yang terpasang pada `onTransform` memanggil `node.scaleX(1)` di setiap frame gerakan drag. Hal ini (1) merusak internal matrix Konva Transformer di pertengahan drag, (2) membuat `scaleX` bernilai `1.0` saat `handleTextTransformEnd` dipanggil ketika mouse melepas handle (sehingga `horizontalChanged` bernilai false dan patch tidak disimpan ke React state), dan (3) merusak diagonal & vertical resize karena `handleTextTransform` hanya menangani horizontal-only drag.
+- ✅ FIX: Menghapus `handleTextTransform` dan prop `onTransform` dari `<KonvaText>`. Mengembalikan lifecycle transform Text secara penuh ke `handleTextTransformEnd` (`onTransformEnd`) dengan reset scale yang bersih dan formula React state (`obj.width * scaleX`).
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` Section 5.7 dan `AGENTS.md`.
+
+---
+
+### Session 31 — 2026-07-24 (Transformer keepRatio Fix for Accurate Corner Drag Resize)
+
+**Selesai:**
+- ✅ AUDIT: Mendiagnosa dan mengonfirmasi hipotesis bahwa default Konva Transformer (`keepRatio: true`) mengunci `scaleX` dan `scaleY` secara proporsional berdasarkan jarak diagonal saat drag dari corner anchors (`top-left`, `top-right`, `bottom-left`, `bottom-right`), bertentangan dengan model resize independen kita (`width` dari `scaleX`, `fontSize` dari `scaleY`).
+- ✅ FIX: Menambahkan prop `keepRatio={false}` pada `<Transformer>` component di `EditPdfPage.tsx`.
+- ✅ TASK VERIFIKASI: `tsc --noEmit` sukses dengan 0 compile errors.
+- ✅ TASK DOCUMENTATION: Mengupdate `CANVAS_EDITOR_STANDARD.md` (Section 5.5, 11 note, 12 checklist) dan `AGENTS.md`.
+
+**Root Cause & Analysis:**
+- Default Konva Transformer mengaktifkan `keepRatio: true` jika tidak di-set secara eksplisit. Hal ini memaksa `scaleX` dan `scaleY` bernilai identik sesuai aspect ratio awal bounding box saat drag dari anchor sudut.
+- Ketika diubah ke `keepRatio={false}`, `scaleX` dan `scaleY` dihitung secara independen berdasarkan pergerakan mouse sesungguhnya pada sumbu X dan Y, sehingga corner drag pada Text, Rect, Circle, dan Line menghasilkan respons ukuran yang presisi 1:1 tanpa kunci rasio paksaan.
+
+---
 
 ## Cara Menjalankan (Development)
 
