@@ -211,6 +211,7 @@ interface PageCanvasProps {
   activeTool: 'select' | CanvasObjectType | 'eraser';
   selectedObjectId: string | null;
   setSelectedObjectId: (id: string | null) => void;
+  setActiveTool: (tool: 'select' | CanvasObjectType | 'eraser') => void;
   updateSelectedObject: (patch: Partial<CanvasObject>) => void;
   commitPageObjectsToHistory: (pageIndex: number, finalObjects: CanvasObject[]) => void;
   stageRefs: React.MutableRefObject<Record<number, any>>;
@@ -227,6 +228,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
     activeTool,
     selectedObjectId,
     setSelectedObjectId,
+    setActiveTool,
     updateSelectedObject,
     commitPageObjectsToHistory,
     stageRefs,
@@ -318,6 +320,9 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
         const finalObjects = [...page.objects, newText];
         setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
         commitPageObjectsToHistory(page.index, finalObjects);
+        
+        setSelectedObjectId(newText.id);
+        setActiveTool('select');
       }
     }
     setTextEditor(null);
@@ -583,6 +588,8 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
 
     if (!isDrawing.current) return;
     isDrawing.current = false;
+    
+    const newlyCreatedId = activeObjectId.current;
     activeObjectId.current = null;
 
     setPages(prev => {
@@ -592,6 +599,11 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
       }
       return prev;
     });
+
+    if (newlyCreatedId) {
+      setSelectedObjectId(newlyCreatedId);
+      setActiveTool('select');
+    }
   };
 
   const handleFreehandDragEnd = (e: any, objId: string) => {
@@ -742,7 +754,7 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
         if (p.index !== page.index) return p;
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'circle') return obj;
-          return { ...obj, x: node.x(), y: node.y(), width: newWidth, height: newHeight } as CanvasObject;
+          return { ...obj, x: node.x() - newWidth / 2, y: node.y() - newHeight / 2, width: newWidth, height: newHeight } as CanvasObject;
         });
         return { ...p, objects: nextObjs };
       });
@@ -844,7 +856,9 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
   const handleTextTransformEnd = (e: any, objId: string) => {
     const node = e.target;
     const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
 
+    // WAJIB: reset scale SEBELUM baca/hitung apapun, tanpa terkecuali di semua cabang
     node.scaleX(1);
     node.scaleY(1);
 
@@ -854,25 +868,28 @@ const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
         const nextObjs = p.objects.map(obj => {
           if (obj.id !== objId || obj.type !== 'text') return obj;
 
+          // Basis kalkulasi SELALU dari state React (obj), bukan dari node Konva langsung
+          let patch: Partial<TextObject> = { x: node.x(), y: node.y() };
+
           if (obj.width === null) {
-            // Point Text: change font size
-            const newFontSize = Math.max(8, Math.round(obj.fontSize * scaleX));
-            return {
-              ...obj,
-              x: node.x(),
-              y: node.y(),
-              fontSize: newFontSize
-            } as CanvasObject;
+            // Point Text: scale fontSize proporsional
+            const scale = Math.max(scaleX, scaleY);
+            patch.fontSize = Math.max(1, Math.round(obj.fontSize * scale * 10) / 10);
           } else {
-            // Area Text: change container width
-            const newWidth = Math.max(20, obj.width * scaleX);
-            return {
-              ...obj,
-              x: node.x(),
-              y: node.y(),
-              width: newWidth
-            } as CanvasObject;
+            // Area Text: resize width dan/atau fontSize berdasarkan arah drag
+            const horizontalChanged = Math.abs(scaleX - 1) > 0.01;
+            const verticalChanged = Math.abs(scaleY - 1) > 0.01;
+
+            if (horizontalChanged && !verticalChanged) {
+              patch.width = Math.max(20, obj.width * scaleX);
+            } else if (verticalChanged && !horizontalChanged) {
+              patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
+            } else if (horizontalChanged && verticalChanged) {
+              patch.width = Math.max(20, obj.width * scaleX);
+              patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
+            }
           }
+          return { ...obj, ...patch } as CanvasObject;
         });
         return { ...p, objects: nextObjs };
       });
@@ -1372,8 +1389,10 @@ export function EditPdfPage() {
       setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 12 }));
     } else if (activeTool === 'text') {
       setDefaultTextProps(prev => ({ ...prev, fontSize: 16 }));
-    } else if (activeTool === 'rect' || activeTool === 'circle' || activeTool === 'line') {
+    } else if (activeTool === 'rect' || activeTool === 'circle') {
       setDefaultShapeProps(prev => ({ ...prev, strokeWidth: 2 }));
+    } else if (activeTool === 'line') {
+      setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 2 }));
     }
   }, [activeTool]);
 
@@ -1755,7 +1774,7 @@ export function EditPdfPage() {
                     <input
                       type="number"
                       min="1"
-                      step={1}
+                      step={0.5}
                       value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
                       onChange={(e) => {
                         const val = Math.max(1, Number(e.target.value));
@@ -2217,6 +2236,7 @@ export function EditPdfPage() {
                           activeTool={activeTool}
                           selectedObjectId={selectedObjectId}
                           setSelectedObjectId={setSelectedObjectId}
+                          setActiveTool={setActiveTool}
                           updateSelectedObject={updateSelectedObject}
                           commitPageObjectsToHistory={commitPageObjectsToHistory}
                           stageRefs={stageRefs}
