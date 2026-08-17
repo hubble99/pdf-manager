@@ -12,7 +12,8 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from core.pdf_extract import ExtractError, OUTPUT_MODES, extract_pages
 from models.common import ErrorResponse
-from utils.file_utils import cleanup_temp_file, save_upload, sanitize_filename, sanitize_stem
+from utils.file_utils import cleanup_temp_file, save_upload
+from utils.filename_utils import sanitize_filename, sanitize_stem
 
 logger = logging.getLogger("pdf_manager.router.extract")
 router = APIRouter(prefix="/extract", tags=["extract"])

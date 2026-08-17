@@ -5,7 +5,7 @@ from typing import List, Dict
 import fitz  # PyMuPDF
 
 from config import settings
-from utils.file_utils import sanitize_filename
+from utils.filename_utils import sanitize_filename
 
 logger = logging.getLogger("pdf_manager.core.organize")
 

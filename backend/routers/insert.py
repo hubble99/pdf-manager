@@ -10,7 +10,8 @@ from pydantic import ValidationError
 from core.insert.image_inserter import ImageInserter
 from core.insert.insertion_plan import InsertionPlan
 from core.insert.insertion_rule import InsertionRule
-from utils.file_utils import cleanup_temp_file, save_upload, sanitize_filename
+from utils.file_utils import cleanup_temp_file, save_upload
+from utils.filename_utils import sanitize_filename
 
 logger = logging.getLogger("pdf_manager.routers.insert")
 router = APIRouter(prefix="/insert", tags=["insert"])

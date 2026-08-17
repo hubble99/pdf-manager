@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from core.pdf_protect import protect_pdf, ProtectError
 from models.common import ErrorResponse
-from utils.file_utils import cleanup_temp_file, save_upload, sanitize_filename
+from utils.file_utils import cleanup_temp_file, save_upload
+from utils.filename_utils import sanitize_filename
 from config import settings
 
 logger = logging.getLogger("pdf_manager.router.protect")

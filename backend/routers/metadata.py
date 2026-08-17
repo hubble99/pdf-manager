@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from config import settings
 from models.common import ErrorResponse
-from utils.file_utils import cleanup_temp_file, save_upload, sanitize_filename
+from utils.file_utils import cleanup_temp_file, save_upload
+from utils.filename_utils import sanitize_filename
 
 logger = logging.getLogger("pdf_manager.router.metadata")
 router = APIRouter(prefix="/metadata", tags=["metadata"])

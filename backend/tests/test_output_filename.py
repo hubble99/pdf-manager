@@ -11,7 +11,7 @@ from pathlib import Path
 
 # ── sanitize_filename unit tests ──────────────────────────────────────────────
 
-from utils.file_utils import sanitize_filename
+from utils.filename_utils import sanitize_filename
 
 
 UUID_PATTERN = re.compile(r"[a-f0-9]{6,}", re.IGNORECASE)
@@ -83,7 +83,7 @@ class TestCoreMergeFilename:
         We can't easily run merge without real PDFs, but we can assert the
         sanitize_filename path never adds UUID characters.
         """
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         name = sanitize_filename("marged_output", "pdf")
         assert name == "marged_output.pdf"
         assert not _has_uuid_noise(name)
@@ -93,13 +93,13 @@ class TestCoreCompressFilename:
     """Verify compress output filename doesn't have UUID."""
 
     def test_no_uuid_in_output_filename(self):
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         name = sanitize_filename("compressed_doc", "pdf")
         assert name == "compressed_doc.pdf"
         assert not _has_uuid_noise(name)
 
     def test_fallback_when_empty(self):
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         name = sanitize_filename("", "pdf")
         assert name == "output.pdf"
         assert not _has_uuid_noise(name)
@@ -109,7 +109,7 @@ class TestCoreOrganizeFilename:
     """Verify organize output filename doesn't have UUID."""
 
     def test_no_uuid_in_output_filename(self):
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         name = sanitize_filename("organized_result", "pdf")
         assert name == "organized_result.pdf"
         assert not _has_uuid_noise(name)
@@ -119,7 +119,7 @@ class TestCoreProtectFilename:
     """Verify protect output filename doesn't have UUID."""
 
     def test_no_uuid_in_output_filename(self):
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         name = sanitize_filename("protected_doc", "pdf")
         assert name == "protected_doc.pdf"
         assert not _has_uuid_noise(name)

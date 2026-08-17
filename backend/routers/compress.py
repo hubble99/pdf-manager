@@ -101,7 +101,7 @@ async def compress_pdf_stream(
 
         temp_path = await save_upload(file, subdir="compress")
         
-        from utils.file_utils import sanitize_filename
+        from utils.filename_utils import sanitize_filename
         
         if output_filename:
             out_name = sanitize_filename(output_filename, "pdf")
