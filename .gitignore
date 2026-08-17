@@ -14,6 +14,7 @@ dist/
 build/
 
 # ── Node ─────────────────────────────────────────────────────────────────────────
+node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
@@ -61,10 +62,19 @@ backend/test*.png
 # ── Assets ───────────────────────────────────────────────────────────────────────
 ui_images/
 
-# -- AI Documentation -------------------------------------------------------------
-agent_docs/
+# -- Internal documentation (private, not for public repo) ------------------------
+# Seluruh dokumentasi kerja internal dikonsolidasikan di project-docs/.
+# Folder ini sengaja TIDAK di-commit ke repo publik karena berisi session log,
+# catatan UAT, arsip percobaan, dan prompt kerja internal.
+project-docs/
 
-# Internal development docs
+# Path lama (pre-konsolidasi) — dipertahankan agar checkout branch lama tetap aman
+agent_docs/
 AGENTS.md
+AGENTS_ARCHIVE_EditPDF_Konva.md
+CANVAS_EDITOR_STANDARD.md
+CANVAS_EDITOR_STANDARD_ARCHIVE_Konva.md
+CANVAS_UI_STYLE.md
 manage_code.md
 UAT/
+flow.md
