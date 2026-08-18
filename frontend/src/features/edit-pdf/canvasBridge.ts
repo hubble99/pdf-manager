@@ -6,7 +6,7 @@ import type {
   DefaultTextProps,
   EditorTool,
   PageData,
-} from './model';
+} from '../../types/canvas';
 
 export interface CanvasBridgeState {
   activeTool: EditorTool;

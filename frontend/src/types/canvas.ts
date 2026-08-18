@@ -88,7 +88,3 @@ export interface DefaultStrokeProps {
   strokeColor: string;
   strokeWidth: number;
 }
-
-export function generateCanvasObjectId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}

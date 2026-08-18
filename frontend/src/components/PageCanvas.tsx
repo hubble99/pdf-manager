@@ -11,8 +11,8 @@ import type {
   PageData, 
   ShapeObject, 
   TextObject,
-} from '../features/edit-pdf/model';
-import { generateCanvasObjectId } from '../features/edit-pdf/model';
+} from '../types/canvas';
+import { generateCanvasObjectId } from '../features/edit-pdf/ids';
 import { CanvasBridge } from '../features/edit-pdf/canvasBridge';
 import {
   EMPTY_TEXT_SENTINEL,

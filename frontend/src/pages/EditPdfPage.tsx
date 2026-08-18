@@ -46,8 +46,8 @@ import type {
   PageData,
   ShapeObject,
   TextObject,
-} from '../features/edit-pdf/model';
-import { generateCanvasObjectId } from '../features/edit-pdf/model';
+} from '../types/canvas';
+import { generateCanvasObjectId } from '../features/edit-pdf/ids';
 
 interface PdfPageData {
   index: number;
