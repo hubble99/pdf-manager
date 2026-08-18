@@ -22,7 +22,7 @@ apiClient.interceptors.request.use(
 // ── Response interceptor — normalize errors ─────────────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<any>) => {
+  async (error: AxiosError<unknown>) => {
     let message = error.message || 'An unexpected error occurred';
     
     if (error.response?.data) {
@@ -36,7 +36,8 @@ apiClient.interceptors.response.use(
           // Keep default message if not JSON
         }
       } else {
-        message = data.message || data.detail || message;
+        const responseData = data as { message?: string; detail?: string };
+        message = responseData.message || responseData.detail || message;
       }
     }
 
@@ -61,9 +62,9 @@ export async function post<T>(
 }
 
 export async function postForm<T>(url: string, formData: FormData): Promise<T> {
-  const res = await apiClient.post<T>(url, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // Let Axios/browser generate the multipart boundary. Setting Content-Type
+  // manually can produce a malformed request and a misleading HTTP 400.
+  const res = await apiClient.post<T>(url, formData);
   return res.data;
 }
 

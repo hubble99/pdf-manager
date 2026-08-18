@@ -1,5 +1,4 @@
 import apiClient, { checkHealth } from '../api/client';
-import { describe, it, expect, vi } from 'vitest';
 
 describe('API Client', () => {
   it('has correct baseURL', () => {
@@ -55,6 +54,24 @@ describe('API Client', () => {
         adapter: () => Promise.reject(errorResponse),
       })
     ).rejects.toThrow('Invalid path specified');
+  });
+
+  it('response interceptor reads FastAPI detail from a blob error response', async () => {
+    const errorResponse = {
+      response: {
+        data: new Blob(
+          [JSON.stringify({ detail: 'Annotations JSON must be an array.' })],
+          { type: 'application/json' },
+        ),
+      },
+    };
+
+    await expect(
+      apiClient.get('/test-error-blob', {
+        adapter: () => Promise.reject(errorResponse),
+        responseType: 'blob',
+      }),
+    ).rejects.toThrow('Annotations JSON must be an array.');
   });
 
   it('response interceptor falls back to error.message', async () => {
