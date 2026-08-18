@@ -47,24 +47,8 @@ apiClient.interceptors.response.use(
 );
 
 // ── Typed helpers ───────────────────────────────────────────────────────────
-export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
   const res = await apiClient.get<T>(url, config);
-  return res.data;
-}
-
-export async function post<T>(
-  url: string,
-  data?: FormData | Record<string, unknown>,
-  config?: AxiosRequestConfig
-): Promise<T> {
-  const res = await apiClient.post<T>(url, data, config);
-  return res.data;
-}
-
-export async function postForm<T>(url: string, formData: FormData): Promise<T> {
-  // Let Axios/browser generate the multipart boundary. Setting Content-Type
-  // manually can produce a malformed request and a misleading HTTP 400.
-  const res = await apiClient.post<T>(url, formData);
   return res.data;
 }
 

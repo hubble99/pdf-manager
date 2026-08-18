@@ -34,31 +34,6 @@ export const openFilePicker = async (options?: {
   }
 };
 
-/**
- * Open a native save dialog.
- * Returns the chosen save path, or null when not in Tauri or cancelled.
- */
-export const saveFilePicker = async (options?: {
-  defaultPath?: string;
-  filters?: { name: string; extensions: string[] }[];
-  title?: string;
-}): Promise<string | null> => {
-  if (!isTauri()) return null;
-
-  try {
-    const { save } = await import('@tauri-apps/plugin-dialog');
-    const result = await save({
-      defaultPath: options?.defaultPath,
-      filters: options?.filters,
-      title: options?.title,
-    });
-    return result ?? null;
-  } catch (err) {
-    console.warn('[tauriDialog] saveFilePicker failed:', err);
-    return null;
-  }
-};
-
 import apiClient from '../api/client';
 
 /**

@@ -2,7 +2,7 @@ export type CanvasObjectType = 'pen' | 'highlighter' | 'text' | 'rect' | 'circle
 
 export type EditorTool = 'select' | CanvasObjectType | 'eraser' | 'eyedropper';
 
-export interface BaseCanvasObject {
+interface BaseCanvasObject {
   id: string;
   type: CanvasObjectType;
   x: number;
