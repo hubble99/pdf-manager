@@ -1,15 +1,7 @@
-import { createContext, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
-
-export type FeatureFileData = any;
-
-export interface FileContextValue {
-  featureFiles: Record<string, FeatureFileData>;
-  setFeatureFile: (featureId: string, data: FeatureFileData) => void;
-  clearFeatureFile: (featureId: string) => void;
-}
-
-export const FileContext = createContext<FileContextValue | null>(null);
+import { FileContext } from './FileContext.context';
+import type { FeatureFileData } from './FileContext.context';
 
 const MAX_MEMORY_BYTES = 100 * 1024 * 1024; // 100MB
 
@@ -19,7 +11,7 @@ function calculateSize(data: FeatureFileData): number {
   if (Array.isArray(data)) {
     return data.reduce((sum, item) => {
       if (item instanceof File) return sum + item.size;
-      if (item?.file instanceof File) return sum + item.file.size;
+      if (item && 'file' in item && item.file instanceof File) return sum + item.file.size;
       return sum;
     }, 0);
   }

@@ -17,7 +17,7 @@ import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
 import { isTauri, openFilePicker } from '../utils/tauriDialog';
 import { useToast } from '../hooks/useToast';
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
