@@ -56,6 +56,7 @@ backend/logs/
 htmlcov/
 .coverage
 frontend/coverage/
+frontend-lint.json
 backend/test*.pdf
 backend/test*.png
 

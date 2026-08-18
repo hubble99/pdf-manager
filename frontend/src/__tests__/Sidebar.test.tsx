@@ -1,7 +1,6 @@
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../components/layout/Sidebar';
-import { describe, it, expect } from 'vitest';
 
 describe('Sidebar Component', () => {
   const renderSidebar = (initialPath = '/') => {

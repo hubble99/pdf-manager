@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:analyze": "tsc -b && set ANALYZE=true&& vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -20,13 +21,11 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.16.1",
-    "konva": "^10.3.0",
+    "fabric": "^7.4.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-konva": "^19.2.5",
-    "react-router-dom": "^7.16.0",
-    "use-image": "^1.1.4"
+    "react-router-dom": "^7.16.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -43,6 +42,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
+    "playwright": "^1.62.0",
+    "rollup-plugin-visualizer": "^6.0.11",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
