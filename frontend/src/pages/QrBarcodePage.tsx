@@ -210,7 +210,7 @@ export function QrBarcodePage() {
 
     const isQr = activeTab === 'qr';
     const defaultName = isQr ? 'qrcode' : 'barcode';
-    const userStem = outputFilename.trim().replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_') || defaultName;
+    const userStem = outputFilename.trim().replace(/[<>:"/\\|?*]/g, '_') || defaultName;
     const filename = `${userStem}.${format}`;
 
     const a = document.createElement('a');

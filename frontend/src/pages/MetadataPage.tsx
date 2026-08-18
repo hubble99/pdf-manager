@@ -157,7 +157,7 @@ export function MetadataPage() {
       const getOutputFilename = (): string => {
         const t = title.trim();
         if (t) {
-          return t.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').substring(0, 100) + '.pdf';
+          return t.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100) + '.pdf';
         }
         return file.name.replace('.pdf', '') + '_metadata.pdf';
       };
