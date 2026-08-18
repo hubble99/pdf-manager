@@ -6,6 +6,36 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
+    .on_window_event(|window, event| {
+      if let tauri::WindowEvent::Resized(size) = event {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static IS_RESIZING: AtomicBool = AtomicBool::new(false);
+
+        if IS_RESIZING.load(Ordering::SeqCst) {
+          return;
+        }
+
+        if let Ok(Some(monitor)) = window.current_monitor() {
+          let work_area = monitor.work_area();
+          let work_size = work_area.size;
+
+          if size.height > work_size.height || size.width > work_size.width {
+              IS_RESIZING.store(true, Ordering::SeqCst);
+
+              let new_width = size.width.min(work_size.width);
+              let new_height = size.height.min(work_size.height);
+
+              let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(new_width, new_height)));
+              let _ = window.set_position(tauri::Position::Physical(work_area.position.into()));
+
+              std::thread::spawn(|| {
+                  std::thread::sleep(std::time::Duration::from_millis(50));
+                  IS_RESIZING.store(false, Ordering::SeqCst);
+              });
+          }
+        }
+      }
+    })
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
