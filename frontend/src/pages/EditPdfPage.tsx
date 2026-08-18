@@ -48,6 +48,11 @@ import type {
   TextObject,
 } from '../types/canvas';
 import { generateCanvasObjectId } from '../features/edit-pdf/ids';
+import {
+  HISTORY_DEBOUNCE_MS,
+  HISTORY_LIMIT,
+  PASTE_OFFSET,
+} from '../features/edit-pdf/constants';
 
 interface PdfPageData {
   index: number;
@@ -261,7 +266,7 @@ export function EditPdfPage() {
 
           const nextHistory = page.history.slice(0, page.historyIndex + 1);
           nextHistory.push(currentObjects);
-          if (nextHistory.length > 50) {
+          if (nextHistory.length > HISTORY_LIMIT) {
             nextHistory.shift();
           }
           return {
@@ -270,7 +275,7 @@ export function EditPdfPage() {
             historyIndex: nextHistory.length - 1
           };
         }));
-      }, 400);
+      }, HISTORY_DEBOUNCE_MS);
       
       return updatedPages;
     });
@@ -313,7 +318,7 @@ export function EditPdfPage() {
 
           const nextHistory = page.history.slice(0, page.historyIndex + 1);
           nextHistory.push(currentObjects);
-          if (nextHistory.length > 50) {
+          if (nextHistory.length > HISTORY_LIMIT) {
             nextHistory.shift();
           }
           return {
@@ -322,7 +327,7 @@ export function EditPdfPage() {
             historyIndex: nextHistory.length - 1
           };
         }));
-      }, 400);
+      }, HISTORY_DEBOUNCE_MS);
 
       return updatedPages;
     });
@@ -338,7 +343,7 @@ export function EditPdfPage() {
       }
       const nextHistory = page.history.slice(0, page.historyIndex + 1);
       nextHistory.push(finalObjects);
-      if (nextHistory.length > 50) {
+      if (nextHistory.length > HISTORY_LIMIT) {
         nextHistory.shift();
       }
       return {
@@ -747,7 +752,7 @@ export function EditPdfPage() {
                   const nextObjects = page.objects.filter(obj => !copiedIds.has(obj.id));
                   const newHistory = page.history.slice(0, page.historyIndex + 1);
                   newHistory.push(nextObjects);
-                  if (newHistory.length > 50) newHistory.shift();
+                  if (newHistory.length > HISTORY_LIMIT) newHistory.shift();
                   return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
                 }));
                 setSelectedObjectId(null);
@@ -769,7 +774,7 @@ export function EditPdfPage() {
               const newObj = JSON.parse(JSON.stringify(clipObj));
               newObj.id = generateCanvasObjectId();
               
-              const offset = (currentPasteCount + 1) * 20; // Konsisten 20px offset untuk setiap paste, baik di halaman yang sama maupun berbeda
+              const offset = (currentPasteCount + 1) * PASTE_OFFSET;
                 
               newObj.x = (newObj.x || 0) + offset;
               newObj.y = (newObj.y || 0) + offset;
@@ -782,7 +787,7 @@ export function EditPdfPage() {
               const nextObjects = [...page.objects, ...newObjs];
               const newHistory = page.history.slice(0, page.historyIndex + 1);
               newHistory.push(nextObjects);
-              if (newHistory.length > 50) newHistory.shift();
+              if (newHistory.length > HISTORY_LIMIT) newHistory.shift();
               return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
             }));
             
@@ -849,7 +854,7 @@ export function EditPdfPage() {
               const nextObjects = page.objects.filter(obj => !deleteIds.has(obj.id));
               const newHistory = page.history.slice(0, page.historyIndex + 1);
               newHistory.push(nextObjects);
-              if (newHistory.length > 50) newHistory.shift();
+              if (newHistory.length > HISTORY_LIMIT) newHistory.shift();
               return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
             }));
             setSelectedObjectId(null);

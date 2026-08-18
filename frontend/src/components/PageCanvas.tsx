@@ -15,6 +15,17 @@ import type {
 import { generateCanvasObjectId } from '../features/edit-pdf/ids';
 import { CanvasBridge } from '../features/edit-pdf/canvasBridge';
 import {
+  CONTROL_CORNER_SIZE,
+  DEFAULT_TEXT_WIDTH,
+  ERASER_TOLERANCE,
+  HISTORY_LIMIT,
+  MIN_SHAPE_SIZE,
+  MIN_TEXT_WIDTH,
+  SNAP_ANGLE_DEGREES,
+  SNAP_ANGLE_RADIANS,
+  SNAP_THRESHOLD_DEGREES,
+} from '../features/edit-pdf/constants';
+import {
   EMPTY_TEXT_SENTINEL,
   getTextCanvasPresentation,
   isEmptyTextState,
@@ -64,7 +75,7 @@ fabric.Object.prototype.cornerColor = '#ffffff';
 fabric.Object.prototype.cornerStrokeColor = '#666666';
 (fabric.Textbox.prototype as any).editingBorderColor = '#666666';
 fabric.Object.prototype.transparentCorners = false;
-fabric.Object.prototype.cornerSize = 10;
+fabric.Object.prototype.cornerSize = CONTROL_CORNER_SIZE;
 fabric.Object.prototype.borderScaleFactor = 1.5;
 
 export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((props) => {
@@ -100,7 +111,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
     if (canvas) {
       canvas.calcOffset();
       
-      const compensatedCornerSize = Math.max(1, Math.round(10 / finalScale));
+      const compensatedCornerSize = Math.max(1, Math.round(CONTROL_CORNER_SIZE / finalScale));
       const compensatedTouchSize = Math.max(1, Math.round(24 / finalScale));
       const compensatedPadding = Math.max(1, Math.round(6 / finalScale));
       
@@ -148,7 +159,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
 
     const eraseFabricObjectAtPoint = (canvasObj: fabric.Canvas, e: any) => {
       const pointer = canvasObj.getScenePoint(e.e);
-      const tolerance = 10;
+      const tolerance = ERASER_TOLERANCE;
       let erasedSomething = false;
 
       const objects = [...canvasObj.getObjects()];
@@ -243,7 +254,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             bold: bridge.defaultTextProps.bold,
             italic: bridge.defaultTextProps.italic,
             color: bridge.defaultTextProps.color,
-            width: 320
+            width: DEFAULT_TEXT_WIDTH
           };
           const finalObjects = [...currentPage.objects, newText];
           setPages(prev => prev.map(p => p.index === currentPage.index ? { ...p, objects: finalObjects } : p));
@@ -320,7 +331,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             const dx = pointer.x - dragStartPos.x;
             const dy = pointer.y - dragStartPos.y;
             const angle = Math.atan2(dy, dx);
-            const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+            const snappedAngle = Math.round(angle / SNAP_ANGLE_RADIANS) * SNAP_ANGLE_RADIANS;
             const dist = Math.sqrt(dx * dx + dy * dy);
             newX = dragStartPos.x + Math.cos(snappedAngle) * dist;
             newY = dragStartPos.y + Math.sin(snappedAngle) * dist;
@@ -354,7 +365,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                const lastSnapshot = p.history[p.historyIndex];
                if (JSON.stringify(lastSnapshot) === JSON.stringify(p.objects)) return p;
                const nextHistory = [...p.history.slice(0, p.historyIndex + 1), p.objects];
-               if (nextHistory.length > 50) nextHistory.shift();
+               if (nextHistory.length > HISTORY_LIMIT) nextHistory.shift();
                return { ...p, history: nextHistory, historyIndex: nextHistory.length - 1 };
              }
              return p;
@@ -384,7 +395,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist >= 5) {
+            if (dist >= MIN_SHAPE_SIZE) {
               isDrag = true;
               finalX = p1.x;
               finalY = p1.y;
@@ -392,7 +403,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
               finalY2 = p2.y;
             }
           } else {
-            if (dragRect.width >= 5 || dragRect.height >= 5) {
+            if (dragRect.width >= MIN_SHAPE_SIZE || dragRect.height >= MIN_SHAPE_SIZE) {
               isDrag = true;
               dragW = dragRect.width;
               dragH = dragRect.height;
@@ -428,7 +439,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             const newShape: ShapeObject = {
               id: newShapeId, type: currentTool as 'rect' | 'circle', 
               x: finalX, y: finalY, 
-              width: Math.max(5, dragW), height: Math.max(5, dragH),
+              width: Math.max(MIN_SHAPE_SIZE, dragW), height: Math.max(MIN_SHAPE_SIZE, dragH),
               fillColor: defaultShapeProps.fillColor, fillOpacity: defaultShapeProps.fillOpacity,
               strokeColor: defaultShapeProps.strokeColor, strokeWidth: defaultShapeProps.strokeWidth
             };
@@ -554,7 +565,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                 
                 if (isText) {
                   newFontSize = Math.max(1, Math.round((obj.fontSize || 16) * scale * 10) / 10);
-                  newWidth = Math.max(20, (obj.width || 20) * scaleX);
+                  newWidth = Math.max(MIN_TEXT_WIDTH, (obj.width || MIN_TEXT_WIDTH) * scaleX);
                 } else if (isRect || isEllipse) {
                   let calcW = 0;
                   let calcH = 0;
@@ -565,8 +576,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                      calcW = (obj.rx * 2 || 1) * scaleX;
                      calcH = (obj.ry * 2 || 1) * scaleY;
                   }
-                  newWidth = Math.max(5, calcW);
-                  newHeight = Math.max(5, calcH);
+                  newWidth = Math.max(MIN_SHAPE_SIZE, calcW);
+                  newHeight = Math.max(MIN_SHAPE_SIZE, calcH);
                 }
 
                 updates[obj.id] = { 
@@ -665,13 +676,13 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                calcW = (target.rx * 2) * scaleX;
                calcH = (target.ry * 2) * scaleY;
             }
-            newWidth = Math.max(5, calcW);
-            newHeight = Math.max(5, calcH);
+            newWidth = Math.max(MIN_SHAPE_SIZE, calcW);
+            newHeight = Math.max(MIN_SHAPE_SIZE, calcH);
           }
           
           target.set({ scaleX: 1, scaleY: 1 });
           if (isText) {
-             target.set({ fontSize: newFontSize, width: Math.max(20, newWidth) });
+             target.set({ fontSize: newFontSize, width: Math.max(MIN_TEXT_WIDTH, newWidth) });
           } else if (isRect) {
              target.set({ width: newWidth, height: newHeight });
           } else if (isEllipse) {
@@ -709,7 +720,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           if (isText) {
              patch.fontSize = newFontSize;
              if (isResizeAction) {
-               patch.width = Math.max(20, newWidth);
+               patch.width = Math.max(MIN_TEXT_WIDTH, newWidth);
              }
           } else if (isRect || isEllipse) {
              patch.width = newWidth;
@@ -732,7 +743,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           cornerColor: '#ffffff',
           cornerStrokeColor: '#666666',
           transparentCorners: false,
-          cornerSize: 10,
+          cornerSize: CONTROL_CORNER_SIZE,
           borderScaleFactor: 1.5
         });
       }
@@ -924,8 +935,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         originY: 'top',
         selectable: isInteractive,
         evented: isInteractive,
-        snapAngle: 45,
-        snapThreshold: 10,
+        snapAngle: SNAP_ANGLE_DEGREES,
+        snapThreshold: SNAP_THRESHOLD_DEGREES,
         cornerSize: compensatedCornerSize,
         touchCornerSize: compensatedTouchSize,
         cornerColor: '#000000',
@@ -941,7 +952,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
           const fontWeight = textObj.bold ? 'bold' : 'normal';
-          const safeWidth = textObj.width || 320;
+          const safeWidth = textObj.width || DEFAULT_TEXT_WIDTH;
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           
           fabricObj = new fabric.Textbox(presentation.text, {
@@ -1041,7 +1052,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
               const dx = x - fixedPt.x;
               const dy = y - fixedPt.y;
               const angle = Math.atan2(dy, dx);
-              const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+              const snappedAngle = Math.round(angle / SNAP_ANGLE_RADIANS) * SNAP_ANGLE_RADIANS;
               const dist = Math.sqrt(dx * dx + dy * dy);
               newX = fixedPt.x + Math.cos(snappedAngle) * dist;
               newY = fixedPt.y + Math.sin(snappedAngle) * dist;
@@ -1141,7 +1152,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           fabricObj.set({
             text: presentation.text,
-            width: textObj.width || 320,
+            width: textObj.width || DEFAULT_TEXT_WIDTH,
             fontSize: textObj.fontSize,
             fontFamily: textObj.fontFamily,
             fill: presentation.fill,
