@@ -81,6 +81,20 @@
   --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow:   400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Canvas Editor Tokens */
+  --canvas-bg:                  #131318;
+  --canvas-dot-grid:            rgba(255, 255, 255, 0.07);
+  --canvas-topbar-bg:           #12121a;
+  --canvas-topbar-border:       #2a2a3e;
+  --canvas-panel-bg:            #1e1e2e;
+  --canvas-panel-border:        #2a2a3e;
+  --canvas-card-bg:             #12121a;
+  --canvas-input-bg:            #12121a;
+  --canvas-input-border:        #2a2a3e;
+  --canvas-text-primary:        #e8e8f0;
+  --canvas-text-muted:          #9898b8;
+  --canvas-page-shadow:         0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 [data-theme="dusty-rose"] {
@@ -235,7 +249,11 @@
 
 html, body, #root {
   height: 100%;
+  width: 100%;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
 }
 
 body {
@@ -300,7 +318,11 @@ body {
 .app-shell {
   display: flex;
   height: 100vh;
+  width: 100vw;
   overflow: hidden;
+  position: fixed;
+  top: 0;
+  left: 0;
   background: var(--background);
 }
 
@@ -496,6 +518,7 @@ body {
 /* ── Main Content ────────────────────────────────────────────────────────────── */
 .main-content {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
