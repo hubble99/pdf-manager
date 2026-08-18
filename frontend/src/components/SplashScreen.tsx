@@ -28,7 +28,7 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
 
   useEffect(() => {
     let cancelled = false;
-    let startTime = Date.now();
+    const startTime = Date.now();
     let fakeProgress = 0;
     let pollTimer: ReturnType<typeof setTimeout>;
 

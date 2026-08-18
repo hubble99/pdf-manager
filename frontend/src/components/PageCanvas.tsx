@@ -51,7 +51,7 @@ if (!(fabric.Canvas.prototype as any)._calcOffsetPatched) {
         return (this as any)._offset || { left: 0, top: 0 };
       }
       return (originalCalcOffset as any).call(this);
-    } catch (e) {
+    } catch {
       return (this as any)._offset || { left: 0, top: 0 };
     }
   };
@@ -67,7 +67,7 @@ fabric.Object.prototype.transparentCorners = false;
 fabric.Object.prototype.cornerSize = 10;
 fabric.Object.prototype.borderScaleFactor = 1.5;
 
-export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) => {
+export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((props) => {
   const {
     page,
     activeTool,
@@ -185,7 +185,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     canvas.on('mouse:down', (e) => {
 
       if ((e.e as MouseEvent).button === 2 || (e.e as MouseEvent).button === 3) {
-        let hasTarget = !!((e.target as any) && (e.target as any).id);
+        const hasTarget = !!((e.target as any) && (e.target as any).id);
         if (hasTarget) {
           const targetId = (e.target as any).id;
           CanvasBridge.get(canvas).setSelectedObjectId(targetId);
@@ -815,7 +815,6 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     const svgHeaderGray = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">`;
     let customCursor = '';
     
-    // eslint-disable-next-line no-restricted-globals
     if (activeTool === 'eraser') {
       const eraserSvg = encodeURIComponent(`${svgHeaderGray}<path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>`);
       customCursor = `url("data:image/svg+xml;utf8,${eraserSvg}") 0 24, crosshair`;
@@ -1010,7 +1009,9 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
           } as any);
         } else if (obj.type === 'line') {
           const lineObj = obj as LineObject;
-          const { left, top, ...lineCommonProps } = commonProps;
+          const lineCommonProps = Object.fromEntries(
+            Object.entries(commonProps).filter(([key]) => key !== 'left' && key !== 'top')
+          ) as Omit<typeof commonProps, 'left' | 'top'>;
           fabricObj = new fabric.Line([lineObj.points[0], lineObj.points[1], lineObj.points[2], lineObj.points[3]], {
             ...lineCommonProps,
             id: lineObj.id,
