@@ -1,31 +1,43 @@
 import React, { useEffect, useRef } from 'react';
 import * as fabric from 'fabric';
-import type { 
+import type {
   CanvasObject, 
   CanvasObjectType, 
+  DefaultShapeProps,
+  DefaultStrokeProps,
+  DefaultTextProps,
   FreehandObject, 
   LineObject, 
   PageData, 
   ShapeObject, 
-  TextObject
-} from '../pages/EditPdfPage';
-import { generateId } from '../pages/EditPdfPage';
+  TextObject,
+} from '../features/edit-pdf/model';
+import { generateCanvasObjectId } from '../features/edit-pdf/model';
+import { CanvasBridge } from '../features/edit-pdf/canvasBridge';
+import {
+  EMPTY_TEXT_SENTINEL,
+  getTextCanvasPresentation,
+  isEmptyTextState,
+  normalizeTextState,
+  TEXT_PLACEHOLDER_LABEL,
+} from '../utils/textPlaceholder';
 
 // ── PageCanvas Component ──────────────────────────────────────────────────────
 export interface PageCanvasProps {
   page: PageData;
-  activeTool: 'select' | CanvasObjectType | 'eraser';
+  activeTool: 'select' | CanvasObjectType | 'eraser' | 'eyedropper';
   selectedObjectId: string | null;
   setSelectedObjectId: (id: string | null) => void;
-  setActiveTool: (tool: 'select' | CanvasObjectType | 'eraser') => void;
+  setActiveTool: (tool: 'select' | CanvasObjectType | 'eraser' | 'eyedropper') => void;
   updateSelectedObject: (patch: Partial<CanvasObject>, overrideId?: string) => void;
   commitPageObjectsToHistory: (pageIndex: number, finalObjects: CanvasObject[]) => void;
-  fabricRefs?: React.MutableRefObject<Record<number, any>>;
+  fabricRefs?: React.MutableRefObject<Record<number, fabric.Canvas>>;
   setPages: React.Dispatch<React.SetStateAction<PageData[]>>;
-  defaultTextProps: { fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string };
-  defaultShapeProps: { fillColor: string; fillOpacity: number; strokeColor: string; strokeWidth: number };
-  defaultStrokeProps: { strokeColor: string; strokeWidth: number };
+  defaultTextProps: DefaultTextProps;
+  defaultShapeProps: DefaultShapeProps;
+  defaultStrokeProps: DefaultStrokeProps;
   hexToRgba: (hex: string, opacity: number) => string;
+  onSampleColor: (color: string) => void;
   finalScale: number;
 }
 
@@ -70,15 +82,9 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     defaultShapeProps,
     defaultStrokeProps,
     hexToRgba,
+    onSampleColor,
     finalScale,
   } = props;
-
-  const logEvent = (eventName: string, details: any = {}) => {
-    const canvas = fabricCanvasRef.current;
-    const objs = canvas ? canvas.getObjects() : [];
-    console.log(`[RUNTIME] [${eventName}] ID:${details.targetId || '-'} Type:${details.targetType || '-'} X:${Math.round(details.x) || '-'} Y:${Math.round(details.y) || '-'} | State: selected=${selectedObjectId} canvasObjs=${objs.length} Rebuilding=${fabricRebuildingRef.current}`);
-  };
-  (window as any).logEvent = logEvent;
 
   // ============================================================================
   // FABRIC JS IMPLEMENTATION (NATIVE)
@@ -86,6 +92,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
   const fabricContainerRef = useRef<HTMLCanvasElement>(null);
   const fabricEditingRef = useRef<boolean>(false);
   const fabricRebuildingRef = useRef<boolean>(false);
+  const backgroundImageRef = useRef<HTMLImageElement>(null);
 
 
   useEffect(() => {
@@ -123,6 +130,16 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     });
     if (fabricRefs) fabricRefs.current[page.index] = canvas;
     fabricCanvasRef.current = canvas;
+    CanvasBridge.connect(canvas, {
+      activeTool,
+      currentPage: page,
+      defaultTextProps,
+      defaultShapeProps,
+      defaultStrokeProps,
+      updateSelectedObject,
+      setSelectedObjectId,
+      onSampleColor,
+    });
 
     let isDragging = false;
     let dragStartPos = { x: 0, y: 0 };
@@ -135,7 +152,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       let erasedSomething = false;
 
       const objects = [...canvasObj.getObjects()];
-      const currentPage = (canvasObj as any).__currentPage as typeof page;
+      const currentPage = CanvasBridge.get(canvasObj).currentPage;
       
       objects.forEach((obj) => {
         if (!(obj as any).id) return;
@@ -171,18 +188,14 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         let hasTarget = !!((e.target as any) && (e.target as any).id);
         if (hasTarget) {
           const targetId = (e.target as any).id;
-          if ((canvas as any).__setSelectedObjectId) {
-            (canvas as any).__setSelectedObjectId(targetId);
-          }
+          CanvasBridge.get(canvas).setSelectedObjectId(targetId);
           canvas.setActiveObject(e.target as any);
           canvas.requestRenderAll();
           window.dispatchEvent(new CustomEvent('show-context-menu', {
             detail: { x: (e.e as MouseEvent).clientX, y: (e.e as MouseEvent).clientY, id: targetId }
           }));
         } else {
-          if ((canvas as any).__setSelectedObjectId) {
-            (canvas as any).__setSelectedObjectId(null);
-          }
+          CanvasBridge.get(canvas).setSelectedObjectId(null);
           canvas.discardActiveObject();
           canvas.requestRenderAll();
         }
@@ -191,7 +204,24 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         return;
       }
 
-      const currentTool = (canvas as any).__activeTool;
+      const bridge = CanvasBridge.get(canvas);
+      const currentTool = bridge.activeTool;
+      if (currentTool === 'eyedropper') {
+        const pointer = canvas.getScenePoint(e.e);
+        const image = backgroundImageRef.current;
+        if (!image?.naturalWidth || !image.naturalHeight) return;
+        const sampleCanvas = document.createElement('canvas');
+        sampleCanvas.width = image.naturalWidth;
+        sampleCanvas.height = image.naturalHeight;
+        const context = sampleCanvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+        context.drawImage(image, 0, 0);
+        const pixelX = Math.max(0, Math.min(image.naturalWidth - 1, Math.round(pointer.x * image.naturalWidth / page.width)));
+        const pixelY = Math.max(0, Math.min(image.naturalHeight - 1, Math.round(pointer.y * image.naturalHeight / page.height)));
+        const [red, green, blue] = context.getImageData(pixelX, pixelY, 1, 1).data;
+        bridge.onSampleColor(`#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('')}`);
+        return;
+      }
       if (currentTool === 'eraser') {
         isDragging = true;
         erasedAnyInSession = false;
@@ -205,14 +235,14 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         const pointer = canvas.getScenePoint(e.e);
         
         if (currentTool === 'text') {
-          const currentPage = (canvas as any).__currentPage as typeof page;
+          const currentPage = bridge.currentPage;
           const newText: TextObject = {
-            id: generateId(), type: 'text', x: pointer.x, y: pointer.y, text: ' ',
-            fontFamily: (canvas as any).__defaultTextProps.fontFamily,
-            fontSize: (canvas as any).__defaultTextProps.fontSize,
-            bold: (canvas as any).__defaultTextProps.bold,
-            italic: (canvas as any).__defaultTextProps.italic,
-            color: (canvas as any).__defaultTextProps.color,
+            id: generateCanvasObjectId(), type: 'text', x: pointer.x, y: pointer.y, text: EMPTY_TEXT_SENTINEL,
+            fontFamily: bridge.defaultTextProps.fontFamily,
+            fontSize: bridge.defaultTextProps.fontSize,
+            bold: bridge.defaultTextProps.bold,
+            italic: bridge.defaultTextProps.italic,
+            color: bridge.defaultTextProps.color,
             width: 320
           };
           const finalObjects = [...currentPage.objects, newText];
@@ -226,20 +256,20 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         isDragging = true;
         dragStartPos = { x: pointer.x, y: pointer.y };
 
-        const strokeColor = (canvas as any).__defaultShapeProps?.strokeColor || '#4A9EFF';
+        const strokeColor = bridge.defaultShapeProps.strokeColor || '#4A9EFF';
         
         const commonDragProps = {
           left: dragStartPos.x, top: dragStartPos.y,
           originX: 'left', originY: 'top',
           stroke: strokeColor, strokeWidth: 1, strokeDashArray: [],
-          fill: (canvas as any).__defaultShapeProps?.fillColor || '#E8E8E8',
+          fill: bridge.defaultShapeProps.fillColor || '#E8E8E8',
           selectable: false, evented: false
         };
 
         if (currentTool === 'circle') {
           dragRect = new fabric.Ellipse({ ...commonDragProps, rx: 0, ry: 0 } as any);
         } else if (currentTool === 'line') {
-          const defaultStrokeProps = (canvas as any).__defaultStrokeProps;
+          const defaultStrokeProps = bridge.defaultStrokeProps;
           const lineStrokeColor = defaultStrokeProps?.strokeColor || '#4A9EFF';
           const lineStrokeWidth = defaultStrokeProps?.strokeWidth || 4;
           dragRect = new fabric.Line([dragStartPos.x, dragStartPos.y, dragStartPos.x, dragStartPos.y], {
@@ -255,7 +285,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     });
 
     canvas.on('mouse:move', (e) => {
-      const currentTool = (canvas as any).__activeTool;
+      const currentTool = CanvasBridge.get(canvas).activeTool;
       if (currentTool === 'eraser' && isDragging) {
         if (eraseFabricObjectAtPoint(canvas, e)) {
           erasedAnyInSession = true;
@@ -273,7 +303,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         const absW = Math.abs(w);
         const absH = Math.abs(h);
 
-        if ((canvas as any).__activeTool === 'circle') {
+        if (currentTool === 'circle') {
           dragRect.set({
             left, top,
             rx: absW / 2,
@@ -281,7 +311,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
             width: absW,
             height: absH
           });
-        } else if ((canvas as any).__activeTool === 'line') {
+        } else if (currentTool === 'line') {
           const lineObj = dragRect as fabric.Line;
           let newX = pointer.x;
           let newY = pointer.y;
@@ -313,11 +343,12 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     });
 
     canvas.on('mouse:up', (e) => {
-      const currentTool = (canvas as any).__activeTool;
+      const bridge = CanvasBridge.get(canvas);
+      const currentTool = bridge.activeTool;
       if (currentTool === 'eraser') {
         isDragging = false;
         if (erasedAnyInSession) {
-          const currentPage = (canvas as any).__currentPage as typeof page;
+          const currentPage = bridge.currentPage;
           setPages(prev => prev.map(p => {
              if (p.index === currentPage.index) {
                const lastSnapshot = p.history[p.historyIndex];
@@ -374,14 +405,14 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         }
         isDragging = false;
 
-        const currentPage = (canvas as any).__currentPage as typeof page;
+        const currentPage = bridge.currentPage;
         let finalObjects = currentPage.objects;
         let createdId: string | null = null;
         
         if (isDrag) {
           if (currentTool === 'line') {
-            const defaultStrokeProps = (canvas as any).__defaultStrokeProps;
-            const newLineId = generateId();
+            const defaultStrokeProps = bridge.defaultStrokeProps;
+            const newLineId = generateCanvasObjectId();
             const newLine: LineObject = {
               id: newLineId, type: 'line',
               x: 0, y: 0,
@@ -392,8 +423,8 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
             finalObjects = [...currentPage.objects, newLine];
             createdId = newLineId;
           } else {
-            const defaultShapeProps = (canvas as any).__defaultShapeProps;
-            const newShapeId = generateId();
+            const defaultShapeProps = bridge.defaultShapeProps;
+            const newShapeId = generateCanvasObjectId();
             const newShape: ShapeObject = {
               id: newShapeId, type: currentTool as 'rect' | 'circle', 
               x: finalX, y: finalY, 
@@ -417,11 +448,12 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
 
     canvas.on('path:created', (e: any) => {
       const path = e.path;
-      const currentTool = (canvas as any).__activeTool;
+      const bridge = CanvasBridge.get(canvas);
+      const currentTool = bridge.activeTool;
       if (currentTool !== 'pen' && currentTool !== 'highlighter') return;
 
-      const currentPage = (canvas as any).__currentPage as typeof page;
-      const newId = generateId();
+      const currentPage = bridge.currentPage;
+      const newId = generateCanvasObjectId();
 
       const newObj: FreehandObject = {
         id: newId,
@@ -431,7 +463,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
         points: path.path,
         strokeColor: path.stroke,
         strokeWidth: path.strokeWidth || 1,
-        opacity: 1,
+        opacity: currentTool === 'highlighter' ? 0.4 : 1,
         scaleX: 1,
         scaleY: 1,
         width: path.width,
@@ -453,7 +485,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       if (!target) return;
       
       const bound = target.getBoundingRect();
-      const currentPage = (canvas as any).__currentPage;
+      const currentPage = CanvasBridge.get(canvas).currentPage;
       if (!currentPage) return;
       
       const pWidth = currentPage.width;
@@ -485,19 +517,14 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       }
     });
 
-    canvas.on('object:moving', (e: any) => {
-      logEvent('object:moving', { targetId: e.target?.id, targetType: e.target?.type, x: e.target?.left, y: e.target?.top });
-    });
-
     canvas.on('object:modified', (e) => {
-      logEvent('object:modified', { targetId: (e.target as any)?.id, targetType: (e.target as any)?.type, x: e.target?.left, y: e.target?.top });
       const target = e.target as any;
       if (!target) return;
 
       if (target.isType && target.isType('ActiveSelection')) {
         try {
           const activeObjects = target.getObjects();
-          const currentPage = (canvas as any).__currentPage;
+          const currentPage = CanvasBridge.get(canvas).currentPage;
           if (!currentPage) return;
           
           canvas.discardActiveObject();
@@ -658,8 +685,8 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       const postScaleY = target.top;
       const newAngle = target.angle || 0;
 
-      const __updateSelectedObject = (canvas as any).__updateSelectedObject;
-      if (__updateSelectedObject) {
+      const bridge = CanvasBridge.get(canvas);
+      if (bridge.updateSelectedObject) {
         if (isLine) {
           const m = target.calcTransformMatrix();
           const pts = target.calcLinePoints();
@@ -668,7 +695,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
           
           target.set({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
           
-          __updateSelectedObject({
+          bridge.updateSelectedObject({
             points: [p1.x, p1.y, p2.x, p2.y]
           }, target.id);
         } else {
@@ -692,7 +719,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
              patch.scaleY = target.scaleY;
           }
 
-          __updateSelectedObject(patch, target.id);
+          bridge.updateSelectedObject(patch, target.id);
         }
       }
     });
@@ -724,7 +751,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
 
     canvas.on('selection:cleared', () => {
       if (fabricRebuildingRef.current) return;
-      const currentTool = (canvas as any).__activeTool;
+      const currentTool = CanvasBridge.get(canvas).activeTool;
       if (currentTool === 'select') {
         setTimeout(() => {
           if (!canvas.getActiveObject()) {
@@ -734,8 +761,20 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       }
     });
 
-    canvas.on('text:editing:entered', () => {
+    canvas.on('text:editing:entered', (e) => {
       fabricEditingRef.current = true;
+      const target = e.target as any;
+      if (!target || target.text !== TEXT_PLACEHOLDER_LABEL) return;
+
+      const currentPage = CanvasBridge.get(canvas).currentPage;
+      const textObject = currentPage.objects.find(o => o.id === target.id && o.type === 'text') as TextObject | undefined;
+      if (!textObject || !isEmptyTextState(textObject.text)) return;
+
+      target.set({ text: '', fill: textObject?.color || '#000000' });
+      if (target.hiddenTextarea) {
+        target.hiddenTextarea.value = '';
+      }
+      canvas.requestRenderAll();
     });
 
     canvas.on('text:editing:exited', (e) => {
@@ -743,24 +782,25 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       const target = e.target as any;
       if (!target || !target.id) return;
 
-      const finalText = (target.text || '').replace(/^\s+$/, '');
-      const currentPage = (canvas as any).__currentPage as typeof page;
+      const finalText = normalizeTextState(target.text);
+      const currentPage = CanvasBridge.get(canvas).currentPage;
 
-      if (!finalText) {
-        const nextObjs = currentPage.objects.filter(o => o.id !== target.id);
-        setPages(prev => prev.map(p => p.index === currentPage.index ? { ...p, objects: nextObjs } : p));
-        commitPageObjectsToHistory(currentPage.index, nextObjs);
-        setSelectedObjectId(null);
-      } else {
-        const nextObjs = currentPage.objects.map(o =>
-          o.id === target.id ? { ...o, text: finalText } as CanvasObject : o
-        );
-        setPages(prev => prev.map(p => p.index === currentPage.index ? { ...p, objects: nextObjs } : p));
-        commitPageObjectsToHistory(currentPage.index, nextObjs);
+      const nextObjs = currentPage.objects.map(o =>
+        o.id === target.id ? { ...o, text: finalText } as CanvasObject : o
+      );
+      setPages(prev => prev.map(p => p.index === currentPage.index ? { ...p, objects: nextObjs } : p));
+      commitPageObjectsToHistory(currentPage.index, nextObjs);
+
+      if (finalText === EMPTY_TEXT_SENTINEL) {
+        const textObject = currentPage.objects.find(o => o.id === target.id) as TextObject | undefined;
+        const presentation = getTextCanvasPresentation(finalText, textObject?.color || '#000000');
+        target.set({ text: presentation.text, fill: presentation.fill });
+        canvas.requestRenderAll();
       }
     });
 
     return () => {
+      CanvasBridge.disconnect(canvas);
       canvas.dispose();
     };
   }, [page.width, page.height]);
@@ -787,7 +827,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       customCursor = `url("data:image/svg+xml;utf8,${highlightSvg}") 3 20, crosshair`;
     } else if (activeTool === 'text') {
       customCursor = 'text';
-    } else if (activeTool === 'line' || activeTool === 'rect' || activeTool === 'circle') {
+    } else if (activeTool === 'line' || activeTool === 'rect' || activeTool === 'circle' || activeTool === 'eyedropper') {
       customCursor = 'crosshair';
     }
 
@@ -799,7 +839,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
       canvas.hoverCursor = 'move';
     }
 
-    (canvas as any).__activeTool = activeTool;
+    CanvasBridge.update(canvas, { activeTool });
     canvas.getObjects().forEach(obj => {
       obj.selectable = isInteractive;
       obj.evented = isInteractive;
@@ -827,13 +867,17 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
-    (canvas as any).__currentPage = page;
-    (canvas as any).__defaultTextProps = defaultTextProps;
-    (canvas as any).__defaultShapeProps = defaultShapeProps;
-    (canvas as any).__defaultStrokeProps = defaultStrokeProps;
-    (canvas as any).__updateSelectedObject = updateSelectedObject;
-    (canvas as any).__setSelectedObjectId = setSelectedObjectId;
-  }, [page, defaultTextProps, defaultShapeProps, defaultStrokeProps, updateSelectedObject]);
+    CanvasBridge.connect(canvas, {
+      activeTool,
+      currentPage: page,
+      defaultTextProps,
+      defaultShapeProps,
+      defaultStrokeProps,
+      updateSelectedObject,
+      setSelectedObjectId,
+      onSampleColor,
+    });
+  }, [activeTool, page, defaultTextProps, defaultShapeProps, defaultStrokeProps, updateSelectedObject, setSelectedObjectId, onSampleColor]);
 
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
@@ -899,15 +943,15 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
           const fontStyle = textObj.italic ? 'italic' : 'normal';
           const fontWeight = textObj.bold ? 'bold' : 'normal';
           const safeWidth = textObj.width || 320;
-          const isPlaceholder = textObj.text === ' ';
+          const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           
-          fabricObj = new fabric.Textbox(isPlaceholder ? 'Enter text here' : textObj.text, { 
+          fabricObj = new fabric.Textbox(presentation.text, {
             ...commonProps, 
             id: textObj.id, 
             width: safeWidth,
             fontSize: textObj.fontSize,
             fontFamily: textObj.fontFamily,
-            fill: isPlaceholder ? '#555555' : textObj.color,
+            fill: presentation.fill,
             fontStyle: fontStyle as any,
             fontWeight: fontWeight,
             textAlign: textObj.textAlign || 'left',
@@ -947,7 +991,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
           }
         } else if (obj.type === 'pen' || obj.type === 'highlighter') {
           const freehandObj = obj as FreehandObject;
-          fabricObj = new fabric.Path(freehandObj.points, {
+          fabricObj = new fabric.Path(freehandObj.points as fabric.TComplexPathData, {
             ...commonProps,
             originX: 'center',
             originY: 'center',
@@ -1053,16 +1097,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
 
           if (selectedObjectId === obj.id) {
             canvas.setActiveObject(fabricObj);
-            if (obj.type === 'text' && (obj as TextObject).text === ' ') {
-              fabricObj.on('editing:entered', () => {
-                if ((fabricObj as any).text === 'Enter text here') {
-                  fabricObj.set({ text: '', fill: (obj as TextObject).color });
-                  if ((fabricObj as any).hiddenTextarea) {
-                    (fabricObj as any).hiddenTextarea.value = '';
-                  }
-                  canvas.requestRenderAll();
-                }
-              });
+            if (obj.type === 'text' && (obj as TextObject).text === EMPTY_TEXT_SENTINEL) {
               fabricObj.enterEditing();
             }
           }
@@ -1102,13 +1137,13 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
           const fontWeight = textObj.bold ? 'bold' : 'normal';
-          const isPlaceholder = textObj.text === ' ';
+          const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           fabricObj.set({
-            text: isPlaceholder ? 'Enter text here' : textObj.text,
+            text: presentation.text,
             width: textObj.width || 320,
             fontSize: textObj.fontSize,
             fontFamily: textObj.fontFamily,
-            fill: isPlaceholder ? '#9898B8' : textObj.color,
+            fill: presentation.fill,
             fontStyle: fontStyle as any,
             fontWeight: fontWeight,
             textAlign: textObj.textAlign || 'left',
@@ -1203,6 +1238,7 @@ export const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, _ref) =
     >
       {/* Background Image PDF Page */}
       <img 
+        ref={backgroundImageRef}
         src={page.imageUrl} 
         alt={`Page ${page.index}`} 
         style={{

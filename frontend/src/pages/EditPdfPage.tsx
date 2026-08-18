@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import {
   MousePointer,
   Pen,
   Highlighter,
+  ChevronsUp,
+  ChevronsDown,
+  ChevronUp,
+  ChevronDown,
   Type,
   Square,
   Circle as CircleIcon,
@@ -18,80 +23,37 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Scan,
+  FileEdit,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Pipette,
 } from 'lucide-react';
-import { Stage, Layer, Image as KonvaImage, Line as KonvaLine, Rect as KonvaRect, Ellipse as KonvaEllipse, Text as KonvaText, Transformer } from 'react-konva';
-import useImage from 'use-image';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { isEmptyTextState } from '../utils/textPlaceholder';
 import { Filename } from '../components/Filename';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type CanvasObjectType = 'pen' | 'highlighter' | 'text' | 'rect' | 'circle' | 'line';
-
-interface BaseCanvasObject {
-  id: string;
-  type: CanvasObjectType;
-  x: number;
-  y: number;
-}
-
-interface FreehandObject extends BaseCanvasObject {
-  type: 'pen' | 'highlighter';
-  points: number[];
-  strokeColor: string;
-  strokeWidth: number;
-  opacity: number; // 1 for pen, 0.4 for highlighter
-}
-
-interface TextObject extends BaseCanvasObject {
-  type: 'text';
-  text: string;
-  fontFamily: string;
-  fontSize: number;
-  bold: boolean;
-  italic: boolean;
-  color: string;
-  width: number | null; // null = auto-expand (point text), number = fixed (area text)
-  visible?: boolean;
-}
-
-interface ShapeObject extends BaseCanvasObject {
-  type: 'rect' | 'circle';
-  width: number;
-  height: number;
-  fillColor: string;
-  fillOpacity: number; // 0-100
-  strokeColor: string;
-  strokeWidth: number;
-}
-
-interface LineObject extends BaseCanvasObject {
-  type: 'line';
-  points: number[]; // [x1, y1, x2, y2]
-  strokeColor: string;
-  strokeWidth: number;
-}
-
-type CanvasObject = FreehandObject | TextObject | ShapeObject | LineObject;
-
-interface PageData {
-  index: number;
-  width: number;  // actual rendered width dari backend (misal 1654)
-  height: number;
-  imageUrl: string;
-  objects: CanvasObject[];
-  history: CanvasObject[][]; // snapshot untuk undo/redo
-  historyIndex: number;
-}
+import * as fabric from 'fabric';
+import type {
+  CanvasObject,
+  CanvasObjectType,
+  FreehandObject,
+  LineObject,
+  PageData,
+  ShapeObject,
+  TextObject,
+} from '../features/edit-pdf/model';
+import { generateCanvasObjectId } from '../features/edit-pdf/model';
 
 interface PdfPageData {
   index: number;
   width: number;
   height: number;
+  dpi: number;
   data: string; // Base64 string
 }
 
@@ -100,19 +62,6 @@ interface ConversionResponse {
   total: number;
 }
 
-interface TextEditingState {
-  id: string | null;
-  x: number;
-  y: number;
-  width: number | null;
-  value: string;
-  fontSize: number;
-  fontFamily: string;
-  bold: boolean;
-  italic: boolean;
-  color: string;
-  isAreaText: boolean;
-}
 
 // ── Windows Font Options ──────────────────────────────────────────────────────
 const FONT_FAMILIES = [
@@ -133,11 +82,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-// Helper to generate unique IDs
-function generateId(): string {
-  return Math.random().toString(36).slice(2, 10);
 }
 
 // ── Lazy Loading Container ────────────────────────────────────────────────────
@@ -205,993 +149,7 @@ function LazyPageContainer({
   return <div ref={containerRef}>{children}</div>;
 }
 
-// ── PageCanvas Component ──────────────────────────────────────────────────────
-interface PageCanvasProps {
-  page: PageData;
-  activeTool: 'select' | CanvasObjectType | 'eraser';
-  selectedObjectId: string | null;
-  setSelectedObjectId: (id: string | null) => void;
-  setActiveTool: (tool: 'select' | CanvasObjectType | 'eraser') => void;
-  updateSelectedObject: (patch: Partial<CanvasObject>) => void;
-  commitPageObjectsToHistory: (pageIndex: number, finalObjects: CanvasObject[]) => void;
-  stageRefs: React.MutableRefObject<Record<number, any>>;
-  setPages: React.Dispatch<React.SetStateAction<PageData[]>>;
-  defaultTextProps: { fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string };
-  defaultShapeProps: { fillColor: string; fillOpacity: number; strokeColor: string; strokeWidth: number };
-  defaultStrokeProps: { strokeColor: string; strokeWidth: number };
-  hexToRgba: (hex: string, opacity: number) => string;
-}
-
-const PageCanvas = React.forwardRef<any, PageCanvasProps>((props, ref) => {
-  const {
-    page,
-    activeTool,
-    selectedObjectId,
-    setSelectedObjectId,
-    setActiveTool,
-    updateSelectedObject,
-    commitPageObjectsToHistory,
-    stageRefs,
-    setPages,
-    defaultTextProps,
-    defaultShapeProps,
-    defaultStrokeProps,
-    hexToRgba,
-  } = props;
-
-  const [image] = useImage(page.imageUrl);
-  const [textEditor, setTextEditor] = useState<TextEditingState | null>(null);
-
-  const isDrawing = useRef(false);
-  const activeObjectId = useRef<string | null>(null);
-  const textDragStartPos = useRef<{ x: number; y: number } | null>(null);
-  const [textDragRect, setTextDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-
-  const transformerRef = useRef<any>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (textEditor && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [textEditor]);
-
-  useEffect(() => {
-    if (textEditor && textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [textEditor?.value]);
-
-  useEffect(() => {
-    if (selectedObjectId && transformerRef.current) {
-      const stage = transformerRef.current.getStage();
-      if (stage) {
-        const node = stage.findOne(`#${selectedObjectId}`);
-        if (node) {
-          transformerRef.current.nodes([node]);
-          transformerRef.current.getLayer()?.batchDraw();
-        } else {
-          transformerRef.current.nodes([]);
-        }
-      }
-    } else if (transformerRef.current) {
-      transformerRef.current.nodes([]);
-      transformerRef.current.getLayer()?.batchDraw();
-    }
-  }, [selectedObjectId, page.objects]);
-
-  const commitText = () => {
-    if (!textEditor) return;
-    const val = textEditor.value.trim();
-
-    if (textEditor.id) {
-      // Edit existing TextObject
-      const finalObjects = page.objects.map(obj => {
-        if (obj.id === textEditor.id) {
-          if (!val) return null;
-          return {
-            ...obj,
-            text: val,
-            visible: true
-          } as TextObject;
-        }
-        return obj;
-      }).filter(Boolean) as CanvasObject[];
-
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
-      commitPageObjectsToHistory(page.index, finalObjects);
-    } else {
-      // Create new TextObject
-      if (val) {
-        const newText: TextObject = {
-          id: generateId(),
-          type: 'text',
-          x: textEditor.x,
-          y: textEditor.y,
-          text: val,
-          fontFamily: textEditor.fontFamily,
-          fontSize: textEditor.fontSize,
-          bold: textEditor.bold,
-          italic: textEditor.italic,
-          color: textEditor.color,
-          width: textEditor.width
-        };
-        const finalObjects = [...page.objects, newText];
-        setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
-        commitPageObjectsToHistory(page.index, finalObjects);
-        
-        setSelectedObjectId(newText.id);
-        setActiveTool('select');
-      }
-    }
-    setTextEditor(null);
-  };
-
-  const cancelText = () => {
-    if (!textEditor) return;
-    if (textEditor.id) {
-      // Restore visibility of existing TextObject
-      const finalObjects = page.objects.map(obj =>
-        obj.id === textEditor.id ? { ...obj, visible: true } as CanvasObject : obj
-      );
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: finalObjects } : p));
-    }
-    setTextEditor(null);
-  };
-
-  const eraseObjectAtPoint = (stage: any) => {
-    const pos = stage.getPointerPosition();
-    if (!pos) return;
-
-    const tolerance = 10;
-    const nextObjects = page.objects.filter(obj => {
-      let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-
-      if (obj.type === 'pen' || obj.type === 'highlighter') {
-        const xs = obj.points.filter((_, i) => i % 2 === 0);
-        const ys = obj.points.filter((_, i) => i % 2 !== 0);
-        if (xs.length === 0 || ys.length === 0) return true;
-        x1 = Math.min(...xs);
-        y1 = Math.min(...ys);
-        x2 = Math.max(...xs);
-        y2 = Math.max(...ys);
-      } else if (obj.type === 'line') {
-        x1 = Math.min(obj.points[0], obj.points[2]);
-        y1 = Math.min(obj.points[1], obj.points[3]);
-        x2 = Math.max(obj.points[0], obj.points[2]);
-        y2 = Math.max(obj.points[1], obj.points[3]);
-      } else if (obj.type === 'rect' || obj.type === 'circle') {
-        x1 = Math.min(obj.x, obj.x + obj.width);
-        y1 = Math.min(obj.y, obj.y + obj.height);
-        x2 = Math.max(obj.x, obj.x + obj.width);
-        y2 = Math.max(obj.y, obj.y + obj.height);
-      } else if (obj.type === 'text') {
-        x1 = obj.x;
-        y1 = obj.y;
-        const textWidth = obj.width || (obj.text.length * obj.fontSize * 0.6);
-        x2 = obj.x + textWidth;
-        y2 = obj.y + obj.fontSize;
-      }
-
-      const collides = (
-        pos.x >= x1 - tolerance &&
-        pos.x <= x2 + tolerance &&
-        pos.y >= y1 - tolerance &&
-        pos.y <= y2 + tolerance
-      );
-
-      return !collides;
-    });
-
-    if (nextObjects.length !== page.objects.length) {
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
-      commitPageObjectsToHistory(page.index, nextObjects);
-    }
-  };
-
-  const handleMouseDown = (e: any) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    if (activeTool === 'eraser') {
-      isDrawing.current = true;
-      eraseObjectAtPoint(stage);
-      return;
-    }
-
-    if (activeTool === 'select') {
-      const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
-      if (clickedOnEmpty) {
-        setSelectedObjectId(null);
-      }
-      return;
-    }
-
-    if (activeTool === 'text') {
-      const pos = stage.getPointerPosition();
-      if (pos) {
-        textDragStartPos.current = pos;
-      }
-      return;
-    }
-
-    if (textEditor) return;
-
-    const pos = stage.getPointerPosition();
-    if (!pos) return;
-
-    isDrawing.current = true;
-    const newId = generateId();
-    activeObjectId.current = newId;
-
-    if (activeTool === 'pen' || activeTool === 'highlighter') {
-      const isHighlighter = activeTool === 'highlighter';
-      const newObj: FreehandObject = {
-        id: newId,
-        type: isHighlighter ? 'highlighter' : 'pen',
-        x: 0,
-        y: 0,
-        points: [pos.x, pos.y],
-        strokeColor: defaultStrokeProps.strokeColor,
-        strokeWidth: isHighlighter ? 12 : defaultStrokeProps.strokeWidth,
-        opacity: isHighlighter ? 0.4 : 1.0
-      };
-      const nextObjects = [...page.objects, newObj];
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
-    } else if (activeTool === 'rect' || activeTool === 'circle') {
-      const newObj: ShapeObject = {
-        id: newId,
-        type: activeTool,
-        x: pos.x,
-        y: pos.y,
-        width: 0,
-        height: 0,
-        fillColor: defaultShapeProps.fillColor,
-        fillOpacity: defaultShapeProps.fillOpacity,
-        strokeColor: defaultShapeProps.strokeColor,
-        strokeWidth: defaultShapeProps.strokeWidth
-      };
-      const nextObjects = [...page.objects, newObj];
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
-    } else if (activeTool === 'line') {
-      const newObj: LineObject = {
-        id: newId,
-        type: 'line',
-        x: 0,
-        y: 0,
-        points: [pos.x, pos.y, pos.x, pos.y],
-        strokeColor: defaultStrokeProps.strokeColor,
-        strokeWidth: defaultStrokeProps.strokeWidth
-      };
-      const nextObjects = [...page.objects, newObj];
-      setPages(prev => prev.map(p => p.index === page.index ? { ...p, objects: nextObjects } : p));
-    }
-  };
-
-  const handleMouseMove = (e: any) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-
-    if (activeTool === 'eraser' && isDrawing.current) {
-      eraseObjectAtPoint(stage);
-      return;
-    }
-
-    if (activeTool === 'text') {
-      if (!textDragStartPos.current) return;
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
-
-      const dx = pos.x - textDragStartPos.current.x;
-      const dy = pos.y - textDragStartPos.current.y;
-
-      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-        setTextDragRect({
-          x: Math.min(pos.x, textDragStartPos.current.x),
-          y: Math.min(pos.y, textDragStartPos.current.y),
-          w: Math.abs(dx),
-          h: Math.abs(dy)
-        });
-      }
-      return;
-    }
-
-    if (!isDrawing.current || !activeObjectId.current) return;
-    const pos = stage.getPointerPosition();
-    if (!pos) return;
-
-    setPages(prev => prev.map(p => {
-      if (p.index !== page.index) return p;
-      return {
-        ...p,
-        objects: p.objects.map(obj => {
-          if (obj.id !== activeObjectId.current) return obj;
-
-          if (obj.type === 'pen' || obj.type === 'highlighter') {
-            return {
-              ...obj,
-              points: [...obj.points, pos.x, pos.y]
-            } as FreehandObject;
-          } else if (obj.type === 'rect' || obj.type === 'circle') {
-            return {
-              ...obj,
-              width: pos.x - obj.x,
-              height: pos.y - obj.y
-            } as ShapeObject;
-          } else if (obj.type === 'line') {
-            return {
-              ...obj,
-              points: [obj.points[0], obj.points[1], pos.x, pos.y]
-            } as LineObject;
-          }
-          return obj;
-        })
-      };
-    }));
-  };
-
-  const handleMouseUp = (e: any) => {
-    const stage = e.target.getStage();
-    if (activeTool === 'eraser') {
-      isDrawing.current = false;
-      return;
-    }
-
-    if (activeTool === 'text') {
-      if (!textDragStartPos.current) return;
-      const pos = stage ? stage.getPointerPosition() : null;
-      if (!pos) {
-        textDragStartPos.current = null;
-        setTextDragRect(null);
-        return;
-      }
-
-      const dx = Math.abs(pos.x - textDragStartPos.current.x);
-      const dy = Math.abs(pos.y - textDragStartPos.current.y);
-      const isDrag = dx > 10 || dy > 10;
-
-      if (isDrag && textDragRect) {
-        setTextEditor({
-          id: null,
-          x: textDragRect.x,
-          y: textDragRect.y,
-          width: textDragRect.w,
-          value: '',
-          fontSize: defaultTextProps.fontSize,
-          fontFamily: defaultTextProps.fontFamily,
-          bold: defaultTextProps.bold,
-          italic: defaultTextProps.italic,
-          color: defaultTextProps.color,
-          isAreaText: true
-        });
-      } else {
-        setTextEditor({
-          id: null,
-          x: textDragStartPos.current.x,
-          y: textDragStartPos.current.y,
-          width: null,
-          value: '',
-          fontSize: defaultTextProps.fontSize,
-          fontFamily: defaultTextProps.fontFamily,
-          bold: defaultTextProps.bold,
-          italic: defaultTextProps.italic,
-          color: defaultTextProps.color,
-          isAreaText: false
-        });
-      }
-
-      textDragStartPos.current = null;
-      setTextDragRect(null);
-      return;
-    }
-
-    if (!isDrawing.current) return;
-    isDrawing.current = false;
-    
-    const newlyCreatedId = activeObjectId.current;
-    activeObjectId.current = null;
-
-    setPages(prev => {
-      const updatedPage = prev.find(p => p.index === page.index);
-      if (updatedPage) {
-        commitPageObjectsToHistory(page.index, updatedPage.objects);
-      }
-      return prev;
-    });
-
-    if (newlyCreatedId) {
-      setSelectedObjectId(newlyCreatedId);
-      setActiveTool('select');
-    }
-  };
-
-  const handleFreehandDragEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-    node.x(0);
-    node.y(0);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || (obj.type !== 'pen' && obj.type !== 'highlighter')) return obj;
-          const newPoints = obj.points.map((val, idx) => idx % 2 === 0 ? val + dx : val + dy);
-          return { ...obj, points: newPoints } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleFreehandTransformEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-    const nodeX = node.x();
-    const nodeY = node.y();
-
-    node.scaleX(1);
-    node.scaleY(1);
-    node.x(0);
-    node.y(0);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || (obj.type !== 'pen' && obj.type !== 'highlighter')) return obj;
-          const newPoints = obj.points.map((val, idx) => idx % 2 === 0 ? val * scaleX + nodeX : val * scaleY + nodeY);
-          return { ...obj, points: newPoints } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleRectDragEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const newX = node.x();
-    const newY = node.y();
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId) return obj;
-          return { ...obj, x: newX, y: newY } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleRectTransformEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-
-    node.scaleX(1);
-    node.scaleY(1);
-
-    const newWidth = Math.max(5, node.width() * scaleX);
-    const newHeight = Math.max(5, node.height() * scaleY);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'rect') return obj;
-          return { ...obj, x: node.x(), y: node.y(), width: newWidth, height: newHeight } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleCircleDragEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const centerResX = node.x();
-    const centerResY = node.y();
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'circle') return obj;
-          return { ...obj, x: centerResX - obj.width / 2, y: centerResY - obj.height / 2 } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleCircleTransformEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-
-    node.scaleX(1);
-    node.scaleY(1);
-
-    const newWidth = Math.max(5, node.width() * scaleX);
-    const newHeight = Math.max(5, node.height() * scaleY);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'circle') return obj;
-          return { ...obj, x: node.x() - newWidth / 2, y: node.y() - newHeight / 2, width: newWidth, height: newHeight } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleLineDragEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const dx = node.x();
-    const dy = node.y();
-    node.x(0);
-    node.y(0);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'line') return obj;
-          const newPoints = [
-            obj.points[0] + dx,
-            obj.points[1] + dy,
-            obj.points[2] + dx,
-            obj.points[3] + dy
-          ];
-          return { ...obj, points: newPoints } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleLineTransformEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-    const nodeX = node.x();
-    const nodeY = node.y();
-
-    node.scaleX(1);
-    node.scaleY(1);
-    node.x(0);
-    node.y(0);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'line') return obj;
-          const newPoints = obj.points.map((val, idx) =>
-            idx % 2 === 0 ? val * scaleX + nodeX : val * scaleY + nodeY
-          );
-          return { ...obj, points: newPoints } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleTextDragEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const newX = node.x();
-    const newY = node.y();
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId) return obj;
-          return { ...obj, x: newX, y: newY } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleTextTransformEnd = (e: any, objId: string) => {
-    const node = e.target;
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
-
-    // WAJIB: reset scale SEBELUM baca/hitung apapun, tanpa terkecuali di semua cabang
-    node.scaleX(1);
-    node.scaleY(1);
-
-    setPages(prev => {
-      const nextPages = prev.map(p => {
-        if (p.index !== page.index) return p;
-        const nextObjs = p.objects.map(obj => {
-          if (obj.id !== objId || obj.type !== 'text') return obj;
-
-          let patch: Partial<TextObject> = { x: node.x(), y: node.y() };
-
-          if (obj.width === null) {
-            // Point Text: scale fontSize proporsional
-            const scale = Math.max(scaleX, scaleY);
-            patch.fontSize = Math.max(1, Math.round(obj.fontSize * scale * 10) / 10);
-          } else {
-            // Area Text: resize width dan/atau fontSize berdasarkan arah drag
-            const horizontalChanged = Math.abs(scaleX - 1) > 0.01;
-            const verticalChanged = Math.abs(scaleY - 1) > 0.01;
-
-            if (horizontalChanged && !verticalChanged) {
-              // Horizontal murni — width berubah, fontSize tetap
-              patch.width = Math.max(20, node.width() * scaleX);
-            } else if (verticalChanged && !horizontalChanged) {
-              // Vertikal murni — fontSize berubah, width tetap
-              patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
-            } else if (horizontalChanged && verticalChanged) {
-              // Diagonal — HANYA fontSize yang berubah, width TIDAK digandakan
-              patch.fontSize = Math.max(1, Math.round(obj.fontSize * scaleY * 10) / 10);
-            }
-          }
-          return { ...obj, ...patch } as CanvasObject;
-        });
-        return { ...p, objects: nextObjs };
-      });
-
-      const activePage = nextPages.find(p => p.index === page.index);
-      if (activePage) {
-        commitPageObjectsToHistory(page.index, activePage.objects);
-      }
-      return nextPages;
-    });
-  };
-
-  const handleTextDoubleClick = (e: any, textObj: TextObject) => {
-    e.cancelBubble = true;
-    setSelectedObjectId(textObj.id);
-
-    setTextEditor({
-      id: textObj.id,
-      x: textObj.x,
-      y: textObj.y,
-      width: textObj.width,
-      value: textObj.text,
-      fontSize: textObj.fontSize,
-      fontFamily: textObj.fontFamily,
-      bold: textObj.bold,
-      italic: textObj.italic,
-      color: textObj.color,
-      isAreaText: textObj.width !== null
-    });
-
-    setPages(prev => prev.map(p => p.index === page.index ? {
-      ...p,
-      objects: p.objects.map(obj => obj.id === textObj.id ? { ...obj, visible: false } as CanvasObject : obj)
-    } : p));
-  };
-
-  const handleObjectClick = (e: any, objId: string) => {
-    if (activeTool === 'select') {
-      e.cancelBubble = true;
-      setSelectedObjectId(objId);
-    }
-  };
-
-  const handleStageClick = (e: any) => {
-    const stage = e.target.getStage();
-    if (!stage) return;
-    const clickedOnEmpty = e.target === stage || e.target.getClassName() === 'Image';
-    if (clickedOnEmpty && activeTool === 'select') {
-      setSelectedObjectId(null);
-    }
-  };
-
-  const stageCursor = activeTool === 'select' ? 'default' : activeTool === 'eraser' ? 'cell' : 'crosshair';
-
-  return (
-    <div
-      className="pdf-page-editor-container"
-      style={{
-        position: 'relative',
-        width: `${page.width}px`,
-        height: `${page.height}px`,
-        margin: '0 auto',
-        background: '#ffffff',
-        borderRadius: '4px',
-        boxShadow: '0 4px 10px rgba(0, 0, 0, 0.3)',
-        border: '1px solid #2A2A3E',
-      }}
-    >
-      <Stage
-        ref={(el) => {
-          if (el) {
-            stageRefs.current[page.index] = el;
-          } else {
-            delete stageRefs.current[page.index];
-          }
-        }}
-        width={page.width}
-        height={page.height}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onTouchStart={handleMouseDown}
-        onTouchMove={handleMouseMove}
-        onTouchEnd={handleMouseUp}
-        onClick={handleStageClick}
-        onTap={handleStageClick}
-        style={{ cursor: stageCursor }}
-      >
-        <Layer>
-          {image && (
-            <KonvaImage
-              image={image}
-              width={page.width}
-              height={page.height}
-              listenUpload={false}
-            />
-          )}
-        </Layer>
-        <Layer>
-          {page.objects.map((obj) => {
-            if (obj.type === 'pen' || obj.type === 'highlighter') {
-              return (
-                <KonvaLine
-                  key={obj.id}
-                  id={obj.id}
-                  points={obj.points}
-                  stroke={obj.strokeColor}
-                  strokeWidth={obj.strokeWidth}
-                  strokeScaleEnabled={false}
-                  tension={0.5}
-                  lineCap="round"
-                  lineJoin="round"
-                  opacity={obj.opacity}
-                  draggable={activeTool === 'select'}
-                  onClick={(e) => handleObjectClick(e, obj.id)}
-                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                  onDragEnd={(e) => handleFreehandDragEnd(e, obj.id)}
-                  onTransformEnd={(e) => handleFreehandTransformEnd(e, obj.id)}
-                />
-              );
-            }
-            if (obj.type === 'rect') {
-              const fillVal = obj.fillColor && obj.fillOpacity > 0
-                ? hexToRgba(obj.fillColor, obj.fillOpacity)
-                : 'transparent';
-              return (
-                <KonvaRect
-                  key={obj.id}
-                  id={obj.id}
-                  x={obj.x}
-                  y={obj.y}
-                  width={obj.width}
-                  height={obj.height}
-                  stroke={obj.strokeColor}
-                  strokeWidth={obj.strokeWidth}
-                  strokeScaleEnabled={false}
-                  fill={fillVal}
-                  draggable={activeTool === 'select'}
-                  onClick={(e) => handleObjectClick(e, obj.id)}
-                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                  onDragEnd={(e) => handleRectDragEnd(e, obj.id)}
-                  onTransformEnd={(e) => handleRectTransformEnd(e, obj.id)}
-                />
-              );
-            }
-            if (obj.type === 'circle') {
-              const fillVal = obj.fillColor && obj.fillOpacity > 0
-                ? hexToRgba(obj.fillColor, obj.fillOpacity)
-                : 'transparent';
-              return (
-                <KonvaEllipse
-                  key={obj.id}
-                  id={obj.id}
-                  x={obj.x + obj.width / 2}
-                  y={obj.y + obj.height / 2}
-                  radiusX={Math.abs(obj.width / 2)}
-                  radiusY={Math.abs(obj.height / 2)}
-                  stroke={obj.strokeColor}
-                  strokeWidth={obj.strokeWidth}
-                  strokeScaleEnabled={false}
-                  fill={fillVal}
-                  draggable={activeTool === 'select'}
-                  onClick={(e) => handleObjectClick(e, obj.id)}
-                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                  onDragEnd={(e) => handleCircleDragEnd(e, obj.id)}
-                  onTransformEnd={(e) => handleCircleTransformEnd(e, obj.id)}
-                />
-              );
-            }
-            if (obj.type === 'line') {
-              return (
-                <KonvaLine
-                  key={obj.id}
-                  id={obj.id}
-                  points={obj.points}
-                  stroke={obj.strokeColor}
-                  strokeWidth={obj.strokeWidth}
-                  draggable={activeTool === 'select'}
-                  onClick={(e) => handleObjectClick(e, obj.id)}
-                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                  onDragEnd={(e) => handleLineDragEnd(e, obj.id)}
-                  onTransformEnd={(e) => handleLineTransformEnd(e, obj.id)}
-                />
-              );
-            }
-            if (obj.type === 'text') {
-              const fontStyle = `${obj.italic ? 'italic' : ''} ${obj.bold ? 'bold' : ''}`.trim() || 'normal';
-              return (
-                <KonvaText
-                  key={obj.id}
-                  id={obj.id}
-                  x={obj.x}
-                  y={obj.y}
-                  text={obj.text}
-                  fontSize={obj.fontSize}
-                  fontFamily={obj.fontFamily}
-                  fontStyle={fontStyle}
-                  fill={obj.color}
-                  width={obj.width || undefined}
-                  wrap={obj.width ? 'word' : 'none'}
-                  visible={obj.visible !== false}
-                  draggable={activeTool === 'select'}
-                  onClick={(e) => handleObjectClick(e, obj.id)}
-                  onTouchEnd={(e) => handleObjectClick(e, obj.id)}
-                  onDblClick={(e) => handleTextDoubleClick(e, obj)}
-                  onDblTap={(e) => handleTextDoubleClick(e, obj)}
-                  onDragEnd={(e) => handleTextDragEnd(e, obj.id)}
-                  onTransformEnd={(e) => handleTextTransformEnd(e, obj.id)}
-                />
-              );
-            }
-            return null;
-          })}
-
-          {textDragRect && (
-            <KonvaRect
-              x={textDragRect.x}
-              y={textDragRect.y}
-              width={textDragRect.w}
-              height={textDragRect.h}
-              stroke="#4A9EFF"
-              strokeWidth={1}
-              dash={[4, 4]}
-              fill="rgba(74,158,255,0.05)"
-              listening={false}
-            />
-          )}
-
-          {selectedObjectId && (
-            <Transformer
-              ref={transformerRef}
-              rotateEnabled={false}
-              keepRatio={false}
-              anchorSize={16}
-              anchorStrokeWidth={2}
-              anchorCornerRadius={4}
-              boundBoxFunc={(oldBox, newBox) => {
-                if (newBox.width < 20 || newBox.height < 20) return oldBox;
-                return newBox;
-              }}
-            />
-          )}
-        </Layer>
-      </Stage>
-
-      {textEditor && (
-        <textarea
-          ref={textareaRef}
-          value={textEditor.value}
-          onChange={(e) => setTextEditor((prev) => prev ? { ...prev, value: e.target.value } : null)}
-          onBlur={commitText}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              if (textEditor.isAreaText) {
-                if (!e.shiftKey) {
-                  e.preventDefault();
-                  commitText();
-                }
-              } else {
-                e.preventDefault();
-                commitText();
-              }
-            } else if (e.key === 'Escape') {
-              e.preventDefault();
-              cancelText();
-            }
-          }}
-          autoFocus
-          style={{
-            position: 'absolute',
-            top: `${textEditor.y}px`,
-            left: `${textEditor.x}px`,
-            background: 'transparent',
-            color: textEditor.color,
-            border: '2px dashed #000000',
-            borderRadius: '4px',
-            fontFamily: textEditor.fontFamily,
-            fontSize: `${textEditor.fontSize}px`,
-            fontWeight: textEditor.bold ? 'bold' : 'normal',
-            fontStyle: textEditor.italic ? 'italic' : 'normal',
-            outline: 'none',
-            zIndex: 1000,
-            padding: '4px',
-            overflow: 'hidden',
-            pointerEvents: 'all',
-            width: textEditor.isAreaText && textEditor.width ? `${textEditor.width}px` : 'auto',
-            minWidth: textEditor.isAreaText ? undefined : '120px',
-            height: 'auto',
-            minHeight: `${textEditor.fontSize + 8}px`,
-            whiteSpace: textEditor.isAreaText ? 'pre-wrap' : 'nowrap',
-            wordWrap: textEditor.isAreaText ? 'break-word' : undefined,
-            resize: 'none',
-          }}
-        />
-      )}
-    </div>
-  );
-});
-
-PageCanvas.displayName = 'PageCanvas';
+import { PageCanvas } from '../components/PageCanvas';
 
 // ── Main EditPdfPage Component ────────────────────────────────────────────────
 export function EditPdfPage() {
@@ -1201,29 +159,54 @@ export function EditPdfPage() {
   const [pages, setPages] = useState<PageData[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<'select' | CanvasObjectType | 'eraser'>('select');
+  const [activeTool, setActiveTool] = useState<'select' | CanvasObjectType | 'eraser' | 'eyedropper'>('select');
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const prevZoomRef = useRef(zoomLevel);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outputFilename, setOutputFilename] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const previewRequestTokenRef = useRef<Record<number, number>>({});
 
   // Default properties untuk object BARU yang akan dibuat (saat tidak ada selection)
-  const [defaultTextProps, setDefaultTextProps] = useState({
-    fontFamily: 'Arial', fontSize: 20, bold: false, italic: false, color: '#000000'
+  const [defaultTextProps, setDefaultTextProps] = useState<{
+    fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string; textAlign: 'left' | 'center' | 'right';
+  }>({
+    fontFamily: 'Arial', fontSize: 20, bold: false, italic: false, color: '#000000', textAlign: 'left'
   });
   const [defaultShapeProps, setDefaultShapeProps] = useState({
-    fillColor: '#E8E8E8', fillOpacity: 100, strokeColor: '#4A9EFF', strokeWidth: 2
+    fillColor: '#E8E8E8', fillOpacity: 100, strokeColor: '#000000', strokeWidth: 2
   });
   const [defaultStrokeProps, setDefaultStrokeProps] = useState({
-    strokeColor: '#4A9EFF', strokeWidth: 3
+    strokeColor: '#000000', strokeWidth: 3
   });
 
-  const stageRefs = useRef<Record<number, any>>({});
+  const fabricRefs = useRef<Record<number, fabric.Canvas>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<number | null>(null);
+  const clipboardRef = useRef<{ objects: any[], sourcePageIndex: number, pasteCountByPage: Record<number, number> } | null>(null);
+
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean } | null>(null);
+
+  useEffect(() => {
+    const closeMenu = () => {
+      if (contextMenu?.visible) setContextMenu(null);
+    };
+    
+    const handleCustomContextMenu = (e: any) => {
+      setContextMenu({ x: e.detail.x, y: e.detail.y, visible: true });
+    };
+
+    window.addEventListener('click', closeMenu);
+    window.addEventListener('contextmenu', closeMenu); // Close on native right click elsewhere
+    window.addEventListener('show-context-menu', handleCustomContextMenu);
+    return () => {
+      window.removeEventListener('click', closeMenu);
+      window.removeEventListener('contextmenu', closeMenu);
+      window.removeEventListener('show-context-menu', handleCustomContextMenu);
+    };
+  }, [contextMenu]);
 
   // Derived Selected Object
   const selectedObject = useMemo(() => {
@@ -1231,15 +214,78 @@ export function EditPdfPage() {
     return pages[activePageIndex]?.objects.find(o => o.id === selectedObjectId) ?? null;
   }, [selectedObjectId, pages, activePageIndex]);
 
-  // Unified properties update handler with debounced history push
-  const updateSelectedObject = useCallback((patch: Partial<CanvasObject>) => {
+  const handleLayering = useCallback((action: 'front' | 'back' | 'forward' | 'backward') => {
     if (!selectedObjectId) return;
+    
+    setPages(prev => {
+      const updatedPages = prev.map((page, idx) => {
+        if (idx !== activePageIndex) return page;
+        
+        const objIndex = page.objects.findIndex(o => o.id === selectedObjectId);
+        if (objIndex === -1) return page;
+        
+        const nextObjects = [...page.objects];
+        const [obj] = nextObjects.splice(objIndex, 1);
+        
+        if (action === 'front') {
+          nextObjects.push(obj);
+        } else if (action === 'back') {
+          nextObjects.unshift(obj);
+        } else if (action === 'forward') {
+          const newIndex = Math.min(nextObjects.length, objIndex + 1);
+          nextObjects.splice(newIndex, 0, obj);
+        } else if (action === 'backward') {
+          const newIndex = Math.max(0, objIndex - 1);
+          nextObjects.splice(newIndex, 0, obj);
+        }
+        
+        return {
+          ...page,
+          objects: nextObjects
+        };
+      });
+      
+      // Debounce history push
+      if (debounceTimeoutRef.current) {
+        window.clearTimeout(debounceTimeoutRef.current);
+      }
+      debounceTimeoutRef.current = window.setTimeout(() => {
+        setPages(curr => curr.map((page, idx) => {
+          if (idx !== activePageIndex) return page;
+          const currentObjects = page.objects;
+          const lastSnapshot = page.history[page.historyIndex];
+
+          if (JSON.stringify(lastSnapshot) === JSON.stringify(currentObjects)) {
+            return page;
+          }
+
+          const nextHistory = page.history.slice(0, page.historyIndex + 1);
+          nextHistory.push(currentObjects);
+          if (nextHistory.length > 50) {
+            nextHistory.shift();
+          }
+          return {
+            ...page,
+            history: nextHistory,
+            historyIndex: nextHistory.length - 1
+          };
+        }));
+      }, 400);
+      
+      return updatedPages;
+    });
+  }, [selectedObjectId, activePageIndex]);
+
+  // Unified properties update handler with debounced history push
+  const updateSelectedObject = useCallback((patch: Partial<CanvasObject>, overrideId?: string) => {
+    const targetId = overrideId || selectedObjectId;
+    if (!targetId) return;
 
     setPages(prev => {
       const updatedPages = prev.map((page, idx) => {
         if (idx !== activePageIndex) return page;
         const nextObjects = page.objects.map(obj => {
-          if (obj.id === selectedObjectId) {
+          if (obj.id === targetId) {
             return { ...obj, ...patch } as CanvasObject;
           }
           return obj;
@@ -1349,47 +395,7 @@ export function EditPdfPage() {
   }, [pages, activePageIndex]);
 
   // Global hotkeys for delete, undo, redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const activeEl = document.activeElement;
-      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.getAttribute('contenteditable') === 'true')) {
-        return;
-      }
-
-      if (e.ctrlKey || e.metaKey) {
-        if (e.key.toLowerCase() === 'z') {
-          e.preventDefault();
-          handleUndo();
-        } else if (e.key.toLowerCase() === 'y') {
-          e.preventDefault();
-          handleRedo();
-        }
-      }
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedObjectId) {
-          setPages(prev => prev.map((page, idx) => {
-            if (idx !== activePageIndex) return page;
-            const nextObjects = page.objects.filter(obj => obj.id !== selectedObjectId);
-            const newHistory = page.history.slice(0, page.historyIndex + 1);
-            newHistory.push(nextObjects);
-            if (newHistory.length > 50) newHistory.shift();
-
-            return {
-              ...page,
-              objects: nextObjects,
-              history: newHistory,
-              historyIndex: newHistory.length - 1
-            };
-          }));
-          setSelectedObjectId(null);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, selectedObjectId, activePageIndex]);
+  // (Moved keydown listeners below zoom functions)
 
   // Tool default configurations sync
   useEffect(() => {
@@ -1416,9 +422,15 @@ export function EditPdfPage() {
 
   const finalScale = baseDisplayScale * zoomLevel;
 
-  // Viewport resize and shrink detection
+  // Viewport resize and shrink detection (Initial load only)
+  const hasInitializedZoomRef = useRef(false);
   useEffect(() => {
-    if (pages.length === 0 || !canvasViewportRef.current) return;
+    if (pages.length === 0) {
+      hasInitializedZoomRef.current = false;
+      return;
+    }
+    if (hasInitializedZoomRef.current || !canvasViewportRef.current) return;
+    
     const viewportWidth = canvasViewportRef.current.clientWidth - 48;
     if (viewportWidth < BASE_DISPLAY_WIDTH) {
       const newZoom = Math.max(viewportWidth / BASE_DISPLAY_WIDTH, 0.25);
@@ -1428,7 +440,8 @@ export function EditPdfPage() {
       setZoomLevel(1.0);
       prevZoomRef.current = 1.0;
     }
-  }, [pages]);
+    hasInitializedZoomRef.current = true;
+  }, [pages.length]);
 
   // Convert hex color and opacity (0-100) to rgba string
   const hexToRgba = useCallback((hex: string, opacity: number) => {
@@ -1440,6 +453,16 @@ export function EditPdfPage() {
     return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
   }, []);
 
+  const handleSampledColor = useCallback((color: string) => {
+    if (selectedObject?.type === 'text') updateSelectedObject({ color });
+    else if (selectedObject?.type === 'rect' || selectedObject?.type === 'circle') updateSelectedObject({ fillColor: color });
+    else if (selectedObject && ['line', 'pen', 'highlighter'].includes(selectedObject.type)) updateSelectedObject({ strokeColor: color });
+    else if (activeTool === 'text') setDefaultTextProps(current => ({ ...current, color }));
+    else if (activeTool === 'rect' || activeTool === 'circle') setDefaultShapeProps(current => ({ ...current, fillColor: color }));
+    else setDefaultStrokeProps(current => ({ ...current, strokeColor: color }));
+    setActiveTool('select');
+  }, [activeTool, selectedObject, updateSelectedObject]);
+
   // API Call: pdf to pages conversion
   const convertPdfToPages = async (pdfFile: File) => {
     setLoading(true);
@@ -1447,15 +470,14 @@ export function EditPdfPage() {
     formData.append('file', pdfFile, pdfFile.name || 'preview.pdf');
 
     try {
-      const res = await apiClient.post<ConversionResponse>('/api/v1/pdf-to-image/pages', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const res = await apiClient.post<ConversionResponse>('/api/v1/pdf-to-image/pages', formData);
 
       const formatted: PageData[] = res.data.pages.map((p) => ({
         index: p.index,
         width: p.width,
         height: p.height,
         imageUrl: `data:image/png;base64,${p.data}`,
+        previewDpi: p.dpi || 200,
         objects: [],
         history: [[]],
         historyIndex: 0
@@ -1490,6 +512,38 @@ export function EditPdfPage() {
       convertPdfToPages(file);
     }
   }, [file]);
+
+  useEffect(() => {
+    if (!file || pages.length === 0) return;
+    const visiblePage = pages[activePageIndex];
+    if (!visiblePage) return;
+
+    const targetDpi = Math.max(200, Math.min(400, Math.ceil(200 * Math.max(1, zoomLevel))));
+    if ((visiblePage.previewDpi || 200) >= targetDpi) return;
+
+    const timeout = window.setTimeout(async () => {
+      const token = (previewRequestTokenRef.current[visiblePage.index] || 0) + 1;
+      previewRequestTokenRef.current[visiblePage.index] = token;
+      const formData = new FormData();
+      formData.append('file', file, file.name || 'preview.pdf');
+      formData.append('page_index', String(visiblePage.index));
+      formData.append('dpi', String(targetDpi));
+
+      try {
+        const response = await apiClient.post<PdfPageData>('/api/v1/pdf-to-image/page', formData);
+        if (previewRequestTokenRef.current[visiblePage.index] !== token) return;
+        setPages(current => current.map(page => page.index === visiblePage.index ? {
+          ...page,
+          imageUrl: `data:image/png;base64,${response.data.data}`,
+          previewDpi: response.data.dpi,
+        } : page));
+      } catch {
+        // Keep the current preview if an optional high-DPI refresh fails.
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [file, pages, activePageIndex, zoomLevel]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1528,36 +582,328 @@ export function EditPdfPage() {
     setSelectedObjectId(null);
   };
 
-  const applyZoomWithScrollCompensation = (newZoom: number) => {
+  const applyZoomWithScrollCompensation = useCallback((newZoom: number, cursor?: {x: number, y: number}) => {
     const viewport = canvasViewportRef.current;
     if (!viewport) {
       setZoomLevel(newZoom);
       prevZoomRef.current = newZoom;
       return;
     }
+    
     const oldZoom = prevZoomRef.current;
-    const centerY_viewport = viewport.scrollTop + viewport.clientHeight / 2;
-    const centerY_content = centerY_viewport / oldZoom;
+    
+    let centerY_viewport, centerX_viewport;
+    if (cursor) {
+      centerY_viewport = viewport.scrollTop + cursor.y;
+      centerX_viewport = viewport.scrollLeft + cursor.x;
+    } else {
+      centerY_viewport = viewport.scrollTop + viewport.clientHeight / 2;
+      centerX_viewport = viewport.scrollLeft + viewport.clientWidth / 2;
+    }
 
-    setZoomLevel(newZoom);
+    const centerY_content = (centerY_viewport - 24) / oldZoom;
+    const centerX_content = (centerX_viewport - 24) / oldZoom;
+
+    // Flush synchronous re-render so the Virtual Spacer instantly resizes in the DOM
+    flushSync(() => {
+      setZoomLevel(newZoom);
+    });
+    
     prevZoomRef.current = newZoom;
 
-    requestAnimationFrame(() => {
-      const newScrollTop = centerY_content * newZoom - viewport.clientHeight / 2;
-      viewport.scrollTop = Math.max(0, newScrollTop);
-    });
-  };
+    // Immediately calculate and apply the new scroll targets synchronously in the same frame
+    const newScrollTop = (centerY_content * newZoom) + 24 - (cursor ? cursor.y : viewport.clientHeight / 2);
+    const newScrollLeft = (centerX_content * newZoom) + 24 - (cursor ? cursor.x : viewport.clientWidth / 2);
+    
+    viewport.scrollTop = Math.max(0, newScrollTop);
+    viewport.scrollLeft = Math.max(0, newScrollLeft);
+  }, []);
 
-  const handleZoomIn = () => {
-    applyZoomWithScrollCompensation(Math.min(zoomLevel + 0.25, 2.0));
-  };
+  const handleZoomIn = useCallback(() => {
+    applyZoomWithScrollCompensation(Math.min(prevZoomRef.current + 0.25, 3.0));
+  }, [applyZoomWithScrollCompensation]);
 
-  const handleZoomOut = () => {
-    applyZoomWithScrollCompensation(Math.max(zoomLevel - 0.25, 0.25));
-  };
+  const handleZoomOut = useCallback(() => {
+    applyZoomWithScrollCompensation(Math.max(prevZoomRef.current - 0.25, 0.1));
+  }, [applyZoomWithScrollCompensation]);
 
-  const handleFitToWidth = () => {
+  const handleFitToWidth = useCallback(() => {
     applyZoomWithScrollCompensation(1.0);
+  }, [applyZoomWithScrollCompensation]);
+
+  const handleFitToPage = useCallback(() => {
+    if (pages.length === 0 || !canvasViewportRef.current) return;
+    const activePage = pages[activePageIndex] || pages[0];
+    const vw = canvasViewportRef.current.clientWidth - 48; // padding left + right
+    const vh = canvasViewportRef.current.clientHeight - 48; // padding top + bottom
+    
+    const scaleX = vw / activePage.width;
+    const scaleY = vh / activePage.height;
+    
+    const fitScale = Math.min(scaleX, scaleY);
+    const baseDisplayScale = BASE_DISPLAY_WIDTH / pages[0].width;
+    const newZoom = Math.max(0.1, Math.min(fitScale / baseDisplayScale, 3.0));
+    applyZoomWithScrollCompensation(newZoom);
+  }, [pages, activePageIndex, applyZoomWithScrollCompensation]);
+
+  // Global hotkeys for delete, undo, redo, and zoom
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.getAttribute('contenteditable') === 'true')) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key.toLowerCase() === 'z') {
+          e.preventDefault();
+          handleUndo();
+        } else if (e.key.toLowerCase() === 'y') {
+          e.preventDefault();
+          handleRedo();
+        } else if (e.key === '0') {
+          e.preventDefault();
+          handleFitToPage();
+        } else if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          handleZoomIn();
+        } else if (e.key === '-') {
+          e.preventDefault();
+          handleZoomOut();
+        } else if (e.key === ']') {
+          e.preventDefault();
+          if (e.shiftKey) handleLayering('front');
+          else handleLayering('forward');
+        } else if (e.key === '[') {
+          e.preventDefault();
+          if (e.shiftKey) handleLayering('back');
+          else handleLayering('backward');
+        } else if (e.key.toLowerCase() === 'a') {
+          e.preventDefault();
+          setActiveTool('select');
+          const activeCanvas = fabricRefs.current[activePageIndex];
+          if (activeCanvas) {
+            activeCanvas.discardActiveObject();
+            
+            // Only select user objects (which have an id) and clone the array to prevent mutation issues
+            const allObjs = activeCanvas.getObjects().filter((o: fabric.Object) => (o as any).id);
+            
+            // Force objects to be selectable immediately because setActiveTool is async
+            allObjs.forEach((obj: fabric.Object) => {
+              obj.selectable = true;
+              obj.evented = true;
+            });
+
+            if (allObjs.length === 1) {
+              activeCanvas.setActiveObject(allObjs[0]);
+              setSelectedObjectId((allObjs[0] as any).id || null);
+            } else if (allObjs.length > 1) {
+              const sel = new fabric.ActiveSelection(allObjs, { canvas: activeCanvas });
+              activeCanvas.setActiveObject(sel);
+              setSelectedObjectId(null);
+            }
+            activeCanvas.requestRenderAll();
+          }
+        } else if (e.key.toLowerCase() === 'c') {
+          const activeCanvas = fabricRefs.current[activePageIndex];
+          if (activeCanvas) {
+            const activeFabricObjects = activeCanvas.getActiveObjects();
+            if (activeFabricObjects && activeFabricObjects.length > 0) {
+              e.preventDefault();
+              const copiedObjects = [];
+              for (const fObj of activeFabricObjects) {
+                if ((fObj as any).id) {
+                  const stateObj = pages[activePageIndex].objects.find((o: CanvasObject) => o.id === (fObj as any).id);
+                  if (stateObj) copiedObjects.push(JSON.parse(JSON.stringify(stateObj)));
+                }
+              }
+              if (copiedObjects.length > 0) {
+                clipboardRef.current = { objects: copiedObjects, sourcePageIndex: activePageIndex, pasteCountByPage: {} };
+                showToast({ type: 'success', title: 'Copied', message: `${copiedObjects.length} objects copied to clipboard.` });
+              }
+            }
+          }
+        } else if (e.key.toLowerCase() === 'x') {
+          const activeCanvas = fabricRefs.current[activePageIndex];
+          if (activeCanvas) {
+            const activeFabricObjects = activeCanvas.getActiveObjects();
+            if (activeFabricObjects && activeFabricObjects.length > 0) {
+              e.preventDefault();
+              const copiedObjects = [];
+              const copiedIds = new Set();
+              for (const fObj of activeFabricObjects) {
+                if ((fObj as any).id) {
+                  const stateObj = pages[activePageIndex].objects.find((o: CanvasObject) => o.id === (fObj as any).id);
+                  if (stateObj) {
+                    copiedObjects.push(JSON.parse(JSON.stringify(stateObj)));
+                    copiedIds.add((fObj as any).id);
+                  }
+                }
+              }
+              if (copiedObjects.length > 0) {
+                clipboardRef.current = { objects: copiedObjects, sourcePageIndex: activePageIndex, pasteCountByPage: {} };
+                setPages(prev => prev.map((page, idx) => {
+                  if (idx !== activePageIndex) return page;
+                  const nextObjects = page.objects.filter(obj => !copiedIds.has(obj.id));
+                  const newHistory = page.history.slice(0, page.historyIndex + 1);
+                  newHistory.push(nextObjects);
+                  if (newHistory.length > 50) newHistory.shift();
+                  return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
+                }));
+                setSelectedObjectId(null);
+                activeCanvas.discardActiveObject();
+                activeCanvas.requestRenderAll();
+                showToast({ type: 'success', title: 'Cut', message: `${copiedObjects.length} objects cut to clipboard.` });
+              }
+            }
+          }
+        } else if (e.key.toLowerCase() === 'v') {
+          const clip = clipboardRef.current;
+          if (clip && clip.objects.length > 0 && pages[activePageIndex]) {
+            e.preventDefault();
+            const { objects, pasteCountByPage } = clip;
+            const currentPasteCount = pasteCountByPage[activePageIndex] || 0;
+            clipboardRef.current!.pasteCountByPage[activePageIndex] = currentPasteCount + 1;
+            
+            const newObjs = objects.map(clipObj => {
+              const newObj = JSON.parse(JSON.stringify(clipObj));
+              newObj.id = generateCanvasObjectId();
+              
+              const offset = (currentPasteCount + 1) * 20; // Konsisten 20px offset untuk setiap paste, baik di halaman yang sama maupun berbeda
+                
+              newObj.x = (newObj.x || 0) + offset;
+              newObj.y = (newObj.y || 0) + offset;
+              
+              return newObj;
+            });
+            
+            setPages(prev => prev.map((page, idx) => {
+              if (idx !== activePageIndex) return page;
+              const nextObjects = [...page.objects, ...newObjs];
+              const newHistory = page.history.slice(0, page.historyIndex + 1);
+              newHistory.push(nextObjects);
+              if (newHistory.length > 50) newHistory.shift();
+              return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
+            }));
+            
+            // Allow React to render the new objects in PageCanvas, then select them natively
+            setTimeout(() => {
+              const activeCanvas = fabricRefs.current?.[activePageIndex];
+              if (activeCanvas) {
+                activeCanvas.discardActiveObject();
+                const newIds = new Set(newObjs.map(o => o.id));
+                const targetObjects = activeCanvas.getObjects().filter((o: fabric.Object) => newIds.has((o as any).id));
+                
+                if (targetObjects.length === 1) {
+                  activeCanvas.setActiveObject(targetObjects[0]);
+                  setSelectedObjectId((targetObjects[0] as any).id);
+                } else if (targetObjects.length > 1) {
+                  const sel = new fabric.ActiveSelection(targetObjects, { canvas: activeCanvas });
+                  activeCanvas.setActiveObject(sel);
+                  setSelectedObjectId(null);
+                }
+                activeCanvas.requestRenderAll();
+              }
+            }, 50);
+            showToast({ type: 'success', title: 'Pasted', message: `${newObjs.length} objects pasted.` });
+          }
+        }
+      }
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        const activeCanvas = fabricRefs.current[activePageIndex];
+        if (activeCanvas) {
+          const activeObj = activeCanvas.getActiveObject();
+          if (activeObj) {
+            e.preventDefault();
+            const step = e.shiftKey ? 10 : 1;
+            const currentLeft = activeObj.left || 0;
+            const currentTop = activeObj.top || 0;
+            
+            if (e.key === 'ArrowUp') activeObj.set('top', currentTop - step);
+            if (e.key === 'ArrowDown') activeObj.set('top', currentTop + step);
+            if (e.key === 'ArrowLeft') activeObj.set('left', currentLeft - step);
+            if (e.key === 'ArrowRight') activeObj.set('left', currentLeft + step);
+            
+            activeObj.setCoords();
+            activeCanvas.requestRenderAll();
+            activeCanvas.fire('object:modified', { target: activeObj });
+            return;
+          }
+        }
+      }
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeCanvas = fabricRefs.current[activePageIndex];
+        if (activeCanvas) {
+          const activeFabricObjects = activeCanvas.getActiveObjects();
+          if (activeFabricObjects && activeFabricObjects.length > 0) {
+            e.preventDefault();
+            const deleteIds = new Set();
+            for (const fObj of activeFabricObjects) {
+              if ((fObj as any).id) deleteIds.add((fObj as any).id);
+            }
+            
+            setPages(prev => prev.map((page, idx) => {
+              if (idx !== activePageIndex) return page;
+              const nextObjects = page.objects.filter(obj => !deleteIds.has(obj.id));
+              const newHistory = page.history.slice(0, page.historyIndex + 1);
+              newHistory.push(nextObjects);
+              if (newHistory.length > 50) newHistory.shift();
+              return { ...page, objects: nextObjects, history: newHistory, historyIndex: newHistory.length - 1 };
+            }));
+            setSelectedObjectId(null);
+            activeCanvas.discardActiveObject();
+            activeCanvas.requestRenderAll();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, handleFitToPage, handleZoomIn, handleZoomOut, selectedObjectId, activePageIndex, handleLayering, selectedObject, pages]);
+
+  // Ctrl+Scroll Native Event Listener
+  useEffect(() => {
+    const viewport = canvasViewportRef.current;
+    if (!viewport) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        
+        const rect = viewport.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+
+        let delta = e.deltaY;
+        if (e.deltaMode === 1) delta *= 33; // DOM_DELTA_LINE
+        else if (e.deltaMode === 2) delta *= window.innerHeight; // DOM_DELTA_PAGE
+        
+        const zoomDelta = -delta * 0.0005; // ~5% zoom per standard 100px wheel tick
+        const currentZoom = prevZoomRef.current;
+        const newZoom = Math.max(0.1, Math.min(currentZoom + zoomDelta, 3.0));
+
+        if (newZoom !== currentZoom) {
+          applyZoomWithScrollCompensation(newZoom, { x: cursorX, y: cursorY });
+        }
+      }
+    };
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', handleWheel);
+  }, [applyZoomWithScrollCompensation]);
+
+  // Scroll Sync handler to sync Fabric calcOffset
+  const scrollRafRef = useRef<number | null>(null);
+  const handleWorkspaceScroll = () => {
+    if (scrollRafRef.current === null) {
+      scrollRafRef.current = requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('canvas-workspace-scroll'));
+        scrollRafRef.current = null;
+      });
+    }
   };
 
   // Compile & save document flow
@@ -1566,24 +912,113 @@ export function EditPdfPage() {
     setSaving(true);
 
     try {
-      const exportedPages: string[] = [];
+      const exportedPages: any[] = [];
 
       for (const p of pages) {
-        const stage = stageRefs.current[p.index];
-        if (stage) {
-          const dataUrl = stage.toDataURL({ pixelRatio: 3 });
-          exportedPages.push(dataUrl);
+        const fabricCanvas = fabricRefs.current[p.index];
+        const pageData = pages.find(pd => pd.index === p.index);
+
+        if (fabricCanvas && p.objects.length > 0 && pageData) {
+          const nativeObjects = p.objects
+            .filter(obj => !isEmptyTextState(obj.type === 'text' ? obj.text : 'content'))
+            .map(obj => {
+              const fabricObject = fabricCanvas.getObjects().find(
+                (candidate: fabric.Object) => (candidate as any).id === obj.id,
+              ) as any;
+
+              if (obj.type === 'pen' || obj.type === 'highlighter') {
+                return {
+                  ...obj,
+                  vectorPath: obj.points,
+                  transformMatrix: fabricObject?.calcTransformMatrix?.(),
+                  pathOffset: fabricObject?.pathOffset
+                    ? [fabricObject.pathOffset.x, fabricObject.pathOffset.y]
+                    : undefined,
+                };
+              }
+              if (obj.type === 'rect' || obj.type === 'circle') {
+                return {
+                  ...obj,
+                  vectorCorners: fabricObject?.getCoords?.().map((point: fabric.Point) => [point.x, point.y]),
+                };
+              }
+              if (obj.type === 'line') {
+                if (!fabricObject?.calcLinePoints || !fabricObject?.calcTransformMatrix) return obj;
+                const linePoints = fabricObject.calcLinePoints();
+                const matrix = fabricObject.calcTransformMatrix();
+                const start = fabric.util.transformPoint(new fabric.Point(linePoints.x1, linePoints.y1), matrix);
+                const end = fabric.util.transformPoint(new fabric.Point(linePoints.x2, linePoints.y2), matrix);
+                return { ...obj, points: [start.x, start.y, end.x, end.y], angle: 0 };
+              }
+              if (obj.type !== 'text') return obj;
+
+              const fabricText = fabricObject;
+              const lines = Array.isArray(fabricText?._textLines)
+                ? fabricText._textLines.map((line: string[] | string) => Array.isArray(line) ? line.join('') : line)
+                : obj.text.split('\n');
+              const lineWidths = lines.map((_: string, index: number) => {
+                if (typeof fabricText?.getLineWidth === 'function') {
+                  return fabricText.getLineWidth(index);
+                }
+                return 0;
+              });
+              return {
+                ...obj,
+                transformMatrix: fabricText?.calcTransformMatrix?.(),
+                lines,
+                lineWidths,
+                lineHeight: fabricText?.lineHeight || 1.16,
+                opacity: fabricText?.opacity ?? 1,
+              };
+            });
+          const temporarilyHiddenObjects = p.objects;
+
+          fabricCanvas.discardActiveObject();
+          
+          // All supported editor objects are emitted as native PDF operators.
+          // The raster channel remains in the contract for future unsupported
+          // objects, but is empty for the current Edit PDF tool set.
+          for (const hiddenObject of temporarilyHiddenObjects) {
+            const fObj = fabricCanvas.getObjects().find((f: fabric.Object) => (f as any).id === hiddenObject.id);
+            if (fObj) fObj.set('visible', false);
+          }
+          fabricCanvas.renderAll();
+          
+          // Determine if there are any visible non-shape objects left to rasterize
+          const hasRasterObjects = fabricCanvas.getObjects().some((f: fabric.Object) => f.visible);
+          let fabricData = "";
+          if (hasRasterObjects) {
+            fabricData = fabricCanvas.toDataURL({ format: 'png', multiplier: 3 });
+          }
+
+          // Restore editor visibility after snapshot.
+          for (const hiddenObject of temporarilyHiddenObjects) {
+            const fObj = fabricCanvas.getObjects().find((f: fabric.Object) => (f as any).id === hiddenObject.id);
+            if (fObj) fObj.set('visible', true);
+          }
+          fabricCanvas.renderAll();
+
+          exportedPages.push({
+            image_b64: fabricData,
+            native_objects: nativeObjects,
+            canvas_width: pageData.width,
+            canvas_height: pageData.height,
+          });
         } else {
-          exportedPages.push(p.imageUrl);
+          exportedPages.push("");
         }
       }
 
-      const payload = {
-        pages: exportedPages,
-        output_filename: outputFilename || 'edited_document',
-      };
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append(
+        'annotations',
+        new Blob([JSON.stringify(exportedPages)], { type: 'application/json' }),
+        'annotations.json',
+      );
+      formData.append('output_filename', outputFilename || 'edited_document');
 
-      const response = await apiClient.post('/api/v1/edit-pdf/save', payload, {
+      const response = await apiClient.post('/api/v1/edit-pdf/save', formData, {
         responseType: 'blob',
       });
 
@@ -1612,683 +1047,936 @@ export function EditPdfPage() {
     }
   };
 
+  const showContextualPanel = pages.length > 0 && (
+    selectedObject !== null ||
+    ['pen', 'highlighter', 'text', 'rect', 'circle', 'line'].includes(activeTool)
+  );
+
   return (
-    <div className="page-body" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div className="feature-split-layout" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        
-        {/* Left Panel */}
-        <div
-          className="feature-controls"
-          style={{
-            width: '320px',
-            minWidth: '320px',
-            maxWidth: '320px',
-            background: '#1E1E2E',
-            borderRight: '1px solid #2A2A3E',
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            overflowY: 'auto',
-          }}
-        >
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[#4A9EFF] font-bold text-lg">Edit PDF</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-[#2A2A3E] text-[#9898B8] font-semibold">BETA</span>
-          </div>
+    <div
+      className="page-body edit-pdf-page"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        padding: 0,
+        overflow: 'hidden',
+        position: 'relative',
+        background: 'var(--canvas-bg)',
+      }}
+    >
+      {/* Hidden File Input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileBrowse}
+        accept=".pdf"
+        className="hidden"
+      />
 
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileBrowse}
-            accept=".pdf"
-            className="hidden"
-          />
+      {/* ── Primary Horizontal Top Bar (Height: 52px) ───────────────────────── */}
+      <div
+        className="canvas-top-bar"
+        style={{
+          height: '52px',
+          minHeight: '52px',
+          maxHeight: '52px',
+          background: 'var(--canvas-topbar-bg)',
+          borderBottom: '1px solid var(--canvas-topbar-border)',
+          padding: '0 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          zIndex: 20,
+          flexShrink: 0,
+        }}
+      >
+        {/* Brand / Title Icon */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-[#4A9EFF] font-bold text-sm flex items-center gap-1.5">
+            <FileEdit size={18} />
+            <span>Edit PDF</span>
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--canvas-panel-border)] text-[var(--canvas-text-muted)] font-semibold">
+            BETA
+          </span>
+        </div>
 
-          {/* Zona 1 — File Info */}
+        {/* Compact File Info & Upload Trigger */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {file && (
             <div
-              className="card"
               style={{
-                padding: '8px 12px',
-                background: '#12121A',
-                border: '1px solid #2A2A3E',
-                borderRadius: '8px',
-                maxHeight: '64px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 gap: '8px',
+                background: 'var(--canvas-card-bg)',
+                border: '1px solid var(--canvas-input-border)',
+                borderRadius: '6px',
+                padding: '2px 10px',
+                height: '32px',
+                maxWidth: '220px',
+                flexShrink: 0,
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
-                <Filename name={file.name} className="text-xs font-semibold text-[#E8E8F0] truncate block" />
-                <span className="text-[10px] text-[#9898B8] block mt-0.5">{formatBytes(file.size)}</span>
+                <Filename name={file.name} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
+                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{formatBytes(file.size)}</span>
               </div>
               <button
                 onClick={handleRemoveFile}
-                className="text-[#9898B8] hover:text-[#ffb4ab] transition-colors p-1"
+                className="text-[var(--canvas-text-muted)] hover:text-[#ffb4ab] transition-colors p-1"
                 title="Clear PDF"
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
               >
-                <Trash2 size={16} />
+                <Trash2 size={14} />
               </button>
             </div>
           )}
-
-          {/* Zona 2 — Drop Zone */}
-          {!file && (
-            <div
-              className={`drop-zone ${isDragOver ? 'drag-over' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                border: '2px dashed #2A2A3E',
-                borderRadius: '8px',
-                padding: '16px',
-                textAlign: 'center',
-                background: '#12121A',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                height: '120px',
-                maxHeight: '120px',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-            >
-              <Upload className="mx-auto mb-1.5 text-[#9898B8]" size={20} />
-              <p style={{ fontSize: '0.8rem', fontWeight: 500, color: '#E8E8F0', marginBottom: '2px' }}>Drag & Drop PDF</p>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>or click to browse</span>
-            </div>
-          )}
-
-          {file && loading && (
-            <div className="flex items-center gap-2 text-[#9898B8] text-xs">
-              <Loader2 className="animate-spin text-[#4A9EFF]" size={14} />
-              <span>Converting PDF pages to images...</span>
-            </div>
-          )}
-
-          {/* Zona 3 — Vertical Tools */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {[
-              { id: 'select', label: 'Select', icon: MousePointer },
-              { id: 'pen', label: 'Pen', icon: Pen },
-              { id: 'highlighter', label: 'Highlighter', icon: Highlighter },
-              { id: 'text', label: 'Text', icon: Type },
-              { id: 'rect', label: 'Rect', icon: Square },
-              { id: 'circle', label: 'Circle', icon: CircleIcon },
-              { id: 'line', label: 'Line', icon: Minus },
-              { id: 'eraser', label: 'Eraser', icon: Eraser },
-            ].map((t) => {
-              const Icon = t.icon;
-              const isActive = activeTool === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setActiveTool(t.id as any);
-                    setSelectedObjectId(null); // Deselect on tool switch
-                  }}
-                  disabled={pages.length === 0}
-                  style={{
-                    width: '100%',
-                    height: '36px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '0 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 500,
-                    transition: 'all 0.2s ease',
-                    background: isActive ? '#4A9EFF' : 'transparent',
-                    color: isActive ? '#ffffff' : '#9898B8',
-                    opacity: pages.length === 0 ? 0.5 : 1,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive && pages.length > 0) e.currentTarget.style.background = '#2A2A3E';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <Icon size={16} />
-                  <span>{t.label}</span>
-                </button>
-              );
-            })}
+          
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isDragOver ? 'var(--accent-dim)' : 'transparent',
+              border: 'none',
+              borderRadius: '6px',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--canvas-text-primary)',
+              flexShrink: 0,
+              transition: 'background var(--transition-fast)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isDragOver) e.currentTarget.style.background = 'var(--accent-dim)';
+            }}
+            onMouseLeave={(e) => {
+              if (!isDragOver) e.currentTarget.style.background = 'transparent';
+            }}
+            title="Upload PDF"
+          >
+            <Upload size={16} />
           </div>
+        </div>
 
-          <div style={{ borderBottom: '1px solid #2A2A3E' }} />
+        {file && loading && (
+          <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
+            <Loader2 className="animate-spin text-[#4A9EFF]" size={14} />
+            <span>Converting...</span>
+          </div>
+        )}
 
-          {/* Zona 4 — Contextual Controls */}
-          {pages.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              
-              <div className="text-[11px] uppercase tracking-wider text-[#4A9EFF] font-bold mb-2">
-                {selectedObject 
-                  ? `Editing: Selected ${selectedObject.type}` 
-                  : `Editing defaults: ${activeTool}`}
+        {/* Separator 1 */}
+        <div style={{ width: '1px', height: '24px', background: 'var(--canvas-topbar-border)', flexShrink: 0 }} />
+
+        {/* 8 Tool Buttons (Icon Only) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          {[
+            { id: 'select', label: 'Select (V)', icon: MousePointer },
+            { id: 'pen', label: 'Pen (P)', icon: Pen },
+            { id: 'highlighter', label: 'Highlighter (H)', icon: Highlighter },
+            { id: 'text', label: 'Text (T)', icon: Type },
+            { id: 'rect', label: 'Rectangle (R)', icon: Square },
+            { id: 'circle', label: 'Circle (C)', icon: CircleIcon },
+            { id: 'line', label: 'Line (L)', icon: Minus },
+            { id: 'eraser', label: 'Eraser (E)', icon: Eraser },
+            { id: 'eyedropper', label: 'Sample Background Color', icon: Pipette },
+          ].map((t) => {
+            const Icon = t.icon;
+            const isActive = activeTool === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setActiveTool(t.id as any);
+                  setSelectedObjectId(null);
+                }}
+                disabled={pages.length === 0}
+                title={t.label}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '6px',
+                  border: 'none',
+                  cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  background: isActive ? 'var(--primary-container)' : 'transparent',
+                  color: isActive ? '#ffffff' : 'var(--canvas-text-muted)',
+                  opacity: pages.length === 0 ? 0.4 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive && pages.length > 0) e.currentTarget.style.background = 'var(--surface-container-high)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.background = 'transparent';
+                }}
+              >
+                <Icon size={16} />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Separator 2 */}
+        <div style={{ width: '1px', height: '24px', background: 'var(--canvas-topbar-border)', flexShrink: 0 }} />
+
+        {/* Zoom & History Controls */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={handleZoomOut}
+            disabled={pages.length === 0 || zoomLevel <= 0.25}
+            title="Zoom Out"
+            style={{
+              background: 'transparent',
+              color: (pages.length === 0 || zoomLevel <= 0.25) ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: (pages.length === 0 || zoomLevel <= 0.25) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <ZoomOut size={16} />
+          </button>
+          <span style={{ fontSize: '13px', color: 'var(--canvas-text-primary)', minWidth: '40px', textAlign: 'center', fontFamily: 'monospace' }}>
+            {Math.round(zoomLevel * 100)}%
+          </span>
+          <button
+            onClick={handleZoomIn}
+            disabled={pages.length === 0 || zoomLevel >= 2.0}
+            title="Zoom In"
+            style={{
+              background: 'transparent',
+              color: (pages.length === 0 || zoomLevel >= 2.0) ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: (pages.length === 0 || zoomLevel >= 2.0) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <ZoomIn size={16} />
+          </button>
+          <button
+            onClick={handleFitToWidth}
+            disabled={pages.length === 0}
+            title="Fit to Width"
+            style={{
+              background: 'transparent',
+              color: pages.length === 0 ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Maximize2 size={16} />
+          </button>
+          <button
+            onClick={handleFitToPage}
+            disabled={pages.length === 0}
+            title="Fit to Page (Ctrl+0)"
+            style={{
+              background: 'transparent',
+              color: pages.length === 0 ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Scan size={16} />
+          </button>
+          <div style={{ width: '1px', height: '16px', background: 'var(--canvas-topbar-border)', margin: '0 2px' }} />
+          <button
+            onClick={handleUndo}
+            disabled={isUndoDisabled || pages.length === 0}
+            title="Undo (Ctrl+Z)"
+            style={{
+              background: 'transparent',
+              color: (isUndoDisabled || pages.length === 0) ? 'var(--outline-variant)' : 'var(--canvas-text-primary)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: (isUndoDisabled || pages.length === 0) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={isRedoDisabled || pages.length === 0}
+            title="Redo (Ctrl+Y)"
+            style={{
+              background: 'transparent',
+              color: (isRedoDisabled || pages.length === 0) ? 'var(--outline-variant)' : 'var(--canvas-text-primary)',
+              border: 'none',
+              padding: '4px',
+              borderRadius: '4px',
+              cursor: (isRedoDisabled || pages.length === 0) ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <Redo2 size={16} />
+          </button>
+        </div>
+
+        {/* Spacer */}
+        <div style={{ flex: 1, minWidth: '12px' }} />
+
+        {/* Output Filename Input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 1, minWidth: '80px', maxWidth: '240px', width: '100%' }}>
+          <input
+            id="edit-output-name"
+            type="text"
+            value={outputFilename}
+            onChange={(e) => setOutputFilename(e.target.value)}
+            placeholder="edited_document"
+            disabled={!file || loading}
+            title="Output Filename"
+            style={{
+              width: '100%',
+              height: '32px',
+              background: 'var(--canvas-input-bg)',
+              border: '1px solid var(--canvas-input-border)',
+              color: 'var(--canvas-text-primary)',
+              padding: '0 10px',
+              borderRadius: '6px',
+              outline: 'none',
+              fontSize: '13px',
+              minWidth: 0,
+            }}
+          />
+        </div>
+
+        {/* Save as PDF Button */}
+        <button
+          onClick={handleSave}
+          disabled={!file || loading || saving || pages.length === 0}
+          style={{
+            height: '32px',
+            padding: '0 14px',
+            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary-container)',
+            color: '#ffffff',
+            borderRadius: '6px',
+            fontWeight: 600,
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+            border: 'none',
+            cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
+            transition: 'background 0.2s ease'
+          }}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="animate-spin" size={14} />
+              <span>Saving...</span>
+            </>
+          ) : (
+            <span>Save as PDF</span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Contextual Controls Toolbar Sub-Bar (Row 2, Height: 40px) ─────────── */}
+      <div
+        className="canvas-contextual-bar"
+        style={{
+          height: '40px',
+          minHeight: '40px',
+          maxHeight: '40px',
+          background: showContextualPanel ? 'var(--canvas-panel-bg)' : 'transparent',
+          borderBottom: showContextualPanel ? '1px solid var(--canvas-topbar-border)' : '1px solid transparent',
+          padding: '0 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          zIndex: 15,
+          flexShrink: 0,
+          overflowX: 'auto',
+          pointerEvents: showContextualPanel ? 'auto' : 'none',
+        }}
+      >
+        {showContextualPanel && (
+          <>
+            {/* Label / Context Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              <span className="text-[11px] uppercase tracking-wider text-[#4A9EFF] font-bold">
+                {selectedObject
+                  ? `Selected: ${selectedObject.type}`
+                  : `Config: ${activeTool}`}
+              </span>
+              <div style={{ width: '1px', height: '18px', background: 'var(--canvas-panel-border)' }} />
+            </div>
+
+            {/* LAYERING CONTROLS (Only when object is selected) */}
+            {selectedObject && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                <button
+                  onClick={() => handleLayering('front')}
+                  title="Bring to Front (Ctrl+Shift+])"
+                  style={{
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronsUp size={16} />
+                </button>
+                <button
+                  onClick={() => handleLayering('forward')}
+                  title="Bring Forward (Ctrl+])"
+                  style={{
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronUp size={16} />
+                </button>
+                <button
+                  onClick={() => handleLayering('backward')}
+                  title="Send Backward (Ctrl+[)"
+                  style={{
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronDown size={16} />
+                </button>
+                <button
+                  onClick={() => handleLayering('back')}
+                  title="Send to Back (Ctrl+Shift+[)"
+                  style={{
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <ChevronsDown size={16} />
+                </button>
+                <div style={{ width: '1px', height: '18px', background: 'var(--canvas-panel-border)', margin: '0 4px' }} />
               </div>
+            )}
 
-              {/* TEXT PROPERTIES (either selected TextObject or default Text tool properties) */}
-              {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Font</span>
-                    <select
-                      value={selectedObject ? (selectedObject as TextObject).fontFamily : defaultTextProps.fontFamily}
-                      onChange={(e) => {
-                        if (selectedObject) {
-                          updateSelectedObject({ fontFamily: e.target.value });
-                        } else {
-                          setDefaultTextProps(prev => ({ ...prev, fontFamily: e.target.value }));
-                        }
-                      }}
-                      style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', cursor: 'pointer', fontSize: '13px' }}
-                    >
-                      {FONT_FAMILIES.map((font) => (
-                        <option key={font} value={font} style={{ fontFamily: font }}>
-                          {font}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Size</span>
-                    <input
-                      type="number"
-                      min="1"
-                      step={0.5}
-                      value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
-                      onChange={(e) => {
-                        const val = Math.max(1, Number(e.target.value));
-                        if (selectedObject) {
-                          updateSelectedObject({ fontSize: val });
-                        } else {
-                          setDefaultTextProps(prev => ({ ...prev, fontSize: val }));
-                        }
-                      }}
-                      style={{ width: '100%', background: '#12121A', border: '1px solid #2A2A3E', color: '#E8E8F0', padding: '6px 10px', borderRadius: '6px', outline: 'none', fontSize: '13px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      onClick={() => {
-                        if (selectedObject) {
-                          updateSelectedObject({ bold: !(selectedObject as TextObject).bold });
-                        } else {
-                          setDefaultTextProps(prev => ({ ...prev, bold: !prev.bold }));
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        height: '32px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#4A9EFF' : '#12121A',
-                        border: '1px solid #2A2A3E',
-                        borderRadius: '6px',
-                        color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#ffffff' : '#9898B8',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Bold size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (selectedObject) {
-                          updateSelectedObject({ italic: !(selectedObject as TextObject).italic });
-                        } else {
-                          setDefaultTextProps(prev => ({ ...prev, italic: !prev.italic }));
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        height: '32px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#4A9EFF' : '#12121A',
-                        border: '1px solid #2A2A3E',
-                        borderRadius: '6px',
-                        color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#ffffff' : '#9898B8',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Italic size={16} />
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Color</span>
-                    <input
-                      type="color"
-                      value={selectedObject ? (selectedObject as TextObject).color : defaultTextProps.color}
-                      onChange={(e) => {
-                        if (selectedObject) {
-                          updateSelectedObject({ color: e.target.value });
-                        } else {
-                          setDefaultTextProps(prev => ({ ...prev, color: e.target.value }));
-                        }
-                      }}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                </>
-              )}
+            {/* TEXT PROPERTIES */}
+            {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Font</span>
+                  <select
+                    value={selectedObject ? (selectedObject as TextObject).fontFamily : defaultTextProps.fontFamily}
+                    onChange={(e) => {
+                      if (selectedObject) {
+                        updateSelectedObject({ fontFamily: e.target.value });
+                      } else {
+                        setDefaultTextProps(prev => ({ ...prev, fontFamily: e.target.value }));
+                      }
+                    }}
+                    style={{ background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
+                  >
+                    {FONT_FAMILIES.map((font) => (
+                      <option key={font} value={font} style={{ fontFamily: font }}>
+                        {font}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Size</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step={0.5}
+                    value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
+                    onChange={(e) => {
+                      const val = Math.max(1, Number(e.target.value));
+                      if (selectedObject) {
+                        updateSelectedObject({ fontSize: val });
+                      } else {
+                        setDefaultTextProps(prev => ({ ...prev, fontSize: val }));
+                      }
+                    }}
+                    style={{ width: '60px', height: '28px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 6px', borderRadius: '4px', outline: 'none', fontSize: '12px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]" title="Rotation Angle">Rot°</span>
+                  <input
+                    type="number"
+                    step={1}
+                    value={selectedObject ? (Math.round((selectedObject.angle || 0) * 10) / 10) : 0}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (selectedObject) {
+                        updateSelectedObject({ angle: val });
+                      }
+                    }}
+                    style={{ width: '55px', height: '28px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 6px', borderRadius: '4px', outline: 'none', fontSize: '12px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => {
+                      if (selectedObject) {
+                        updateSelectedObject({ bold: !(selectedObject as TextObject).bold });
+                      } else {
+                        setDefaultTextProps(prev => ({ ...prev, bold: !prev.bold }));
+                      }
+                    }}
+                    title="Bold"
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      border: '1px solid var(--canvas-input-border)',
+                      borderRadius: '4px',
+                      color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#ffffff' : 'var(--canvas-text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Bold size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedObject) {
+                        updateSelectedObject({ italic: !(selectedObject as TextObject).italic });
+                      } else {
+                        setDefaultTextProps(prev => ({ ...prev, italic: !prev.italic }));
+                      }
+                    }}
+                    title="Italic"
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      border: '1px solid var(--canvas-input-border)',
+                      borderRadius: '4px',
+                      color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#ffffff' : 'var(--canvas-text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Italic size={14} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid var(--canvas-panel-border)', paddingLeft: '14px', marginLeft: '4px' }}>
+                  <button
+                    onClick={() => {
+                      if (selectedObject) updateSelectedObject({ textAlign: 'left' });
+                      else setDefaultTextProps(prev => ({ ...prev, textAlign: 'left' }));
+                    }}
+                    title="Align Left"
+                    style={{
+                      width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
+                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    }}
+                  >
+                    <AlignLeft size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedObject) updateSelectedObject({ textAlign: 'center' });
+                      else setDefaultTextProps(prev => ({ ...prev, textAlign: 'center' }));
+                    }}
+                    title="Align Center"
+                    style={{
+                      width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
+                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    }}
+                  >
+                    <AlignCenter size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (selectedObject) updateSelectedObject({ textAlign: 'right' });
+                      else setDefaultTextProps(prev => ({ ...prev, textAlign: 'right' }));
+                    }}
+                    title="Align Right"
+                    style={{
+                      width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
+                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    }}
+                  >
+                    <AlignRight size={14} />
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                  <input
+                    type="color"
+                    value={selectedObject ? (selectedObject as TextObject).color : defaultTextProps.color}
+                    onChange={(e) => {
+                      if (selectedObject) {
+                        updateSelectedObject({ color: e.target.value });
+                      } else {
+                        setDefaultTextProps(prev => ({ ...prev, color: e.target.value }));
+                      }
+                    }}
+                    title="Text Color"
+                    style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
+                  />
+                </div>
+              </div>
+            )}
 
-              {/* SHAPE PROPERTIES (rect, circle) */}
-              {((selectedObject && (selectedObject.type === 'rect' || selectedObject.type === 'circle')) ||
-                (!selectedObject && (activeTool === 'rect' || activeTool === 'circle'))) && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Stroke Color</span>
+            {/* SHAPE PROPERTIES (rect, circle) */}
+            {((selectedObject && (selectedObject.type === 'rect' || selectedObject.type === 'circle')) ||
+              (!selectedObject && (activeTool === 'rect' || activeTool === 'circle'))) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0 }}>
                     <input
-                      type="color"
-                      value={selectedObject ? (selectedObject as ShapeObject).strokeColor : defaultShapeProps.strokeColor}
+                      type="checkbox"
+                      checked={(selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) > 0}
                       onChange={(e) => {
-                        if (selectedObject) {
-                          updateSelectedObject({ strokeColor: e.target.value });
-                        } else {
-                          setDefaultShapeProps(prev => ({ ...prev, strokeColor: e.target.value }));
-                        }
-                      }}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Stroke Width</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
+                        const val = e.target.checked ? 2 : 0;
                         if (selectedObject) {
                           updateSelectedObject({ strokeWidth: val });
                         } else {
                           setDefaultShapeProps(prev => ({ ...prev, strokeWidth: val }));
                         }
                       }}
-                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                      style={{ accentColor: '#4A9EFF', cursor: 'pointer', margin: 0 }}
                     />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Fill Color</span>
-                    <input
-                      type="color"
-                      value={selectedObject ? (selectedObject as ShapeObject).fillColor : defaultShapeProps.fillColor}
-                      onChange={(e) => {
-                        if (selectedObject) {
-                          updateSelectedObject({ fillColor: e.target.value });
-                        } else {
-                          setDefaultShapeProps(prev => ({ ...prev, fillColor: e.target.value }));
-                        }
-                      }}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Fill Opacity</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        if (selectedObject) {
-                          updateSelectedObject({ fillOpacity: val });
-                        } else {
-                          setDefaultShapeProps(prev => ({ ...prev, fillOpacity: val }));
-                        }
-                      }}
-                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* LINE / FREEHAND PROPERTIES (line, pen, highlighter) */}
-              {((selectedObject && (selectedObject.type === 'line' || selectedObject.type === 'pen' || selectedObject.type === 'highlighter')) ||
-                (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
-                <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span className="text-xs font-semibold text-[#9898B8]">Stroke Color</span>
-                    <input
-                      type="color"
-                      value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeColor : defaultStrokeProps.strokeColor}
-                      onChange={(e) => {
-                        if (selectedObject) {
-                          updateSelectedObject({ strokeColor: e.target.value });
-                        } else {
-                          setDefaultStrokeProps(prev => ({ ...prev, strokeColor: e.target.value }));
-                        }
-                      }}
-                      style={{ width: '100%', height: '32px', border: '1px solid #2A2A3E', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '2px' }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-[#9898B8]">Stroke Width</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#12121A] text-[#4A9EFF]">
-                        {selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}px
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1"
-                      max="20"
-                      value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        if (selectedObject) {
-                          updateSelectedObject({ strokeWidth: val });
-                        } else {
-                          setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: val }));
-                        }
-                      }}
-                      style={{ width: '100%', accentColor: '#4A9EFF', cursor: 'pointer' }}
-                    />
-                  </div>
-                </>
-              )}
-
-              {activeTool === 'select' && !selectedObject && (
-                <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
-                  Click object to select. Drag to move.
-                </span>
-              )}
-
-              {activeTool === 'eraser' && (
-                <span className="text-xs text-[#9898B8]" style={{ fontStyle: 'italic' }}>
-                  Click or drag over any object to delete it.
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Zona 5 — Bottom Controls */}
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label className="text-xs font-semibold text-[#9898B8]" htmlFor="edit-output-name">
-                Output Filename
-              </label>
-              <input
-                id="edit-output-name"
-                type="text"
-                value={outputFilename}
-                onChange={(e) => setOutputFilename(e.target.value)}
-                placeholder="edited_document"
-                disabled={!file || loading}
-                style={{
-                  width: '100%',
-                  background: '#12121A',
-                  border: '1px solid #2A2A3E',
-                  color: '#E8E8F0',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  outline: 'none',
-                  fontSize: '14px',
-                }}
-              />
-            </div>
-
-            <button
-              onClick={handleSave}
-              disabled={!file || loading || saving || pages.length === 0}
-              style={{
-                width: '100%',
-                background: (!file || loading || saving || pages.length === 0) ? '#2A2A3E' : '#4A9EFF',
-                color: '#ffffff',
-                padding: '12px',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                border: 'none',
-                cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s ease',
-              }}
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="animate-spin" size={16} />
-                  <span>Saving PDF...</span>
-                </>
-              ) : (
-                <span>Save as PDF</span>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Right Panel */}
-        <div
-          className="feature-preview"
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#131318',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Sticky Horizontal Toolbar */}
-          <div
-            style={{
-              height: '48px',
-              background: '#12121A',
-              borderBottom: '1px solid #2A2A3E',
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              zIndex: 10,
-            }}
-          >
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleZoomOut}
-                disabled={pages.length === 0 || zoomLevel <= 0.25}
-                title="Zoom Out"
-                style={{
-                  background: 'transparent',
-                  color: (pages.length === 0 || zoomLevel <= 0.25) ? '#414752' : '#9898B8',
-                  border: 'none',
-                  padding: '6px',
-                  borderRadius: '4px',
-                  cursor: (pages.length === 0 || zoomLevel <= 0.25) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <ZoomOut size={16} />
-              </button>
-              <span style={{ fontSize: '13px', color: '#E8E8F0', minWidth: '40px', textAlign: 'center', fontFamily: 'monospace' }}>
-                {Math.round(zoomLevel * 100)}%
-              </span>
-              <button
-                onClick={handleZoomIn}
-                disabled={pages.length === 0 || zoomLevel >= 2.0}
-                title="Zoom In"
-                style={{
-                  background: 'transparent',
-                  color: (pages.length === 0 || zoomLevel >= 2.0) ? '#414752' : '#9898B8',
-                  border: 'none',
-                  padding: '6px',
-                  borderRadius: '4px',
-                  cursor: (pages.length === 0 || zoomLevel >= 2.0) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <ZoomIn size={16} />
-              </button>
-            </div>
-
-            {/* Separator */}
-            <div style={{ width: '1px', height: '24px', background: '#2A2A3E' }} />
-
-            {/* Undo / Redo */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={handleUndo}
-                disabled={isUndoDisabled || pages.length === 0}
-                title="Undo"
-                style={{
-                  background: 'transparent',
-                  color: (isUndoDisabled || pages.length === 0) ? '#414752' : '#E8E8F0',
-                  border: 'none',
-                  padding: '6px',
-                  borderRadius: '4px',
-                  cursor: (isUndoDisabled || pages.length === 0) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <Undo2 size={16} />
-              </button>
-              <button
-                onClick={handleRedo}
-                disabled={isRedoDisabled || pages.length === 0}
-                title="Redo"
-                style={{
-                  background: 'transparent',
-                  color: (isRedoDisabled || pages.length === 0) ? '#414752' : '#E8E8F0',
-                  border: 'none',
-                  padding: '6px',
-                  borderRadius: '4px',
-                  cursor: (isRedoDisabled || pages.length === 0) ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <Redo2 size={16} />
-              </button>
-            </div>
-
-            {/* Separator */}
-            <div style={{ width: '1px', height: '24px', background: '#2A2A3E' }} />
-
-            {/* Fit to Width */}
-            <button
-              onClick={handleFitToWidth}
-              disabled={pages.length === 0}
-              title="Fit to Width"
-              style={{
-                background: 'transparent',
-                color: pages.length === 0 ? '#414752' : '#9898B8',
-                border: 'none',
-                padding: '6px 10px',
-                borderRadius: '4px',
-                cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px',
-                fontWeight: 500,
-              }}
-            >
-              <Maximize2 size={16} />
-              <span>Fit to Width</span>
-            </button>
-          </div>
-
-          {/* Canvas editor pages area */}
-          <div
-            ref={canvasViewportRef}
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '24px',
-              alignItems: 'center',
-            }}
-          >
-            {pages.length === 0 ? (
-              <div style={{ margin: 'auto', textAlign: 'center', color: '#9898B8' }}>
-                <p className="text-base font-medium mb-1">No Document Uploaded</p>
-                <p className="text-sm">Please drop a PDF on the left panel to begin editing.</p>
-              </div>
-            ) : (
-              <div
-                style={{
-                  transform: `scale(${finalScale})`,
-                  transformOrigin: 'top center',
-                  transition: 'transform 0.15s ease',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '24px',
-                  alignItems: 'center',
-                  width: '100%',
-                  paddingBottom: '100px',
-                }}
-              >
-                {pages.map((p) => {
-                  const isLazy = pages.length > 50;
-                  return (
-                    <LazyPageContainer
-                      key={p.index}
-                      width={p.width}
-                      height={p.height}
-                      active={isLazy}
-                    >
-                      <div 
-                        onMouseDown={() => setActivePageIndex(p.index)} 
-                        onTouchStart={() => setActivePageIndex(p.index)}
-                      >
-                        <PageCanvas
-                          page={p}
-                          activeTool={activeTool}
-                          selectedObjectId={selectedObjectId}
-                          setSelectedObjectId={setSelectedObjectId}
-                          setActiveTool={setActiveTool}
-                          updateSelectedObject={updateSelectedObject}
-                          commitPageObjectsToHistory={commitPageObjectsToHistory}
-                          stageRefs={stageRefs}
-                          setPages={setPages}
-                          defaultTextProps={defaultTextProps}
-                          defaultShapeProps={defaultShapeProps}
-                          defaultStrokeProps={defaultStrokeProps}
-                          hexToRgba={hexToRgba}
-                        />
-                      </div>
-                    </LazyPageContainer>
-                  );
-                })}
+                    <span className="text-xs font-semibold text-[#9898B8]">Stroke</span>
+                  </label>
+                  <input
+                    type="color"
+                    value={selectedObject ? (selectedObject as ShapeObject).strokeColor : defaultShapeProps.strokeColor}
+                    disabled={(selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) === 0}
+                    onChange={(e) => {
+                      if (selectedObject) {
+                        updateSelectedObject({ strokeColor: e.target.value });
+                      } else {
+                        setDefaultShapeProps(prev => ({ ...prev, strokeColor: e.target.value }));
+                      }
+                    }}
+                    title="Stroke Color"
+                    style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px', opacity: (selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) === 0 ? 0.4 : 1 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Width</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="20"
+                    value={selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (selectedObject) {
+                        updateSelectedObject({ strokeWidth: val });
+                      } else {
+                        setDefaultShapeProps(prev => ({ ...prev, strokeWidth: val }));
+                      }
+                    }}
+                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                  />
+                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[24px]">
+                    {selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}px
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Fill</span>
+                  <input
+                    type="color"
+                    value={selectedObject ? (selectedObject as ShapeObject).fillColor : defaultShapeProps.fillColor}
+                    onChange={(e) => {
+                      if (selectedObject) {
+                        updateSelectedObject({ fillColor: e.target.value });
+                      } else {
+                        setDefaultShapeProps(prev => ({ ...prev, fillColor: e.target.value }));
+                      }
+                    }}
+                    title="Fill Color"
+                    style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Opacity</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (selectedObject) {
+                        updateSelectedObject({ fillOpacity: val });
+                      } else {
+                        setDefaultShapeProps(prev => ({ ...prev, fillOpacity: val }));
+                      }
+                    }}
+                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                  />
+                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[32px]">
+                    {selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}%
+                  </span>
+                </div>
               </div>
             )}
-          </div>
 
-        </div>
+            {/* LINE / FREEHAND PROPERTIES (line, pen, highlighter) */}
+            {((selectedObject && (selectedObject.type === 'line' || selectedObject.type === 'pen' || selectedObject.type === 'highlighter')) ||
+              (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                  <input
+                    type="color"
+                    value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeColor : defaultStrokeProps.strokeColor}
+                    onChange={(e) => {
+                      if (selectedObject) {
+                        updateSelectedObject({ strokeColor: e.target.value });
+                      } else {
+                        setDefaultStrokeProps(prev => ({ ...prev, strokeColor: e.target.value }));
+                      }
+                    }}
+                    title="Stroke Color"
+                    style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[#9898B8]">Width</span>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (selectedObject) {
+                        updateSelectedObject({ strokeWidth: val });
+                      } else {
+                        setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: val }));
+                      }
+                    }}
+                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                  />
+                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[24px]">
+                    {selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}px
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {/* ── Canvas Workspace Area ──────────────────────────────────────────────── */}
+      <div
+        ref={canvasViewportRef}
+        className="canvas-workspace"
+        style={{
+          flex: 1,
+          height: 'calc(100% - 92px)',
+          width: '100%',
+          overflowY: 'auto',
+          overflowX: 'auto',
+          padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--canvas-bg)',
+          backgroundImage: 'radial-gradient(var(--canvas-dot-grid) 1px, transparent 1px)',
+          backgroundSize: '20px 20px',
+        }}
+        onScroll={handleWorkspaceScroll}
+      >
+        {pages.length === 0 ? (
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            style={{ 
+              margin: 'auto', 
+              textAlign: 'center', 
+              color: 'var(--canvas-text-muted)', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              gap: '12px',
+              cursor: 'pointer',
+              padding: '32px',
+              borderRadius: '16px',
+              border: '1px dashed transparent',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--canvas-card-bg)';
+              e.currentTarget.style.borderColor = 'var(--canvas-input-border)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'transparent';
+            }}
+          >
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--canvas-topbar-bg)', border: '1px solid var(--canvas-input-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Upload size={28} className="text-[#4A9EFF]" />
+            </div>
+            <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">No Document Uploaded</p>
+            <p className="text-sm">Click here or drag a file to begin editing.</p>
+          </div>
+        ) : (
+          <div 
+            style={{ 
+              width: Math.max(...pages.map(p => p.width)) * finalScale,
+              height: (pages.reduce((acc, p) => acc + p.height, 0) + (pages.length - 1) * 24 + 100) * finalScale,
+              position: 'relative',
+              margin: '0 auto', 
+              flexShrink: 0
+            }}
+          >
+            <div
+              style={{
+                transform: `scale(${finalScale})`,
+                transformOrigin: 'top left',
+                transition: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                alignItems: 'center',
+                width: Math.max(...pages.map(p => p.width)),
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                paddingBottom: '100px',
+              }}
+            >
+            {pages.map((p) => {
+              const isLazy = pages.length > 50;
+              return (
+                <LazyPageContainer
+                  key={p.index}
+                  width={p.width}
+                  height={p.height}
+                  active={isLazy}
+                >
+                  <div 
+                    onMouseDown={() => setActivePageIndex(p.index)} 
+                    onTouchStart={() => setActivePageIndex(p.index)}
+                  >
+                    <PageCanvas
+                      page={p}
+                      activeTool={activeTool}
+                      selectedObjectId={selectedObjectId}
+                      setSelectedObjectId={setSelectedObjectId}
+                      setActiveTool={setActiveTool}
+                      updateSelectedObject={updateSelectedObject}
+                      commitPageObjectsToHistory={commitPageObjectsToHistory}
+                      fabricRefs={fabricRefs}
+                      setPages={setPages}
+                      defaultTextProps={defaultTextProps}
+                      defaultShapeProps={defaultShapeProps}
+                      defaultStrokeProps={defaultStrokeProps}
+                      hexToRgba={hexToRgba}
+                      onSampleColor={handleSampledColor}
+                      finalScale={finalScale}
+                    />
+                  </div>
+                </LazyPageContainer>
+              );
+            })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Context Menu ──────────────────────────────────────────────────────── */}
+      {contextMenu?.visible && selectedObjectId && (
+        <div
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            background: 'var(--canvas-panel-bg)',
+            border: '1px solid var(--canvas-panel-border)',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            padding: '4px 0',
+            zIndex: 9999,
+            minWidth: '160px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 text-center text-[10px] uppercase font-bold tracking-wider text-[var(--canvas-text-muted)] border-b border-[var(--canvas-panel-border)] mb-1">
+            Layer Order
+          </div>
+          <button
+            onClick={() => { handleLayering('front'); setContextMenu(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '6px 12px', background: 'transparent', border: 'none', color: 'var(--canvas-text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: '13px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ChevronsUp size={14} /> Bring to Front
+          </button>
+          <button
+            onClick={() => { handleLayering('forward'); setContextMenu(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '6px 12px', background: 'transparent', border: 'none', color: 'var(--canvas-text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: '13px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ChevronUp size={14} /> Bring Forward
+          </button>
+          <button
+            onClick={() => { handleLayering('backward'); setContextMenu(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '6px 12px', background: 'transparent', border: 'none', color: 'var(--canvas-text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: '13px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ChevronDown size={14} /> Send Backward
+          </button>
+          <button
+            onClick={() => { handleLayering('back'); setContextMenu(null); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '6px 12px', background: 'transparent', border: 'none', color: 'var(--canvas-text-primary)', cursor: 'pointer', textAlign: 'left', fontSize: '13px' }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <ChevronsDown size={14} /> Send to Back
+          </button>
+        </div>
+      )}
     </div>
   );
 }
