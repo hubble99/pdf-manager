@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import axios from 'axios';
 import {
   CheckCircle,
   Eye,
@@ -141,10 +142,15 @@ export function ProtectPage() {
     } catch (err: unknown) {
       let msg = err instanceof Error ? err.message : 'Unknown error';
       // Parse Axios error response
-      if ((err as any)?.response?.data) {
+      if (axios.isAxiosError(err) && err.response?.data) {
         try {
-          const errData = JSON.parse(await (err as any).response.data.text());
-          msg = errData?.detail || msg;
+          const responseData = err.response.data;
+          if (responseData instanceof Blob) {
+            const errData: unknown = JSON.parse(await responseData.text());
+            if (typeof errData === 'object' && errData !== null && 'detail' in errData && typeof errData.detail === 'string') {
+              msg = errData.detail;
+            }
+          }
         } catch { /* ignore parse errors */ }
       }
       showToast({ type: 'error', title: 'Protection failed', message: msg });
@@ -186,10 +192,15 @@ export function ProtectPage() {
       });
     } catch (err: unknown) {
       let msg = err instanceof Error ? err.message : 'Unknown error';
-      if ((err as any)?.response?.data) {
+      if (axios.isAxiosError(err) && err.response?.data) {
         try {
-          const errData = JSON.parse(await (err as any).response.data.text());
-          msg = errData?.detail || msg;
+          const responseData = err.response.data;
+          if (responseData instanceof Blob) {
+            const errData: unknown = JSON.parse(await responseData.text());
+            if (typeof errData === 'object' && errData !== null && 'detail' in errData && typeof errData.detail === 'string') {
+              msg = errData.detail;
+            }
+          }
         } catch { /* ignore */ }
       }
       showToast({ type: 'error', title: 'Password removal failed', message: msg });

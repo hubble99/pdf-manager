@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { FileX, Loader2 } from 'lucide-react';
+import axios from 'axios';
 import apiClient from '../../api/client';
 
 export interface PreviewCanvasProps {
@@ -65,8 +66,8 @@ export function PreviewCanvas({
           const blob = new Blob([res.data], { type: 'image/png' });
           currentUrl = URL.createObjectURL(blob);
           setUrl(currentUrl);
-        } catch (err: any) {
-          if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+        } catch (err: unknown) {
+          if (axios.isCancel(err)) return;
           console.error('Failed to load preview', err);
           setError(true);
         } finally {
