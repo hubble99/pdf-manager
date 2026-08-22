@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { Sidebar } from './components/layout/Sidebar';
@@ -10,7 +10,6 @@ import { PdfToImagePage } from './pages/PdfToImagePage';
 import { ImageToPdfPage } from './pages/ImageToPdfPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { InsertPage } from './pages/InsertPage';
-import { EditPdfPage } from './pages/EditPdfPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OrganizePage } from './pages/OrganizePage';
 import { MetadataPage } from './pages/MetadataPage';
@@ -24,6 +23,18 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ToastContainer } from './components/ToastContainer';
 type AppState = 'splash' | 'ready' | 'error';
 type BackendStatus = 'checking' | 'online' | 'offline';
+
+const EditPdfPage = lazy(() =>
+  import('./pages/EditPdfPage').then((module) => ({ default: module.EditPdfPage }))
+);
+
+function RouteFallback() {
+  return (
+    <div className="page-body" role="status" aria-live="polite">
+      Loading PDF editor…
+    </div>
+  );
+}
 
 function BackendStatusBar({ status }: { status: BackendStatus }) {
   if (status === 'online') return null;
@@ -136,7 +147,14 @@ export default function App() {
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />
                 <Route path="/insert"        element={<InsertPage />} />
-                <Route path="/edit-pdf"      element={<EditPdfPage />} />
+                <Route
+                  path="/edit-pdf"
+                  element={(
+                    <Suspense fallback={<RouteFallback />}>
+                      <EditPdfPage />
+                    </Suspense>
+                  )}
+                />
                 <Route path="/settings"      element={<SettingsPage />} />
               </Routes>
             </MainContent>

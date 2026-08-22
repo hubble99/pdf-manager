@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { ThemeContext } from './ThemeContext.context';
+import { isTheme } from './ThemeContext.context';
 import type { Theme } from './ThemeContext.context';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('app_theme');
-    if (saved === 'dark' || saved === 'dusty-rose') {
-      return saved as Theme;
-    }
+    if (isTheme(saved)) return saved;
     return 'dark';
   });
 

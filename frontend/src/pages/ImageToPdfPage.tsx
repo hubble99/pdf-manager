@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -63,7 +63,7 @@ function generateId(): string {
 export function ImageToPdfPage() {
   const { showToast } = useToast();
   const { fileData: _files, setFileData: setFiles } = useFeatureFile<FileEntry[]>('imagetopdf');
-  const files = _files || [];
+  const files = useMemo(() => _files ?? [], [_files]);
   const [outputName, setOutputName] = useState('output.pdf');
   const [pageSize, setPageSize] = useState('a4');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -74,23 +74,18 @@ export function ImageToPdfPage() {
   // Preview state
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1.0);
+  const filesRef = useRef(files);
 
-  // Cleanup object URLs on unmount
   useEffect(() => {
-    return () => {
-      files.forEach((f) => URL.revokeObjectURL(f.previewUrl));
-    };
+    filesRef.current = files;
   }, [files]);
 
-  // Handle active index reset when files change
+  // URLs are revoked when an entry is removed and once more on unmount.
   useEffect(() => {
-    if (files.length === 0) {
-      setActiveIdx(null);
-    } else if (activeIdx !== null && activeIdx >= files.length) {
-      setActiveIdx(files.length - 1);
-    }
-  }, [files, activeIdx]);
-
+    return () => {
+      filesRef.current.forEach((f) => URL.revokeObjectURL(f.previewUrl));
+    };
+  }, []);
 
   // ── File handling ───────────────────────────────────────────────────────────
   const addFiles = useCallback(
@@ -108,19 +103,23 @@ export function ImageToPdfPage() {
         rotation: 0,
         flipH: false,
       }));
-      
-      setFiles((prev) => {
-        const safePrev = prev || [];
-        const next = [...safePrev, ...newEntries];
-        if (safePrev.length === 0) setActiveIdx(0); // auto-select first file
-        return next;
-      });
+      if (files.length === 0) setActiveIdx(0); // auto-select first file
+      setFiles((prev) => [...(prev || []), ...newEntries]);
       setResult(null);
     },
-    []
+    [files.length, setFiles, showToast]
   );
 
   const removeFile = (id: string) => {
+    const removedIdx = files.findIndex((f) => f.id === id);
+    setActiveIdx((current) => {
+      const nextLength = Math.max(0, files.length - (removedIdx >= 0 ? 1 : 0));
+      if (nextLength === 0) return null;
+      if (current === null || removedIdx < 0) return current;
+      if (current > removedIdx) return current - 1;
+      if (current === removedIdx) return Math.min(removedIdx, nextLength - 1);
+      return Math.min(current, nextLength - 1);
+    });
     setFiles((prev) => {
       if (!prev) return [];
       const filtered = prev.filter((f) => {
@@ -136,22 +135,20 @@ export function ImageToPdfPage() {
   };
 
   const moveFile = (id: string, direction: 'up' | 'down') => {
+    const idx = files.findIndex((f) => f.id === id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= files.length) return;
+
+    if (activeIdx === idx) {
+      setActiveIdx(swapIdx);
+    } else if (activeIdx === swapIdx) {
+      setActiveIdx(idx);
+    }
+
     setFiles((prev) => {
       if (!prev) return [];
-      const idx = prev.findIndex((f) => f.id === id);
-      if (idx === -1) return prev;
       const newArr = [...prev];
-      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= newArr.length) return prev;
       [newArr[idx], newArr[swapIdx]] = [newArr[swapIdx], newArr[idx]];
-
-      // Track active index movement
-      if (activeIdx === idx) {
-        setActiveIdx(swapIdx);
-      } else if (activeIdx === swapIdx) {
-        setActiveIdx(idx);
-      }
-
       return newArr;
     });
   };

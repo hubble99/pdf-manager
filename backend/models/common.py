@@ -15,5 +15,5 @@ class SuccessResponse(BaseModel):
 class ErrorResponse(BaseModel):
     status: str = "error"
     message: str
-    detail: Optional[str] = None
+    detail: Any = None
 

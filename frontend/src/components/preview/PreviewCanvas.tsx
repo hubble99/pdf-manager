@@ -11,6 +11,7 @@ export interface PreviewCanvasProps {
   flipH?: boolean;
   zoom: number; // 0.25 - 3.0 (1.0 = 100%)
   onLoad?: (width: number, height: number) => void;
+  onViewportChange?: (width: number, height: number) => void;
   className?: string;
   isHighlighted?: boolean; // For extract pages
 }
@@ -22,6 +23,7 @@ export function PreviewCanvas({
   imageRotation = 0,
   zoom,
   onLoad,
+  onViewportChange,
   className = '',
   isHighlighted = false,
   flipH = false,
@@ -30,15 +32,13 @@ export function PreviewCanvas({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const displayUrl = imageUrl || (file ? url : null);
+  const displayLoading = Boolean(file) && !imageUrl && loading;
+  const displayError = Boolean(file) && !imageUrl && error;
 
   useEffect(() => {
-    // If we have an imageUrl, just use it
-    if (imageUrl) {
-      setUrl(imageUrl);
-      setError(false);
-      setLoading(false);
-      return;
-    }
+    if (imageUrl) return;
 
     // If we have a file, fetch preview
     if (file) {
@@ -84,18 +84,29 @@ export function PreviewCanvas({
         if (currentUrl) URL.revokeObjectURL(currentUrl);
       };
     }
-    
-    // If no file and no imageUrl
-    setUrl(null);
   }, [file, pageNumber, imageUrl]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !onViewportChange) return;
+
+    const reportViewport = () => onViewportChange(container.clientWidth, container.clientHeight);
+    reportViewport();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', reportViewport);
+      return () => window.removeEventListener('resize', reportViewport);
+    }
+
+    const observer = new ResizeObserver(reportViewport);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [onViewportChange]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     if (onLoad) {
       const img = e.currentTarget;
-      // Depending on rotation, width and height might be swapped
-      const w = imageRotation % 180 === 90 ? img.naturalHeight : img.naturalWidth;
-      const h = imageRotation % 180 === 90 ? img.naturalWidth : img.naturalHeight;
-      onLoad(w, h);
+      onLoad(img.naturalWidth, img.naturalHeight);
     }
   };
 
@@ -105,6 +116,7 @@ export function PreviewCanvas({
   return (
     <div
       className={`preview-canvas-container ${className}`}
+      ref={containerRef}
       style={{
         flex: 1,
         overflow: 'auto',
@@ -116,7 +128,7 @@ export function PreviewCanvas({
         position: 'relative',
       }}
     >
-      {loading ? (
+      {displayLoading ? (
         <div
           className="preview-skeleton"
           style={{
@@ -139,7 +151,7 @@ export function PreviewCanvas({
             </div>
           ) : null}
         </div>
-      ) : error || !url ? (
+      ) : displayError || !displayUrl ? (
         <div
           style={{
             width: 600,
@@ -167,7 +179,7 @@ export function PreviewCanvas({
         >
           <img
             ref={imgRef}
-            src={url}
+            src={displayUrl}
             alt="Preview"
             onLoad={handleImageLoad}
             style={{

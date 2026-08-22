@@ -63,7 +63,6 @@ async def merge_pdfs_endpoint(
                 "X-Total-Pages": str(total_pages),
                 "X-File-Size": str(size_bytes),
                 "X-Output-File": safe_name,
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
             },
         )
 

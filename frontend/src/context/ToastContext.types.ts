@@ -5,7 +5,7 @@ export interface Toast {
   message?: string;
   action?: {
     label: string;
-    onClick: () => void;
+    onClick: () => void | boolean | Promise<void | boolean>;
   };
   duration?: number;
 }

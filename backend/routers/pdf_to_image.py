@@ -77,7 +77,6 @@ async def pdf_to_image_endpoint(
                 "X-Format": format.upper(),
                 "X-DPI": str(dpi),
                 "X-Output-File": final_filename,
-                "Content-Disposition": f'attachment; filename="{final_filename}"',
             },
         )
 

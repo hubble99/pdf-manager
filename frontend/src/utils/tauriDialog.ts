@@ -40,11 +40,12 @@ import apiClient from '../api/client';
  * Open the system Downloads folder.
  * Uses backend subprocess to reliably open folder on Windows.
  */
-export const openOutputFolder = async (): Promise<void> => {
+export const openOutputFolder = async (): Promise<boolean> => {
   try {
-    await apiClient.post('/api/v1/settings/open-downloads');
+    const response = await apiClient.post('/api/v1/settings/open-downloads');
+    return response.data?.data?.opened === true;
   } catch (err) {
     console.warn('[tauriDialog] openOutputFolder failed:', err);
+    return false;
   }
 };
-

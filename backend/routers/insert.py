@@ -65,14 +65,13 @@ async def insert_content(
         headers = {
             "X-Rules-Applied": str(len(resolved_rules)),
             "X-Total-Pages": str(total_pages),
-            "Access-Control-Expose-Headers": "X-Rules-Applied, X-Total-Pages, Content-Disposition"
+            "Access-Control-Expose-Headers": "X-Rules-Applied, X-Total-Pages, X-Output-File, Content-Disposition"
         }
         
         safe_name = sanitize_filename(
             output_filename or f"inserted_{main_pdf.filename or 'output'}",
             "pdf"
         )
-        headers["Content-Disposition"] = f'attachment; filename="{safe_name}"'
         headers["X-Output-File"] = safe_name
         
         return FileResponse(

@@ -92,7 +92,6 @@ async def extract_pages_endpoint(
                 "X-Pages-Extracted": str(pages_extracted),
                 "X-Output-File": safe_name,
                 "X-Output-Mode": output_mode,
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
             },
         )
 

@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from config import settings
 from models.common import SuccessResponse
 
@@ -47,8 +47,7 @@ async def open_downloads():
             subprocess.Popen(["open", downloads_path])
         else:
             subprocess.Popen(["xdg-open", downloads_path])
-        return SuccessResponse(message="Opened downloads folder")
+        return SuccessResponse(data={"opened": True}, message="Opened downloads folder")
     except Exception as e:
-        logger.error(f"Error opening downloads: {e}")
-        return SuccessResponse(message="Failed to open downloads")
-
+        logger.exception("Error opening downloads")
+        raise HTTPException(status_code=500, detail="Could not open the downloads folder") from e

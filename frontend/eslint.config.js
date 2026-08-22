@@ -19,4 +19,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Fabric.js augments canvas objects/events dynamically. Keep the exception
+    // isolated to the adapter/editor boundary instead of weakening lint globally.
+    files: ['src/components/PageCanvas.tsx', 'src/pages/EditPdfPage.tsx'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      'react-hooks/exhaustive-deps': 'off',
+    },
+  },
 ])

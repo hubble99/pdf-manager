@@ -186,24 +186,17 @@ export function QrBarcodePage() {
     qrErrorCorrection, 
     barcodeType, 
     format, 
-    previewData
+    previewData,
+    showToast
   ]);
 
   // Trigger preview generation when debounced inputs or settings change
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     generatePreview(false, controller.signal);
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    debouncedQrContent,
-    debouncedBarcodeContent,
-    qrSize,
-    qrErrorCorrection,
-    barcodeType,
-    format,
-    activeTab
-  ]);
+  }, [generatePreview]);
 
   // ── Download ────────────────────────────────────────────────────────────────
   const handleDownload = () => {
@@ -211,8 +204,7 @@ export function QrBarcodePage() {
 
     const isQr = activeTab === 'qr';
     const defaultName = isQr ? 'qrcode' : 'barcode';
-    const userStem = outputFilename.trim().replace(/[<>:"/\\|?*]/g, '_') || defaultName;
-    const filename = `${userStem}.${format}`;
+    const filename = buildOutputFilename(outputFilename, format, defaultName);
 
     const a = document.createElement('a');
     a.download = filename;

@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from config import settings
+from core.pdf_metadata import MetadataEncryptedError, MetadataOpenError, update_pdf_metadata
 from models.common import ErrorResponse
 from utils.file_utils import cleanup_temp_file, save_upload
 from utils.filename_utils import sanitize_filename
@@ -14,80 +15,40 @@ from utils.filename_utils import sanitize_filename
 logger = logging.getLogger("pdf_manager.router.metadata")
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
+
 @router.post("/")
-async def update_pdf_metadata(
+async def update_pdf_metadata_endpoint(
     file: UploadFile = File(...),
     title: str = Form(default=""),
     author: str = Form(default=""),
     subject: str = Form(default=""),
     keywords: str = Form(default=""),
 ):
-    """
-    Update PDF metadata.
-    """
     temp_path: Path | None = None
     try:
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="File must be a PDF.")
-
         temp_path = await save_upload(file, subdir="metadata")
-
-        import fitz  # PyMuPDF
-        
-        try:
-            doc = fitz.open(str(temp_path))
-        except Exception as e:
-            raise HTTPException(status_code=422, detail=f"Cannot open PDF: {e}")
-
-        if doc.is_encrypted:
-            doc.close()
-            raise HTTPException(status_code=403, detail="PDF is encrypted.")
-
-        meta = doc.metadata
-        if title is not None: meta["title"] = title
-        if author is not None: meta["author"] = author
-        if subject is not None: meta["subject"] = subject
-        if keywords is not None: meta["keywords"] = keywords
-
-        doc.set_metadata(meta)
-
         title_str = title.strip()
-        if title_str:
-            safe_name = sanitize_filename(title_str, "pdf")
-        else:
-            original_name = file.filename or "output.pdf"
-            safe_name = sanitize_filename(
-                original_name.replace(".pdf", ""), "pdf"
-            )
-
-        out_name = f"{safe_name}_{uuid.uuid4().hex[:8]}.pdf"
+        source_stem = Path(file.filename or "output.pdf").stem
+        safe_name = sanitize_filename(title_str or f"{source_stem}_metadata", "pdf")
+        out_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
         out_path = settings.OUTPUT_DIR / out_name
-
-        doc.save(str(out_path), garbage=4, deflate=True)
-        doc.close()
-
+        try:
+            update_pdf_metadata(temp_path, out_path, title=title, author=author, subject=subject, keywords=keywords)
+        except MetadataOpenError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except MetadataEncryptedError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         return FileResponse(
-            path=str(out_path),
-            media_type="application/pdf",
-            filename=safe_name,
-            headers={
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
-                "X-Output-File": safe_name,
-            },
+            path=str(out_path), media_type="application/pdf", filename=safe_name,
+            headers={"X-Output-File": safe_name},
         )
-
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"metadata error: {e}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content=ErrorResponse(
-                status="error",
-                message="Metadata update failed.",
-                detail=str(e),
-            ).model_dump(),
-        )
+    except Exception as exc:
+        logger.error("metadata error: %s", exc, exc_info=True)
+        return JSONResponse(status_code=500, content=ErrorResponse(message="Metadata update failed.", detail=str(exc)).model_dump())
     finally:
         if temp_path:
             cleanup_temp_file(temp_path)

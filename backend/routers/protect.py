@@ -71,7 +71,6 @@ async def protect_pdf_endpoint(
                 "X-Total-Pages": str(total_pages),
                 "X-File-Size": str(size_bytes),
                 "X-Output-File": safe_name,
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
             },
         )
 
@@ -126,7 +125,8 @@ async def remove_password_endpoint(
 
         # Save without encryption
         stem = Path(output_filename).stem if output_filename else Path(file.filename).stem
-        out_name = sanitize_filename(f"{stem}_unlocked", "pdf")
+        unlocked_stem = stem if stem.lower().endswith("_unlocked") else f"{stem}_unlocked"
+        out_name = sanitize_filename(unlocked_stem, "pdf")
         out_path = settings.OUTPUT_DIR / out_name
 
         try:
@@ -153,7 +153,6 @@ async def remove_password_endpoint(
                 "X-Total-Pages": str(total_pages),
                 "X-File-Size": str(size_bytes),
                 "X-Output-File": safe_name,
-                "Content-Disposition": f'attachment; filename="{safe_name}"',
             },
         )
 

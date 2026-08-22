@@ -52,6 +52,13 @@ import {
   HISTORY_DEBOUNCE_MS,
   HISTORY_LIMIT,
   PASTE_OFFSET,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_SHAPE_FILL,
+  DEFAULT_TEXT_COLOR,
+  PAGE_LAZY_THRESHOLD,
+  PREVIEW_BASE_DPI,
+  PREVIEW_MAX_DPI,
+  PREVIEW_MIN_DPI,
 } from '../features/edit-pdf/constants';
 
 interface PdfPageData {
@@ -67,6 +74,8 @@ interface ConversionResponse {
   total: number;
 }
 
+type EditTool = 'select' | CanvasObjectType | 'eraser' | 'eyedropper';
+
 
 // ── Windows Font Options ──────────────────────────────────────────────────────
 const FONT_FAMILIES = [
@@ -81,6 +90,8 @@ const FONT_FAMILIES = [
   'Tahoma',
   'Century Gothic',
 ];
+
+const BASE_DISPLAY_WIDTH = 800;
 
 // Helper to format file size
 function formatBytes(bytes: number): string {
@@ -131,8 +142,8 @@ function LazyPageContainer({
         style={{
           width: `${width}px`,
           height: `${height}px`,
-          background: '#1E1E2E',
-          border: '1px solid #2A2A3E',
+          background: 'var(--canvas-panel-bg)',
+          border: '1px solid var(--canvas-panel-border)',
           borderRadius: '8px',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
           display: 'flex',
@@ -140,7 +151,7 @@ function LazyPageContainer({
           alignItems: 'center',
           justifyContent: 'center',
           gap: 12,
-          color: '#9898B8',
+          color: 'var(--canvas-text-muted)',
           fontSize: '14px',
           margin: '0 auto',
         }}
@@ -164,7 +175,7 @@ export function EditPdfPage() {
   const [pages, setPages] = useState<PageData[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<'select' | CanvasObjectType | 'eraser' | 'eyedropper'>('select');
+  const [activeTool, setActiveTool] = useState<EditTool>('select');
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const prevZoomRef = useRef(zoomLevel);
   const [loading, setLoading] = useState(false);
@@ -177,13 +188,13 @@ export function EditPdfPage() {
   const [defaultTextProps, setDefaultTextProps] = useState<{
     fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string; textAlign: 'left' | 'center' | 'right';
   }>({
-    fontFamily: 'Arial', fontSize: 20, bold: false, italic: false, color: '#000000', textAlign: 'left'
+    fontFamily: 'Arial', fontSize: DEFAULT_FONT_SIZE, bold: false, italic: false, color: DEFAULT_TEXT_COLOR, textAlign: 'left'
   });
   const [defaultShapeProps, setDefaultShapeProps] = useState({
-    fillColor: '#E8E8E8', fillOpacity: 100, strokeColor: '#000000', strokeWidth: 2
+    fillColor: DEFAULT_SHAPE_FILL, fillOpacity: 100, strokeColor: DEFAULT_TEXT_COLOR, strokeWidth: 2
   });
   const [defaultStrokeProps, setDefaultStrokeProps] = useState({
-    strokeColor: '#000000', strokeWidth: 3
+    strokeColor: DEFAULT_TEXT_COLOR, strokeWidth: 3
   });
 
   const fabricRefs = useRef<Record<number, fabric.Canvas>>({});
@@ -402,23 +413,24 @@ export function EditPdfPage() {
   // Global hotkeys for delete, undo, redo
   // (Moved keydown listeners below zoom functions)
 
-  // Tool default configurations sync
-  useEffect(() => {
-    if (activeTool === 'pen') {
+  const handleToolSelect = useCallback((tool: EditTool) => {
+    setActiveTool(tool);
+    setSelectedObjectId(null);
+
+    if (tool === 'pen') {
       setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 3 }));
-    } else if (activeTool === 'highlighter') {
+    } else if (tool === 'highlighter') {
       setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 12 }));
-    } else if (activeTool === 'text') {
-      setDefaultTextProps(prev => ({ ...prev, fontSize: 20 }));
-    } else if (activeTool === 'rect' || activeTool === 'circle') {
+    } else if (tool === 'text') {
+      setDefaultTextProps(prev => ({ ...prev, fontSize: DEFAULT_FONT_SIZE }));
+    } else if (tool === 'rect' || tool === 'circle') {
       setDefaultShapeProps(prev => ({ ...prev, strokeWidth: 2 }));
-    } else if (activeTool === 'line') {
+    } else if (tool === 'line') {
       setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: 2 }));
     }
-  }, [activeTool]);
+  }, []);
 
   // BASE DISPLAY SCALE AND ZOOM CALCULATIONS
-  const BASE_DISPLAY_WIDTH = 800; // px
 
   const baseDisplayScale = useMemo(() => {
     if (pages.length === 0) return 1;
@@ -482,7 +494,7 @@ export function EditPdfPage() {
         width: p.width,
         height: p.height,
         imageUrl: `data:image/png;base64,${p.data}`,
-        previewDpi: p.dpi || 200,
+        previewDpi: p.dpi || PREVIEW_BASE_DPI,
         objects: [],
         history: [[]],
         historyIndex: 0
@@ -514,6 +526,8 @@ export function EditPdfPage() {
 
   useEffect(() => {
     if (file && pages.length === 0) {
+      // Feature-file context persists the selected file across route remounts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       convertPdfToPages(file);
     }
   }, [file]);
@@ -523,8 +537,8 @@ export function EditPdfPage() {
     const visiblePage = pages[activePageIndex];
     if (!visiblePage) return;
 
-    const targetDpi = Math.max(200, Math.min(400, Math.ceil(200 * Math.max(1, zoomLevel))));
-    if ((visiblePage.previewDpi || 200) >= targetDpi) return;
+    const targetDpi = Math.max(PREVIEW_MIN_DPI, Math.min(PREVIEW_MAX_DPI, Math.ceil(200 * Math.max(1, zoomLevel))));
+    if ((visiblePage.previewDpi || PREVIEW_BASE_DPI) >= targetDpi) return;
 
     const timeout = window.setTimeout(async () => {
       const token = (previewRequestTokenRef.current[visiblePage.index] || 0) + 1;
@@ -1099,7 +1113,7 @@ export function EditPdfPage() {
       >
         {/* Brand / Title Icon */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[#4A9EFF] font-bold text-sm flex items-center gap-1.5">
+          <span className="text-[var(--canvas-accent)] font-bold text-sm flex items-center gap-1.5">
             <FileEdit size={18} />
             <span>Edit PDF</span>
           </span>
@@ -1131,7 +1145,7 @@ export function EditPdfPage() {
               </div>
               <button
                 onClick={handleRemoveFile}
-                className="text-[var(--canvas-text-muted)] hover:text-[#ffb4ab] transition-colors p-1"
+                className="text-[var(--canvas-text-muted)] hover:text-[var(--canvas-danger)] transition-colors p-1"
                 title="Clear PDF"
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
               >
@@ -1174,7 +1188,7 @@ export function EditPdfPage() {
 
         {file && loading && (
           <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
-            <Loader2 className="animate-spin text-[#4A9EFF]" size={14} />
+            <Loader2 className="animate-spin text-[var(--canvas-accent)]" size={14} />
             <span>Converting...</span>
           </div>
         )}
@@ -1200,10 +1214,7 @@ export function EditPdfPage() {
             return (
               <button
                 key={t.id}
-                onClick={() => {
-                  setActiveTool(t.id as any);
-                  setSelectedObjectId(null);
-                }}
+                onClick={() => handleToolSelect(t.id as EditTool)}
                 disabled={pages.length === 0}
                 title={t.label}
                 style={{
@@ -1217,7 +1228,7 @@ export function EditPdfPage() {
                   cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease',
                   background: isActive ? 'var(--primary-container)' : 'transparent',
-                  color: isActive ? '#ffffff' : 'var(--canvas-text-muted)',
+                  color: isActive ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
                   opacity: pages.length === 0 ? 0.4 : 1,
                 }}
                 onMouseEnter={(e) => {
@@ -1382,7 +1393,7 @@ export function EditPdfPage() {
             height: '32px',
             padding: '0 14px',
             background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary-container)',
-            color: '#ffffff',
+            color: 'var(--canvas-on-accent)',
             borderRadius: '6px',
             fontWeight: 600,
             fontSize: '13px',
@@ -1431,7 +1442,7 @@ export function EditPdfPage() {
           <>
             {/* Label / Context Badge */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-              <span className="text-[11px] uppercase tracking-wider text-[#4A9EFF] font-bold">
+            <span className="text-[11px] uppercase tracking-wider text-[var(--canvas-accent)] font-bold">
                 {selectedObject
                   ? `Selected: ${selectedObject.type}`
                   : `Config: ${activeTool}`}
@@ -1498,7 +1509,7 @@ export function EditPdfPage() {
             {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Font</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Font</span>
                   <select
                     value={selectedObject ? (selectedObject as TextObject).fontFamily : defaultTextProps.fontFamily}
                     onChange={(e) => {
@@ -1518,7 +1529,7 @@ export function EditPdfPage() {
                   </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Size</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Size</span>
                   <input
                     type="number"
                     min="1"
@@ -1536,7 +1547,7 @@ export function EditPdfPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]" title="Rotation Angle">Rot°</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title="Rotation Angle">Rot°</span>
                   <input
                     type="number"
                     step={1}
@@ -1569,7 +1580,7 @@ export function EditPdfPage() {
                       background: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)',
                       borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? '#ffffff' : 'var(--canvas-text-muted)',
+                      color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1593,7 +1604,7 @@ export function EditPdfPage() {
                       background: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)',
                       borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? '#ffffff' : 'var(--canvas-text-muted)',
+                      color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1611,7 +1622,7 @@ export function EditPdfPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignLeft size={14} />
@@ -1626,7 +1637,7 @@ export function EditPdfPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignCenter size={14} />
@@ -1641,14 +1652,14 @@ export function EditPdfPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? '#ffffff' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignRight size={14} />
                   </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Color</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as TextObject).color : defaultTextProps.color}
@@ -1683,9 +1694,9 @@ export function EditPdfPage() {
                           setDefaultShapeProps(prev => ({ ...prev, strokeWidth: val }));
                         }
                       }}
-                      style={{ accentColor: '#4A9EFF', cursor: 'pointer', margin: 0 }}
+                    style={{ accentColor: 'var(--canvas-accent)', cursor: 'pointer', margin: 0 }}
                     />
-                    <span className="text-xs font-semibold text-[#9898B8]">Stroke</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Stroke</span>
                   </label>
                   <input
                     type="color"
@@ -1703,7 +1714,7 @@ export function EditPdfPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Width</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
                   <input
                     type="range"
                     min="0"
@@ -1717,14 +1728,14 @@ export function EditPdfPage() {
                         setDefaultShapeProps(prev => ({ ...prev, strokeWidth: val }));
                       }
                     }}
-                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    style={{ width: '80px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
                   />
-                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[24px]">
+                  <span className="text-[11px] font-mono font-semibold text-[var(--canvas-accent)] min-w-[24px]">
                     {selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}px
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Fill</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Fill</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as ShapeObject).fillColor : defaultShapeProps.fillColor}
@@ -1740,7 +1751,7 @@ export function EditPdfPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Opacity</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Opacity</span>
                   <input
                     type="range"
                     min="0"
@@ -1754,9 +1765,9 @@ export function EditPdfPage() {
                         setDefaultShapeProps(prev => ({ ...prev, fillOpacity: val }));
                       }
                     }}
-                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    style={{ width: '80px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
                   />
-                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[32px]">
+                  <span className="text-[11px] font-mono font-semibold text-[var(--canvas-accent)] min-w-[32px]">
                     {selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}%
                   </span>
                 </div>
@@ -1768,7 +1779,7 @@ export function EditPdfPage() {
               (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Color</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Color</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeColor : defaultStrokeProps.strokeColor}
@@ -1784,7 +1795,7 @@ export function EditPdfPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[#9898B8]">Width</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
                   <input
                     type="range"
                     min="1"
@@ -1798,9 +1809,9 @@ export function EditPdfPage() {
                         setDefaultStrokeProps(prev => ({ ...prev, strokeWidth: val }));
                       }
                     }}
-                    style={{ width: '80px', accentColor: '#4A9EFF', cursor: 'pointer' }}
+                    style={{ width: '80px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
                   />
-                  <span className="text-[11px] font-mono font-semibold text-[#4A9EFF] min-w-[24px]">
+                  <span className="text-[11px] font-mono font-semibold text-[var(--canvas-accent)] min-w-[24px]">
                     {selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}px
                   </span>
                 </div>
@@ -1856,7 +1867,7 @@ export function EditPdfPage() {
             }}
           >
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--canvas-topbar-bg)', border: '1px solid var(--canvas-input-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Upload size={28} className="text-[#4A9EFF]" />
+              <Upload size={28} className="text-[var(--canvas-accent)]" />
             </div>
             <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">No Document Uploaded</p>
             <p className="text-sm">Click here or drag a file to begin editing.</p>
@@ -1888,7 +1899,7 @@ export function EditPdfPage() {
               }}
             >
             {pages.map((p) => {
-              const isLazy = pages.length > 50;
+              const isLazy = pages.length > PAGE_LAZY_THRESHOLD;
               return (
                 <LazyPageContainer
                   key={p.index}
@@ -1936,7 +1947,7 @@ export function EditPdfPage() {
             background: 'var(--canvas-panel-bg)',
             border: '1px solid var(--canvas-panel-border)',
             borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--canvas-menu-shadow)',
             padding: '4px 0',
             zIndex: 9999,
             minWidth: '160px',

@@ -61,7 +61,6 @@ async def compress_pdf_endpoint(
                 "X-Reduction-Pct": str(result["reduction_pct"]),
                 "X-Images-Processed": str(result["images_processed"]),
                 "X-Output-File": safe_filename,
-                "Content-Disposition": f'attachment; filename="{safe_filename}"',
             },
         )
 
@@ -170,4 +169,3 @@ async def download_compressed_pdf(download_id: str):
         media_type="application/pdf",
         filename=file_path.name,
     )
-

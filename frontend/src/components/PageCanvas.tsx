@@ -14,6 +14,7 @@ import type {
 } from '../types/canvas';
 import { generateCanvasObjectId } from '../features/edit-pdf/ids';
 import { CanvasBridge } from '../features/edit-pdf/canvasBridge';
+import { useTheme } from '../hooks/useTheme';
 import {
   CONTROL_CORNER_SIZE,
   DEFAULT_TEXT_WIDTH,
@@ -24,6 +25,8 @@ import {
   SNAP_ANGLE_DEGREES,
   SNAP_ANGLE_RADIANS,
   SNAP_THRESHOLD_DEGREES,
+  DEFAULT_SHAPE_FILL,
+  DEFAULT_STROKE_COLOR,
 } from '../features/edit-pdf/constants';
 import {
   EMPTY_TEXT_SENTINEL,
@@ -69,16 +72,28 @@ if (!(fabric.Canvas.prototype as any)._calcOffsetPatched) {
   (fabric.Canvas.prototype as any)._calcOffsetPatched = true;
 }
 
-// Global default overrides for all Fabric objects (including ActiveSelection bounding boxes)
-fabric.Object.prototype.borderColor = '#666666';
-fabric.Object.prototype.cornerColor = '#ffffff';
-fabric.Object.prototype.cornerStrokeColor = '#666666';
-(fabric.Textbox.prototype as any).editingBorderColor = '#666666';
 fabric.Object.prototype.transparentCorners = false;
 fabric.Object.prototype.cornerSize = CONTROL_CORNER_SIZE;
 fabric.Object.prototype.borderScaleFactor = 1.5;
 
+interface CanvasThemeColors {
+  selectionFill: string;
+  selectionBorder: string;
+  selectionCorner: string;
+}
+
+function readCanvasThemeColors(): CanvasThemeColors {
+  const styles = getComputedStyle(document.documentElement);
+  const read = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    selectionFill: read('--canvas-selection-fill', 'rgba(74, 158, 255, 0.2)'),
+    selectionBorder: read('--canvas-selection-border', '#4A9EFF'),
+    selectionCorner: read('--canvas-selection-corner', '#FFFFFF'),
+  };
+}
+
 export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((props) => {
+  const { theme } = useTheme();
   const {
     page,
     activeTool,
@@ -104,6 +119,36 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
   const fabricEditingRef = useRef<boolean>(false);
   const fabricRebuildingRef = useRef<boolean>(false);
   const backgroundImageRef = useRef<HTMLImageElement>(null);
+  const themeColorsRef = useRef<CanvasThemeColors>(readCanvasThemeColors());
+
+  useEffect(() => {
+    const colors = readCanvasThemeColors();
+    themeColorsRef.current = colors;
+
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    canvas.selectionColor = colors.selectionFill;
+    canvas.selectionBorderColor = colors.selectionBorder;
+    canvas.getObjects().forEach((object) => {
+      object.set({
+        borderColor: colors.selectionBorder,
+        cornerColor: colors.selectionCorner,
+        cornerStrokeColor: colors.selectionBorder,
+      });
+      if (object instanceof fabric.Textbox) {
+        object.set({ editingBorderColor: colors.selectionBorder } as Partial<fabric.Textbox>);
+      }
+    });
+
+    const activeObject = canvas.getActiveObject();
+    activeObject?.set({
+      borderColor: colors.selectionBorder,
+      cornerColor: colors.selectionCorner,
+      cornerStrokeColor: colors.selectionBorder,
+    });
+    canvas.requestRenderAll();
+  }, [theme]);
 
 
   useEffect(() => {
@@ -129,12 +174,13 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
   useEffect(() => {
     if (!fabricContainerRef.current) return;
 
+    const colors = themeColorsRef.current;
     const canvas = new fabric.Canvas(fabricContainerRef.current, {
       width: page.width,
       height: page.height,
       selection: true,
-      selectionColor: 'rgba(80, 80, 80, 0.35)',
-      selectionBorderColor: '#666666',
+      selectionColor: colors.selectionFill,
+      selectionBorderColor: colors.selectionBorder,
       selectionLineWidth: 1.5,
       fireRightClick: true,
       stopContextMenu: true,
@@ -267,13 +313,13 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         isDragging = true;
         dragStartPos = { x: pointer.x, y: pointer.y };
 
-        const strokeColor = bridge.defaultShapeProps.strokeColor || '#4A9EFF';
+        const strokeColor = bridge.defaultShapeProps.strokeColor || DEFAULT_STROKE_COLOR;
         
         const commonDragProps = {
           left: dragStartPos.x, top: dragStartPos.y,
           originX: 'left', originY: 'top',
           stroke: strokeColor, strokeWidth: 1, strokeDashArray: [],
-          fill: bridge.defaultShapeProps.fillColor || '#E8E8E8',
+          fill: bridge.defaultShapeProps.fillColor || DEFAULT_SHAPE_FILL,
           selectable: false, evented: false
         };
 
@@ -281,7 +327,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           dragRect = new fabric.Ellipse({ ...commonDragProps, rx: 0, ry: 0 } as any);
         } else if (currentTool === 'line') {
           const defaultStrokeProps = bridge.defaultStrokeProps;
-          const lineStrokeColor = defaultStrokeProps?.strokeColor || '#4A9EFF';
+          const lineStrokeColor = defaultStrokeProps?.strokeColor || DEFAULT_STROKE_COLOR;
           const lineStrokeWidth = defaultStrokeProps?.strokeWidth || 4;
           dragRect = new fabric.Line([dragStartPos.x, dragStartPos.y, dragStartPos.x, dragStartPos.y], {
             originX: 'center', originY: 'center',
@@ -428,7 +474,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
               id: newLineId, type: 'line',
               x: 0, y: 0,
               points: [finalX, finalY, finalX2, finalY2],
-              strokeColor: defaultStrokeProps?.strokeColor || '#4A9EFF',
+              strokeColor: defaultStrokeProps?.strokeColor || DEFAULT_STROKE_COLOR,
               strokeWidth: defaultStrokeProps?.strokeWidth || 4
             };
             finalObjects = [...currentPage.objects, newLine];
@@ -738,10 +784,11 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
     const handleSelectionChange = () => {
       const activeObject = canvas.getActiveObject();
       if (activeObject && activeObject.isType && activeObject.isType('ActiveSelection')) {
+        const activeColors = themeColorsRef.current;
         activeObject.set({
-          borderColor: '#666666',
-          cornerColor: '#ffffff',
-          cornerStrokeColor: '#666666',
+          borderColor: activeColors.selectionBorder,
+          cornerColor: activeColors.selectionCorner,
+          cornerStrokeColor: activeColors.selectionBorder,
           transparentCorners: false,
           cornerSize: CONTROL_CORNER_SIZE,
           borderScaleFactor: 1.5
@@ -781,7 +828,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       const textObject = currentPage.objects.find(o => o.id === target.id && o.type === 'text') as TextObject | undefined;
       if (!textObject || !isEmptyTextState(textObject.text)) return;
 
-      target.set({ text: '', fill: textObject?.color || '#000000' });
+      target.set({ text: '', fill: textObject?.color || DEFAULT_STROKE_COLOR });
       if (target.hiddenTextarea) {
         target.hiddenTextarea.value = '';
       }
@@ -804,7 +851,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
 
       if (finalText === EMPTY_TEXT_SENTINEL) {
         const textObject = currentPage.objects.find(o => o.id === target.id) as TextObject | undefined;
-        const presentation = getTextCanvasPresentation(finalText, textObject?.color || '#000000');
+        const presentation = getTextCanvasPresentation(finalText, textObject?.color || DEFAULT_STROKE_COLOR);
         target.set({ text: presentation.text, fill: presentation.fill });
         canvas.requestRenderAll();
       }
@@ -863,7 +910,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         brush.color = defaultStrokeProps.strokeColor;
       } else {
         brush.width = defaultStrokeProps.strokeWidth || 4;
-        brush.color = defaultStrokeProps.strokeColor || '#000000';
+        brush.color = defaultStrokeProps.strokeColor || DEFAULT_STROKE_COLOR;
       }
       canvas.freeDrawingBrush = brush;
       canvas.freeDrawingCursor = customCursor || 'crosshair';
@@ -927,6 +974,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       const compensatedTouchSize = Math.max(1, Math.round(24 / finalScale));
       const compensatedPadding = Math.max(1, Math.round(6 / finalScale));
 
+      const activeColors = themeColorsRef.current;
       const commonProps = {
         left: obj.x,
         top: obj.y,
@@ -939,9 +987,9 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         snapThreshold: SNAP_THRESHOLD_DEGREES,
         cornerSize: compensatedCornerSize,
         touchCornerSize: compensatedTouchSize,
-        cornerColor: '#000000',
-        cornerStrokeColor: '#000000',
-        borderColor: '#000000',
+        cornerColor: activeColors.selectionCorner,
+        cornerStrokeColor: activeColors.selectionBorder,
+        borderColor: activeColors.selectionBorder,
         borderScaleFactor: 1.5,
         padding: obj.type === 'rect' ? 0 : compensatedPadding,
         transparentCorners: false,
@@ -966,7 +1014,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             fontWeight: fontWeight,
             textAlign: textObj.textAlign || 'left',
             editable: true,
-            editingBorderColor: '#666666',
+            editingBorderColor: activeColors.selectionBorder,
             splitByGrapheme: true
           } as any);
           fabricObj.setControlsVisibility({ mt: false, mb: false });
@@ -1282,4 +1330,3 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
 });
 
 PageCanvas.displayName = 'PageCanvas';
-

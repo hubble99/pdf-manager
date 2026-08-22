@@ -75,7 +75,7 @@ export function CompressPage() {
     setFile(f);
     setResult(null);
     setOutputFilename(`compressed_${f.name}`);
-  }, []);
+  }, [setFile, showToast]);
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
   const handleDragLeave = () => setIsDragOver(false);

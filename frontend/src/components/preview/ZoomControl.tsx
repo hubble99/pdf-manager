@@ -1,14 +1,15 @@
 import { Minus, Plus, Maximize } from 'lucide-react';
+import { MAX_PREVIEW_ZOOM, MIN_PREVIEW_ZOOM } from '../../utils/previewZoom';
 
 export interface ZoomControlProps {
-  zoom: number; // 0.25 - 3.0
+  zoom: number; // 0.05 - 3.0
   onChange: (zoom: number) => void;
   onFitToPage: () => void;
 }
 
 export function ZoomControl({ zoom, onChange, onFitToPage }: ZoomControlProps) {
-  const MIN_ZOOM = 0.25;
-  const MAX_ZOOM = 3.0;
+  const MIN_ZOOM = MIN_PREVIEW_ZOOM;
+  const MAX_ZOOM = MAX_PREVIEW_ZOOM;
 
   const handleDecrease = () => {
     onChange(Math.max(MIN_ZOOM, zoom - 0.25));

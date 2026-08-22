@@ -240,10 +240,11 @@ export function OrganizePage() {
         setInfoLoading(false);
       }
     },
-    []
+    [setFile, showToast]
   );
   useEffect(() => {
     if (file && !pdfInfo && !infoLoading && !result) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadFile(file);
     }
   }, [file, pdfInfo, infoLoading, result, loadFile]);

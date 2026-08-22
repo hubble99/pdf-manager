@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileSearch } from 'lucide-react';
 import { PreviewCanvas } from './PreviewCanvas';
 import { PreviewInfo } from './PreviewInfo';
 import { PageNavigation } from './PageNavigation';
 import { RotationControl } from './RotationControl';
 import { ZoomControl } from './ZoomControl';
+import { calculatePreviewFitZoom } from '../../utils/previewZoom';
 
 export interface PreviewPanelProps {
   pdfFile?: File | null;
@@ -45,28 +46,54 @@ export function PreviewPanel({
   className = '',
   isHighlighted = false,
 }: PreviewPanelProps) {
-  const [imgUrl, setImgUrl] = useState<string | null>(null);
-  const [dimensions, setDimensions] = useState<{ w: number; h: number } | null>(null);
+  const previewSourceKey = pdfFile
+    ? `pdf:${pdfFile.name}:${pdfFile.size}:${pdfFile.lastModified}:${currentPage}`
+    : imageFile
+      ? `image:${imageFile.name}:${imageFile.size}:${imageFile.lastModified}`
+      : 'none';
+  const [dimensions, setDimensions] = useState<{ sourceKey: string; w: number; h: number } | null>(null);
+  const [viewport, setViewport] = useState<{ w: number; h: number } | null>(null);
+  const lastFittedPreviewRef = useRef<string | null>(null);
 
-  // Create object URL for imageFile
-  useEffect(() => {
-    if (imageFile) {
-      const url = URL.createObjectURL(imageFile);
-      setImgUrl(url);
-      setDimensions(null); // Reset dimensions on new image
-      return () => {
-        URL.revokeObjectURL(url);
-      };
-    }
-    setImgUrl(null);
-  }, [imageFile]);
+  const imgUrl = useMemo(
+    () => imageFile ? URL.createObjectURL(imageFile) : null,
+    [imageFile]
+  );
 
-  // Reset dimensions on new PDF page
   useEffect(() => {
-    if (pdfFile) {
-      setDimensions(null);
-    }
-  }, [pdfFile, currentPage]);
+    return () => {
+      if (imgUrl) URL.revokeObjectURL(imgUrl);
+    };
+  }, [imgUrl]);
+
+  const currentDimensions = dimensions?.sourceKey === previewSourceKey ? dimensions : null;
+  const displayDimensions = currentDimensions && (rotation === 90 || rotation === 270)
+    ? { w: currentDimensions.h, h: currentDimensions.w }
+    : currentDimensions;
+
+  const fitToPage = useCallback(() => {
+    if (!currentDimensions || !viewport) return;
+
+    onZoomChange(calculatePreviewFitZoom({
+      sourceWidth: currentDimensions.w,
+      sourceHeight: currentDimensions.h,
+      viewportWidth: viewport.w,
+      viewportHeight: viewport.h,
+      rotation,
+    }));
+  }, [currentDimensions, onZoomChange, rotation, viewport]);
+
+  const fitKey = `${previewSourceKey}:${rotation}`;
+  useEffect(() => {
+    if (!currentDimensions || !viewport || lastFittedPreviewRef.current === fitKey) return;
+
+    fitToPage();
+    lastFittedPreviewRef.current = fitKey;
+  }, [currentDimensions, fitKey, fitToPage, viewport]);
+
+  const handleViewportChange = useCallback((w: number, h: number) => {
+    setViewport((previous) => previous?.w === w && previous.h === h ? previous : { w, h });
+  }, []);
 
   if (!pdfFile && !imageFile) {
     return (
@@ -113,7 +140,7 @@ export function PreviewPanel({
         <ZoomControl
           zoom={zoom}
           onChange={onZoomChange}
-          onFitToPage={() => onZoomChange(1.0)}
+          onFitToPage={fitToPage}
         />
       </div>
       
@@ -124,7 +151,8 @@ export function PreviewPanel({
         imageRotation={rotation}
         flipH={flipH}
         zoom={zoom}
-        onLoad={(w, h) => setDimensions({ w, h })}
+        onLoad={(w, h) => setDimensions({ sourceKey: previewSourceKey, w, h })}
+        onViewportChange={handleViewportChange}
         isHighlighted={isHighlighted}
       />
       
@@ -132,8 +160,8 @@ export function PreviewPanel({
         filename={filename}
         currentPage={isPdf ? currentPage : undefined}
         totalPages={isPdf ? totalPages : undefined}
-        width={dimensions?.w}
-        height={dimensions?.h}
+        width={displayDimensions?.w}
+        height={displayDimensions?.h}
       />
       
     </div>

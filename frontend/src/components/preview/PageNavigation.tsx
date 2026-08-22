@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface PageNavigationProps {
@@ -14,11 +14,7 @@ export function PageNavigation({
   onChange,
   disabled = false,
 }: PageNavigationProps) {
-  const [inputValue, setInputValue] = useState(String(currentPage));
-
-  useEffect(() => {
-    setInputValue(String(currentPage));
-  }, [currentPage]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handlePrev = () => {
     if (currentPage > 1 && !disabled) {
@@ -33,12 +29,11 @@ export function PageNavigation({
   };
 
   const commitValue = () => {
-    const val = parseInt(inputValue, 10);
+    const val = parseInt(inputRef.current?.value ?? '', 10);
     if (!isNaN(val) && val >= 1 && val <= totalPages) {
       onChange(val);
-    } else {
-      // Revert if invalid
-      setInputValue(String(currentPage));
+    } else if (inputRef.current) {
+      inputRef.current.value = String(currentPage);
     }
   };
 
@@ -60,9 +55,10 @@ export function PageNavigation({
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
         <span className="text-muted">Page:</span>
         <input
+          key={currentPage}
+          ref={inputRef}
           type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          defaultValue={currentPage}
           onBlur={commitValue}
           onKeyDown={handleKeyDown}
           disabled={disabled}

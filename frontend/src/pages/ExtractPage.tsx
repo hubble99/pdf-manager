@@ -100,11 +100,12 @@ export function ExtractPage() {
         setInfoLoading(false);
       }
     },
-    []
+    [setFile, showToast]
   );
   useEffect(() => {
     if (file && !pdfInfo && !infoLoading && !result) {
-      loadFile(file);
+      const timer = window.setTimeout(() => void loadFile(file), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [file, pdfInfo, infoLoading, result, loadFile]);
 

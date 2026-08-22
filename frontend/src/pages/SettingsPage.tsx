@@ -34,14 +34,11 @@ function formatBytes(bytes: number): string {
 export function SettingsPage() {
   const { showToast } = useToast();
   const { theme, setTheme } = useTheme();
-  const [outDir, setOutDir] = useState('');
+  const [outDir, setOutDir] = useState(() => localStorage.getItem('pdf_manager_outdir') || '');
   const [isClearing, setIsClearing] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('pdf_manager_outdir');
-    if (saved) setOutDir(saved);
-
     const updateHistory = () => setHistory(getHistory());
     updateHistory();
     window.addEventListener('history-updated', updateHistory);

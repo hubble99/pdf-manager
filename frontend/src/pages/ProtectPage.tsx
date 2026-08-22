@@ -88,7 +88,7 @@ export function ProtectPage() {
       setAllowCopy(true);
       setAllowModify(true);
     },
-    []
+    [setFile, showToast]
   );
 
   const handleDragOverFile = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };

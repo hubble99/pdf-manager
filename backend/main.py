@@ -4,13 +4,15 @@ PDF Manager Backend — FastAPI Application Entry Point
 import logging
 import shutil
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
 from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, metadata, protect, preview, edit_pdf
+from version import APP_VERSION
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -74,7 +76,7 @@ async def lifespan(app: FastAPI):
 # ── FastAPI App ─────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="PDF Manager API",
-    version="1.0.0",
+    version=APP_VERSION,
     description="Backend API for PDF Manager desktop application",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -143,6 +145,27 @@ async def expose_headers_middleware(request: Request, call_next):
 
 
 # ── Global Exception Handler ────────────────────────────────────────────────────
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else "Request failed."
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers=exc.headers,
+        content=ErrorResponse(message=message, detail=detail).model_dump(),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=ErrorResponse(
+            message="Request validation failed.",
+            detail=exc.errors(),
+        ).model_dump(),
+    )
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception on {request.url}: {exc}", exc_info=True)
@@ -179,7 +202,7 @@ async def health_check():
         status="success",
         message="PDF Manager API is running",
         data={
-            "version": "1.0.0",
+            "version": APP_VERSION,
             "output_dir": str(settings.OUTPUT_DIR),
             "temp_dir": str(settings.TEMP_DIR),
         },
