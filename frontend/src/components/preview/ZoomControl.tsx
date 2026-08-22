@@ -1,22 +1,44 @@
+import { useEffect, useRef } from 'react';
 import { Minus, Plus, Maximize } from 'lucide-react';
 import { MAX_PREVIEW_ZOOM, MIN_PREVIEW_ZOOM } from '../../utils/previewZoom';
 
 export interface ZoomControlProps {
   zoom: number; // 0.05 - 3.0
   onChange: (zoom: number) => void;
+  onCommit?: (zoom: number) => void;
+  onInteractionStart?: () => void;
   onFitToPage: () => void;
 }
 
-export function ZoomControl({ zoom, onChange, onFitToPage }: ZoomControlProps) {
+export function ZoomControl({ zoom, onChange, onCommit = onChange, onInteractionStart, onFitToPage }: ZoomControlProps) {
   const MIN_ZOOM = MIN_PREVIEW_ZOOM;
   const MAX_ZOOM = MAX_PREVIEW_ZOOM;
+  const pendingZoomRef = useRef(zoom);
+
+  useEffect(() => {
+    pendingZoomRef.current = zoom;
+  }, [zoom]);
+
+  const previewZoom = (nextZoom: number) => {
+    pendingZoomRef.current = nextZoom;
+    onInteractionStart?.();
+    onChange(nextZoom);
+  };
+
+  const commitZoom = () => {
+    onCommit(pendingZoomRef.current);
+  };
 
   const handleDecrease = () => {
-    onChange(Math.max(MIN_ZOOM, zoom - 0.25));
+    const nextZoom = Math.max(MIN_ZOOM, zoom - 0.25);
+    pendingZoomRef.current = nextZoom;
+    onCommit(nextZoom);
   };
 
   const handleIncrease = () => {
-    onChange(Math.min(MAX_ZOOM, zoom + 0.25));
+    const nextZoom = Math.min(MAX_ZOOM, zoom + 0.25);
+    pendingZoomRef.current = nextZoom;
+    onCommit(nextZoom);
   };
 
   return (
@@ -34,7 +56,12 @@ export function ZoomControl({ zoom, onChange, onFitToPage }: ZoomControlProps) {
         max={MAX_ZOOM}
         step={0.05}
         value={zoom}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
+        onPointerDown={onInteractionStart}
+        onPointerUp={commitZoom}
+        onKeyDown={onInteractionStart}
+        onKeyUp={commitZoom}
+        onBlur={commitZoom}
+        onChange={(e) => previewZoom(parseFloat(e.target.value))}
         style={{ flex: 1, accentColor: 'var(--accent)' }}
       />
       <button

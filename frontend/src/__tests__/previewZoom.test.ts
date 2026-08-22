@@ -21,6 +21,15 @@ describe('calculatePreviewFitZoom', () => {
     })).toBeCloseTo(636 / 1200);
   });
 
+  it('fits a landscape page without introducing a vertical scrollbar', () => {
+    expect(calculatePreviewFitZoom({
+      sourceWidth: 842,
+      sourceHeight: 595,
+      viewportWidth: 600,
+      viewportHeight: 600,
+    })).toBeCloseTo(536 / 842);
+  });
+
   it('keeps a usable minimum zoom for very large images', () => {
     expect(calculatePreviewFitZoom({
       sourceWidth: 100000,

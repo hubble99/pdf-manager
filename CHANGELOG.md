@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3 — 2026-08-22
+
+- Stabilized shared previews while switching PDF pages by retaining the current page during loading and discarding late preview responses safely.
+- Fit mode now recalculates from the active page dimensions and viewport, including resize and rotated landscape pages.
+- Added regression coverage for preview cancellation, mixed-size documents, responsive fit, and committed zoom slider interactions.
+
 ## 1.1.2 — 2026-08-22
 
 - Fixed shared PDF and image previews to fit the available viewport across Split, PDF to Image, Image to PDF, and Insert Content.

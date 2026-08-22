@@ -53,7 +53,9 @@ export function PreviewPanel({
       : 'none';
   const [dimensions, setDimensions] = useState<{ sourceKey: string; w: number; h: number } | null>(null);
   const [viewport, setViewport] = useState<{ w: number; h: number } | null>(null);
-  const lastFittedPreviewRef = useRef<string | null>(null);
+  const [isFitMode, setIsFitMode] = useState(true);
+  const [draftZoom, setDraftZoom] = useState<number | null>(null);
+  const lastFitZoomRef = useRef<number | null>(null);
 
   const imgUrl = useMemo(
     () => imageFile ? URL.createObjectURL(imageFile) : null,
@@ -71,29 +73,59 @@ export function PreviewPanel({
     ? { w: currentDimensions.h, h: currentDimensions.w }
     : currentDimensions;
 
-  const fitToPage = useCallback(() => {
-    if (!currentDimensions || !viewport) return;
+  const fitZoom = useMemo(() => {
+    if (!currentDimensions || !viewport) return null;
 
-    onZoomChange(calculatePreviewFitZoom({
+    return calculatePreviewFitZoom({
       sourceWidth: currentDimensions.w,
       sourceHeight: currentDimensions.h,
       viewportWidth: viewport.w,
       viewportHeight: viewport.h,
       rotation,
-    }));
-  }, [currentDimensions, onZoomChange, rotation, viewport]);
+    });
+  }, [currentDimensions, rotation, viewport]);
 
-  const fitKey = `${previewSourceKey}:${rotation}`;
+  const fitToPage = useCallback(() => {
+    if (fitZoom === null) return;
+
+    lastFitZoomRef.current = fitZoom;
+    setDraftZoom(null);
+    setIsFitMode(true);
+    onZoomChange(fitZoom);
+  }, [fitZoom, onZoomChange]);
+
   useEffect(() => {
-    if (!currentDimensions || !viewport || lastFittedPreviewRef.current === fitKey) return;
+    if (!isFitMode || fitZoom === null || lastFitZoomRef.current === fitZoom) return;
 
-    fitToPage();
-    lastFittedPreviewRef.current = fitKey;
-  }, [currentDimensions, fitKey, fitToPage, viewport]);
+    lastFitZoomRef.current = fitZoom;
+    onZoomChange(fitZoom);
+  }, [fitZoom, isFitMode, onZoomChange]);
 
   const handleViewportChange = useCallback((w: number, h: number) => {
     setViewport((previous) => previous?.w === w && previous.h === h ? previous : { w, h });
   }, []);
+
+  const handleManualZoomChange = useCallback((nextZoom: number) => {
+    setDraftZoom(nextZoom);
+  }, []);
+
+  const commitManualZoomChange = useCallback((nextZoom: number) => {
+    lastFitZoomRef.current = null;
+    setIsFitMode(false);
+    setDraftZoom(null);
+    onZoomChange(nextZoom);
+  }, [onZoomChange]);
+
+  const beginZoomInteraction = useCallback(() => {
+    lastFitZoomRef.current = null;
+    setIsFitMode(false);
+  }, []);
+
+  const liveZoom = draftZoom ?? (isFitMode && fitZoom !== null ? fitZoom : zoom);
+
+  const handlePreviewLoad = useCallback((w: number, h: number) => {
+    setDimensions({ sourceKey: previewSourceKey, w, h });
+  }, [previewSourceKey]);
 
   if (!pdfFile && !imageFile) {
     return (
@@ -138,8 +170,10 @@ export function PreviewPanel({
         </div>
         
         <ZoomControl
-          zoom={zoom}
-          onChange={onZoomChange}
+          zoom={liveZoom}
+          onChange={handleManualZoomChange}
+          onCommit={commitManualZoomChange}
+          onInteractionStart={beginZoomInteraction}
           onFitToPage={fitToPage}
         />
       </div>
@@ -150,9 +184,10 @@ export function PreviewPanel({
         imageUrl={imgUrl || undefined}
         imageRotation={rotation}
         flipH={flipH}
-        zoom={zoom}
-        onLoad={(w, h) => setDimensions({ sourceKey: previewSourceKey, w, h })}
+        zoom={liveZoom}
+        onLoad={handlePreviewLoad}
         onViewportChange={handleViewportChange}
+        viewport={viewport}
         isHighlighted={isHighlighted}
       />
       
