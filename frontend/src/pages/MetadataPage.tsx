@@ -15,6 +15,8 @@ import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
+import { buildOutputFilename, sanitizeFilenameStem } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -153,31 +155,17 @@ export function MetadataPage() {
 
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const blobUrl = URL.createObjectURL(blob);
-      
-      const getOutputFilename = (): string => {
-        const t = title.trim();
-        if (t) {
-          return t.replace(/[<>:"/\\|?*]/g, '_').substring(0, 100) + '.pdf';
-        }
-        return file.name.replace('.pdf', '') + '_metadata.pdf';
-      };
-      
-      let filename = getOutputFilename();
-      if (response.headers['content-disposition']) {
-        const match = response.headers['content-disposition'].match(/filename="([^"]+)"/);
-        if (match) filename = match[1];
-      } else if (response.headers['x-output-file']) {
-        filename = response.headers['x-output-file'];
-      }
+      const fallbackStem = title.trim() || `${sanitizeFilenameStem(file.name)}_metadata`;
+      const filename = getFilenameFromHeaders(
+        response.headers,
+        buildOutputFilename(fallbackStem, 'pdf'),
+      );
 
       setResult({ blobUrl, filename });
       addHistoryEntry({ filename, action: 'Updated Metadata', size: 0 });
 
       // Auto-download
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename;
-      a.click();
+      triggerBlobDownload(blob, filename);
 
       showToast({
         type: 'success',

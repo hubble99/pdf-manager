@@ -19,6 +19,14 @@ export function getFilenameFromHeaders(
   // Try Content-Disposition first
   const cd = headers['content-disposition'] as string | undefined;
   if (cd) {
+    const encodedMatch = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    if (encodedMatch?.[1]) {
+      try {
+        return decodeURIComponent(encodedMatch[1]);
+      } catch {
+        return encodedMatch[1];
+      }
+    }
     const match = cd.match(/filename="([^"]+)"/);
     if (match?.[1]) return match[1];
   }

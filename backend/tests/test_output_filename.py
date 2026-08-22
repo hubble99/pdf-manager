@@ -26,8 +26,14 @@ def _has_uuid_noise(filename: str) -> bool:
 class TestSanitizeFilename:
     def test_basic_clean_name(self):
         result = sanitize_filename("Hasil Merge", "pdf")
-        assert result == "Hasil_Merge.pdf"
+        assert result == "Hasil Merge.pdf"
         assert not _has_uuid_noise(result)
+
+    def test_preserves_user_entered_spaces(self):
+        assert sanitize_filename("Hasil Editing", "pdf") == "Hasil Editing.pdf"
+
+    def test_normalizes_only_whitespace_runs(self):
+        assert sanitize_filename("Laporan  Akhir\t2026", "pdf") == "Laporan Akhir 2026.pdf"
 
     def test_strips_existing_extension(self):
         result = sanitize_filename("report.pdf", "pdf")
@@ -71,6 +77,9 @@ class TestSanitizeFilename:
     def test_collapse_underscores(self):
         result = sanitize_filename("file___name", "pdf")
         assert "__" not in result
+
+    def test_prefixes_windows_reserved_name(self):
+        assert sanitize_filename("CON", "pdf") == "_CON.pdf"
 
 
 # ── Integration: core modules must not add UUID ────────────────────────────────

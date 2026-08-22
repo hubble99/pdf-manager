@@ -19,6 +19,7 @@ import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
+import { appendFilenameSuffix } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -116,7 +117,7 @@ export function ProtectPage() {
     formData.append('file', file);
     formData.append('user_pw', userPw);
     formData.append('owner_pw', ownerPw);
-    formData.append('output_filename', outputName ? `${outputName}_protected.pdf` : `protected_${file.name}`);
+    formData.append('output_filename', appendFilenameSuffix(outputName || file.name, 'protected'));
     formData.append('allow_print', String(allowPrint));
     formData.append('allow_copy', String(allowCopy));
     formData.append('allow_modify', String(allowModify));
@@ -170,7 +171,7 @@ export function ProtectPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_pw', removePw);
-    formData.append('output_filename', outputName ? `${outputName}_unlocked.pdf` : `unlocked_${file.name}`);
+    formData.append('output_filename', outputName || file.name);
 
     try {
       const response = await apiClient.post('/api/v1/protect/remove', formData, { responseType: 'blob' });

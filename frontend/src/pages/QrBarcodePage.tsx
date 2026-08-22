@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
+import { buildOutputFilename } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
