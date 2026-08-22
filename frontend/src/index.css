@@ -33,6 +33,7 @@
 
   /* Semantic — accent for interactive elements */
   --accent:                   #4a9eff;
+  --on-accent:                #ffffff;
   --accent-dim:               rgba(74, 158, 255, 0.12);
   --accent-hover:             rgba(74, 158, 255, 0.08);
 
@@ -133,6 +134,7 @@
   --inverse-primary:          #F8DADA;
 
   --accent:                   #5C3333; /* Main primary color */
+  --on-accent:                #FFFFFF;
   --accent-dim:               rgba(92, 51, 51, 0.12); /* Accent background */
   --accent-hover:             rgba(92, 51, 51, 0.08); /* Accent hover */
 
@@ -206,6 +208,7 @@
   --inverse-primary:          #D5DEEF;
 
   --accent:                   #395886; /* Main primary color */
+  --on-accent:                #FFFFFF;
   --accent-dim:               rgba(57, 88, 134, 0.12); /* Accent background */
   --accent-hover:             rgba(57, 88, 134, 0.08); /* Accent hover */
 

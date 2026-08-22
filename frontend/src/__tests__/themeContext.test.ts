@@ -25,3 +25,16 @@ describe('canvas theme tokens', () => {
     expect(themeBlock).toContain(`--canvas-selection-border:  ${selectionBorder};`);
   });
 });
+
+describe('accent text tokens', () => {
+  it.each([
+    ['dark', ':root'],
+    ['dusty-rose', '[data-theme="dusty-rose"]'],
+    ['steel-blue', '[data-theme="steel-blue"]'],
+  ])('defines --on-accent for %s', (_theme, selector) => {
+    const blockStart = stylesheet.indexOf(selector);
+    const block = stylesheet.slice(blockStart, stylesheet.indexOf('\n}', blockStart));
+
+    expect(block).toMatch(/--on-accent:\s*#[0-9A-Fa-f]{6};/);
+  });
+});
