@@ -16,6 +16,7 @@ import type { ImageToPdfResult } from '../types';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PreviewPanel } from '../components/preview';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -246,26 +247,15 @@ export function ImageToPdfPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <ImageIcon size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Image to PDF</h1>
-            <p className="page-subtitle">Convert and combine images into a PDF document</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={ImageIcon}
+        title="Image to PDF"
+        description="Convert and combine images into a PDF document"
+      />
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="page-body">
+      <div className="page-body page-body--workspace">
         <div className="feature-split-layout">
           
           {/* Controls */}
@@ -273,7 +263,7 @@ export function ImageToPdfPage() {
             {/* Drop zone */}
             <div
               id="img-to-pdf-drop-zone"
-              className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+              className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -317,7 +307,7 @@ export function ImageToPdfPage() {
                       key={entry.id} 
                       className="file-item"
                       style={{ 
-                        backgroundColor: activeIdx === idx ? 'var(--bg-inset)' : undefined,
+                        backgroundColor: activeIdx === idx ? 'var(--surface-container-lowest)' : undefined,
                         borderColor: activeIdx === idx ? 'var(--accent)' : undefined,
                         cursor: 'pointer'
                       }}
@@ -539,9 +529,6 @@ export function ImageToPdfPage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

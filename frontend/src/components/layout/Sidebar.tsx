@@ -39,7 +39,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'image-to-pdf',  label: 'Image to PDF',    icon: FileImage,  path: '/image-to-pdf' },
   { id: 'qr-barcode',    label: 'QR & Barcode',    icon: QrCode,     path: '/qr-barcode' },
   { id: 'insert',        label: 'Insert Content',  icon: FilePlus,   path: '/insert', badge: 'ADV' },
-  { id: 'edit-pdf',      label: 'Edit PDF',        icon: PenLine,    path: '/edit-pdf' },
+  { id: 'edit-canvas',   label: 'Edit Canvas',     icon: PenLine,    path: '/edit-canvas' },
 ];
 
 export function Sidebar() {
@@ -73,7 +73,7 @@ export function Sidebar() {
           {!collapsed && (
             <div>
               <div className="sidebar-logo-text">PDF Manager</div>
-              <div className="sidebar-logo-sub">v1.0.0</div>
+              <div className="sidebar-logo-sub">v1.2.0</div>
             </div>
           )}
         </div>
@@ -146,7 +146,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="sidebar-footer">
           <p className="text-mono text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
-            PDF Manager v1.0.0<br />
+            PDF Manager v1.2.0<br />
             <span style={{ opacity: 0.6 }}>Offline · Local Processing</span>
           </p>
         </div>

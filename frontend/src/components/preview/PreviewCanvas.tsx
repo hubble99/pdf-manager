@@ -210,7 +210,7 @@ export function PreviewCanvas({
         alignItems: canCenterVertically ? 'center' : 'flex-start',
         justifyContent: canCenterHorizontally ? 'center' : 'flex-start',
         padding: '2rem',
-        backgroundColor: 'var(--bg-inset, #111)',
+        backgroundColor: 'var(--surface-container-lowest)',
         position: 'relative',
       }}
     >
@@ -226,7 +226,7 @@ export function PreviewCanvas({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--text-muted)'
+            color: 'var(--on-surface-variant)'
           }}
         >
           {file && file.size > 50 * 1024 * 1024 ? (
@@ -246,7 +246,7 @@ export function PreviewCanvas({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--text-muted)',
+            color: 'var(--on-surface-variant)',
             backgroundColor: 'var(--surface-dim)',
             borderRadius: 4,
           }}
@@ -294,8 +294,8 @@ export function PreviewCanvas({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: 'var(--bg-inset, #111)',
-                color: 'var(--text-muted)',
+                backgroundColor: 'var(--surface-container-lowest)',
+                color: 'var(--on-surface-variant)',
               }}
             >
               <Loader2 size={28} style={{ animation: 'spin 1s linear infinite' }} />

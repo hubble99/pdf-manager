@@ -6,13 +6,23 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from config import settings
-from core.edit_pdf import EditPdfStampError, save_edited_pdf
+from core.edit_canvas import EditCanvasStampError, save_edited_pdf
 from models.common import ErrorResponse
 from utils.file_utils import cleanup_temp_file, save_upload
 from utils.filename_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _contains_legacy_content_edit(value) -> bool:
+    if isinstance(value, dict):
+        if value.get("type") == "content_edit":
+            return True
+        return any(_contains_legacy_content_edit(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_legacy_content_edit(item) for item in value)
+    return False
 
 
 async def _read_annotations(upload: UploadFile) -> list:
@@ -27,22 +37,30 @@ async def _read_annotations(upload: UploadFile) -> list:
         raise HTTPException(status_code=400, detail="Annotations JSON must be an array with one entry per PDF page.")
     for page_index, annotation in enumerate(payload):
         if annotation == "" or isinstance(annotation, (str, dict)):
+            if isinstance(annotation, dict) and _contains_legacy_content_edit(annotation):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Annotation entry at page index {page_index}: selectable text editing "
+                        "is unavailable in the stable Edit Canvas editor."
+                    ),
+                )
             continue
         raise HTTPException(status_code=400, detail=f"Annotation entry at page index {page_index} must be a string, object, or empty string.")
     return payload
 
 
-@router.post("/edit-pdf/save")
+@router.post("/edit-canvas/save")
 async def save_edited_pdf_endpoint(file: UploadFile = File(...), annotations: UploadFile = File(...), output_filename: str = Form("edited_document")):
     annotations_list = await _read_annotations(annotations)
     temp_path: Path | None = None
     try:
-        temp_path = await save_upload(file, subdir="edit_pdf")
+        temp_path = await save_upload(file, subdir="edit_canvas")
         safe_name = sanitize_filename(output_filename, "pdf")
         out_path = settings.OUTPUT_DIR / safe_name
         try:
             result = save_edited_pdf(temp_path, annotations_list, out_path)
-        except EditPdfStampError as exc:
+        except EditCanvasStampError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return FileResponse(
             path=str(out_path), media_type="application/pdf", filename=safe_name,

@@ -73,7 +73,7 @@ async def test_pdf_to_image_page_uses_requested_dpi():
     assert page["height"] == 600
 
 @pytest.mark.asyncio
-async def test_edit_pdf_save():
+async def test_edit_canvas_save():
     doc = fitz.open()
     doc.new_page(width=100, height=200)
     pdf_bytes = doc.write()
@@ -97,7 +97,7 @@ async def test_edit_pdf_save():
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/api/v1/edit-pdf/save", data=data, files=files)
+        resp = await client.post("/api/v1/edit-canvas/save", data=data, files=files)
 
     assert resp.status_code == 200
     assert resp.headers.get("content-type") == "application/pdf"
@@ -106,7 +106,7 @@ async def test_edit_pdf_save():
 
 
 @pytest.mark.asyncio
-async def test_edit_pdf_exports_supported_objects_without_raster_overlay():
+async def test_edit_canvas_exports_supported_objects_without_raster_overlay():
     doc = fitz.open()
     source_page = doc.new_page(width=200, height=200)
     source_page.insert_text((12, 16), "Original vector background", fontsize=8)
@@ -184,7 +184,7 @@ async def test_edit_pdf_exports_supported_objects_without_raster_overlay():
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/api/v1/edit-pdf/save", files=files)
+        resp = await client.post("/api/v1/edit-canvas/save", files=files)
 
     assert resp.status_code == 200
     result = fitz.open(stream=resp.content, filetype="pdf")
@@ -203,7 +203,77 @@ async def test_edit_pdf_exports_supported_objects_without_raster_overlay():
 
 
 @pytest.mark.asyncio
-async def test_edit_pdf_rejects_malformed_annotations_json():
+async def test_edit_canvas_persists_letter_spacing_without_scaling_glyphs():
+    document = fitz.open()
+    for _ in range(3):
+        document.new_page(width=300, height=120)
+    pdf_bytes = document.write()
+    document.close()
+
+    annotations = []
+    for letter_spacing in (-100, 0, 500):
+        annotations.append({
+            "image_b64": "",
+            "canvas_width": 300,
+            "canvas_height": 120,
+            "native_objects": [{
+                "type": "text",
+                "x": 20,
+                "y": 20,
+                "width": 120,
+                "text": "TRACK",
+                "lines": ["TRACK"],
+                "fontFamily": "Arial",
+                "fontSize": 20,
+                "letterSpacing": letter_spacing,
+                "lineHeight": 1.16,
+                "color": "#000000",
+                "bold": False,
+                "italic": False,
+                "opacity": 1,
+            }],
+        })
+
+    files = {
+        "file": ("test.pdf", pdf_bytes, "application/pdf"),
+        "annotations": ("annotations.json", json.dumps(annotations).encode("utf-8"), "application/json"),
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post("/api/v1/edit-canvas/save", files=files)
+
+    assert response.status_code == 200
+    result = fitz.open(stream=response.content, filetype="pdf")
+    try:
+        widths = []
+        heights = []
+        for page in result:
+            chars = [
+                char
+                for block in page.get_text("rawdict")["blocks"]
+                for line in block.get("lines", [])
+                for span in line.get("spans", [])
+                for char in span.get("chars", [])
+            ]
+            assert "".join(char["c"] for char in chars).replace(" ", "") == "TRACK"
+            x0 = min(char["bbox"][0] for char in chars)
+            y0 = min(char["bbox"][1] for char in chars)
+            x1 = max(char["bbox"][2] for char in chars)
+            y1 = max(char["bbox"][3] for char in chars)
+            widths.append(x1 - x0)
+            heights.append(y1 - y0)
+    finally:
+        result.close()
+
+    assert widths[0] < widths[1] < widths[2]
+    assert widths[1] - widths[0] == pytest.approx(8, abs=1)
+    assert widths[2] - widths[1] == pytest.approx(40, abs=1)
+    assert heights[0] == pytest.approx(heights[1], rel=0.01)
+    assert heights[2] == pytest.approx(heights[1], rel=0.01)
+
+
+@pytest.mark.asyncio
+async def test_edit_canvas_rejects_malformed_annotations_json():
     doc = fitz.open()
     doc.new_page(width=100, height=200)
     pdf_bytes = doc.write()
@@ -215,14 +285,14 @@ async def test_edit_pdf_rejects_malformed_annotations_json():
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/api/v1/edit-pdf/save", files=files)
+        resp = await client.post("/api/v1/edit-canvas/save", files=files)
 
     assert resp.status_code == 400
     assert "Invalid annotations JSON at line" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_edit_pdf_rejects_non_array_annotations():
+async def test_edit_canvas_rejects_non_array_annotations():
     doc = fitz.open()
     doc.new_page(width=100, height=200)
     pdf_bytes = doc.write()
@@ -234,7 +304,7 @@ async def test_edit_pdf_rejects_non_array_annotations():
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post("/api/v1/edit-pdf/save", files=files)
+        resp = await client.post("/api/v1/edit-canvas/save", files=files)
 
     assert resp.status_code == 400
     assert resp.json()["detail"] == "Annotations JSON must be an array with one entry per PDF page."

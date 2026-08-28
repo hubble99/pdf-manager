@@ -23,11 +23,11 @@ export function ThumbnailStrip({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        borderBottom: '1px solid var(--border)',
+        borderBottom: '1px solid var(--outline-variant)',
         backgroundColor: 'var(--surface-container)',
       }}
     >
-      <div style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+      <div style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, color: 'var(--on-surface-variant)' }}>
         Page Thumbnails
       </div>
       <div
@@ -54,9 +54,9 @@ export function ThumbnailStrip({
                 width: 80,
                 height: 110,
                 borderRadius: 'var(--radius-sm)',
-                border: isActive ? '2px solid var(--accent)' : '1px solid var(--border)',
+                border: isActive ? '2px solid var(--accent)' : '1px solid var(--outline-variant)',
                 overflow: 'hidden',
-                backgroundColor: 'var(--bg-inset)',
+                backgroundColor: 'var(--surface-container-lowest)',
                 transition: 'border-color 0.2s',
               }}
               onClick={() => onPageClick(page)}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 — 2026-08-28
+
+- Froze the UAT-approved canvas-only Edit Canvas baseline and removed the unstable selectable-text editing prototype from the runtime contract.
+- Added Smart Eyedropper foreground sampling and non-destructive letter-spacing controls for text overlays.
+- Added an application font library with numeric font weights, lazy browser face loading, nearest-weight resolution, and native PDF font embedding.
+- Preserved text, shapes, lines, freehand paths, and highlights as native PDF output without full-page rasterization.
+- Consolidated shared feature headers, empty/loading/error states, preview layout behavior, and accessibility styling.
+- Renamed Edit PDF canvas routes and modules to Edit Canvas in preparation for the isolated native editor rewrite.
+
 ## 1.1.3 — 2026-08-22
 
 - Stabilized shared previews while switching PDF pages by retaining the current page during loading and discarding late preview responses safely.

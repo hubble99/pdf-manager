@@ -18,6 +18,7 @@ import { Filename } from '../components/Filename';
 import { isTauri, openFilePicker } from '../utils/tauriDialog';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
+import { PageHeader } from '../components/ui';
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -81,22 +82,12 @@ export function SettingsPage() {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <Settings size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Settings</h1>
-            <p className="page-subtitle">Configure application preferences</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={Settings}
+        title="Settings"
+        description="Configure application preferences"
+      />
 
       <div className="page-body">
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -117,8 +108,8 @@ export function SettingsPage() {
                   padding: 16, 
                   borderRadius: 'var(--radius-md)', 
                   cursor: 'pointer',
-                  border: theme === 'dark' ? '2px solid var(--accent)' : '1px solid var(--border, var(--outline-variant))',
-                  background: theme === 'dark' ? 'var(--accent-dim, var(--accent-muted))' : 'var(--surface-container)'
+                  border: theme === 'dark' ? '2px solid var(--accent)' : '1px solid var(--outline-variant)',
+                  background: theme === 'dark' ? 'var(--accent-dim)' : 'var(--surface-container)'
                 }}
               >
                 <Moon size={24} color={theme === 'dark' ? 'var(--accent)' : 'var(--on-surface-variant)'} />
@@ -134,8 +125,8 @@ export function SettingsPage() {
                   padding: 16, 
                   borderRadius: 'var(--radius-md)', 
                   cursor: 'pointer',
-                  border: theme === 'dusty-rose' ? '2px solid var(--accent)' : '1px solid var(--border, var(--outline-variant))',
-                  background: theme === 'dusty-rose' ? 'var(--accent-dim, var(--accent-muted))' : 'var(--surface-container)'
+                  border: theme === 'dusty-rose' ? '2px solid var(--accent)' : '1px solid var(--outline-variant)',
+                  background: theme === 'dusty-rose' ? 'var(--accent-dim)' : 'var(--surface-container)'
                 }}
               >
                 <Palette size={24} color={theme === 'dusty-rose' ? 'var(--accent)' : 'var(--on-surface-variant)'} />
@@ -151,8 +142,8 @@ export function SettingsPage() {
                   padding: 16, 
                   borderRadius: 'var(--radius-md)', 
                   cursor: 'pointer',
-                  border: theme === 'steel-blue' ? '2px solid var(--accent)' : '1px solid var(--border, var(--outline-variant))',
-                  background: theme === 'steel-blue' ? 'var(--accent-dim, var(--accent-muted))' : 'var(--surface-container)'
+                  border: theme === 'steel-blue' ? '2px solid var(--accent)' : '1px solid var(--outline-variant)',
+                  background: theme === 'steel-blue' ? 'var(--accent-dim)' : 'var(--surface-container)'
                 }}
               >
                 <Waves size={24} color={theme === 'steel-blue' ? 'var(--accent)' : 'var(--on-surface-variant)'} />
@@ -249,9 +240,9 @@ export function SettingsPage() {
               <div style={{ color: 'var(--on-surface-variant)' }}>App Name</div>
               <div style={{ fontWeight: 500 }}>PDF Manager V2</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Version</div>
-              <div style={{ fontWeight: 500 }}>1.0.0 (Production Candidate)</div>
+              <div style={{ fontWeight: 500 }}>1.2.0 (Stable)</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Tech Stack</div>
-              <div style={{ fontWeight: 500 }}>Tauri 2.11, React 19, Vite 6, FastAPI, PyMuPDF</div>
+              <div style={{ fontWeight: 500 }}>Tauri 2.11, React 19, Vite 8, FastAPI, PyMuPDF</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Features</div>
               <div style={{ fontWeight: 500 }}>Merge, Extract, Compress, Image Tools, QR, Insert, Protect</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Theme</div>
@@ -263,7 +254,6 @@ export function SettingsPage() {
       </div>
 
       
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

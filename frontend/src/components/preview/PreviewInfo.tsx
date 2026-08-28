@@ -16,11 +16,11 @@ export function PreviewInfo({
   height,
 }: PreviewInfoProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px', borderBottom: '1px solid var(--outline-variant)' }}>
       <div style={{ flex: 1, minWidth: 0, fontWeight: 500, fontSize: 14 }}>
         <Filename name={filename} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--on-surface-variant)' }}>
         {currentPage !== undefined && totalPages !== undefined && (
           <span>Page {currentPage}/{totalPages}</span>
         )}

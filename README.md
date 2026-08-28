@@ -1,6 +1,6 @@
 # PDF Manager
 
-![Version](https://img.shields.io/badge/version-1.1.3-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Release](https://img.shields.io/github/downloads/hubble99/pdf-manager/total)
@@ -15,7 +15,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/Version-1.1.3-green?style=flat-square" />
+  <img src="https://img.shields.io/badge/Version-1.2.0-green?style=flat-square" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" />
   <img src="https://img.shields.io/badge/Offline-100%25-purple?style=flat-square" />
 </p>
@@ -34,6 +34,7 @@
 | 🔲 **QR & Barcode** | Generate QR codes and barcodes (Code128, EAN13, EAN8, Code39) |
 | 📌 **Insert Content** | Insert PDF pages or images into an existing PDF document |
 | 🗂️ **Organize Pages** | Rearrange, delete, or rotate PDF pages |
+| ✏️ **Edit Canvas** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
 | 🏷️ **Edit Metadata** | Edit title, author, subject, and other PDF properties |
 | 🔒 **Protect/Unlock PDF** | Protect PDFs with a password or remove existing passwords |
 
@@ -81,7 +82,7 @@
 ### Prerequisites
 
 - **Python 3.11+** — [python.org](https://python.org)
-- **Node.js 18+** — [nodejs.org](https://nodejs.org)
+- **Node.js 20.19+** — [nodejs.org](https://nodejs.org)
 - **Rust 1.77+** — [rustup.rs](https://rustup.rs)
 - **uv** — `pip install uv`
 
@@ -158,7 +159,7 @@ The output installers will be located at: `frontend/src-tauri/target/release/bun
 
 ## 📦 Installation Guide (End User)
 
-1. Download `PDF Manager_1.1.3_x64-setup.exe` from the [Releases](../../releases) page.
+1. Download `PDF Manager_1.2.0_x64-setup.exe` from the [Releases](../../releases) page.
 2. Follow the installation wizard.
 3. Launch the app from **Start Menu → PDF Manager**.
 
@@ -200,11 +201,13 @@ npx tsc --noEmit
 
 ---
 
-## 🎨 Design Themes
+## 🎨 UI Design System
 
-**Pro-Level Document Interface**
-- Provides 3 themes: Dark, Dusty Rose, and Steel Blue.
-- Clean typography and professional styling tailored for document workflows.
+PDF Manager follows a compact desktop-productivity design system: document
+preview remains primary, controls stay space-efficient, and shared patterns are
+preferred over feature-specific styling through shared tokens and components.
+
+The application provides Dark, Dusty Rose, and Steel Blue themes.
 
 ---
 

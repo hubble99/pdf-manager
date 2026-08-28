@@ -12,8 +12,9 @@ import type {
   ShapeObject, 
   TextObject,
 } from '../types/canvas';
-import { generateCanvasObjectId } from '../features/edit-pdf/ids';
-import { CanvasBridge } from '../features/edit-pdf/canvasBridge';
+import { generateCanvasObjectId } from '../features/edit-canvas/ids';
+import { CanvasBridge } from '../features/edit-canvas/canvasBridge';
+import { normalizeLetterSpacing } from '../features/edit-canvas/letterSpacing';
 import { useTheme } from '../hooks/useTheme';
 import {
   CONTROL_CORNER_SIZE,
@@ -27,7 +28,7 @@ import {
   SNAP_THRESHOLD_DEGREES,
   DEFAULT_SHAPE_FILL,
   DEFAULT_STROKE_COLOR,
-} from '../features/edit-pdf/constants';
+} from '../features/edit-canvas/constants';
 import {
   EMPTY_TEXT_SENTINEL,
   getTextCanvasPresentation,
@@ -35,6 +36,7 @@ import {
   normalizeTextState,
   TEXT_PLACEHOLDER_LABEL,
 } from '../utils/textPlaceholder';
+import { sampleForegroundColor } from '../utils/colorSampling';
 
 // ── PageCanvas Component ──────────────────────────────────────────────────────
 export interface PageCanvasProps {
@@ -275,8 +277,19 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         context.drawImage(image, 0, 0);
         const pixelX = Math.max(0, Math.min(image.naturalWidth - 1, Math.round(pointer.x * image.naturalWidth / page.width)));
         const pixelY = Math.max(0, Math.min(image.naturalHeight - 1, Math.round(pointer.y * image.naturalHeight / page.height)));
-        const [red, green, blue] = context.getImageData(pixelX, pixelY, 1, 1).data;
-        bridge.onSampleColor(`#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('')}`);
+        const sourceScale = image.naturalWidth / page.width;
+        const sampleRadius = Math.max(4, Math.min(12, Math.round(5 * sourceScale)));
+        const sampleX = Math.max(0, pixelX - sampleRadius);
+        const sampleY = Math.max(0, pixelY - sampleRadius);
+        const sampleWidth = Math.min(image.naturalWidth - sampleX, sampleRadius * 2 + 1);
+        const sampleHeight = Math.min(image.naturalHeight - sampleY, sampleRadius * 2 + 1);
+        const pixels = context.getImageData(sampleX, sampleY, sampleWidth, sampleHeight);
+        bridge.onSampleColor(sampleForegroundColor(
+          pixels,
+          pixelX - sampleX,
+          pixelY - sampleY,
+          sampleRadius,
+        ));
         return;
       }
       if (currentTool === 'eraser') {
@@ -297,6 +310,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             id: generateCanvasObjectId(), type: 'text', x: pointer.x, y: pointer.y, text: EMPTY_TEXT_SENTINEL,
             fontFamily: bridge.defaultTextProps.fontFamily,
             fontSize: bridge.defaultTextProps.fontSize,
+            letterSpacing: bridge.defaultTextProps.letterSpacing,
+            fontWeight: bridge.defaultTextProps.fontWeight,
             bold: bridge.defaultTextProps.bold,
             italic: bridge.defaultTextProps.italic,
             color: bridge.defaultTextProps.color,
@@ -604,7 +619,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                 const isText = obj.type && (obj.type.toLowerCase() === 'text' || obj.type.toLowerCase() === 'textbox');
                 const isRect = obj.type && obj.type.toLowerCase() === 'rect';
                 const isEllipse = obj.type && obj.type.toLowerCase() === 'ellipse';
-                
+
                 const scaleX = obj.scaleX || 1;
                 const scaleY = obj.scaleY || 1;
                 const scale = Math.max(scaleX, scaleY);
@@ -699,15 +714,18 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       const isLine = target.type && target.type.toLowerCase() === 'line';
       const isPath = target.type && target.type.toLowerCase() === 'path';
 
+      const targetScaleX = target.scaleX || 1;
+      const targetScaleY = target.scaleY || 1;
+
       let newFontSize = target.fontSize;
       let newWidth = target.width;
       let newHeight = target.height;
 
-      if (target.scaleX !== 1 || target.scaleY !== 1) {
+      if (Math.abs(targetScaleX - 1) > 0.0001 || Math.abs(targetScaleY - 1) > 0.0001) {
         if (!isPath) {
           wasScaled = true;
-          const scaleX = target.scaleX;
-          const scaleY = target.scaleY;
+          const scaleX = targetScaleX;
+          const scaleY = targetScaleY;
           const scale = Math.max(scaleX, scaleY);
           
           if (isText) {
@@ -999,7 +1017,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         if (obj.type === 'text') {
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
-          const fontWeight = textObj.bold ? 'bold' : 'normal';
+          const fontWeight = textObj.fontWeight ?? (textObj.bold ? 700 : 400);
           const safeWidth = textObj.width || DEFAULT_TEXT_WIDTH;
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           
@@ -1007,11 +1025,12 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             ...commonProps, 
             id: textObj.id, 
             width: safeWidth,
+            charSpacing: normalizeLetterSpacing(textObj.letterSpacing),
             fontSize: textObj.fontSize,
             fontFamily: textObj.fontFamily,
             fill: presentation.fill,
             fontStyle: fontStyle as any,
-            fontWeight: fontWeight,
+            fontWeight,
             textAlign: textObj.textAlign || 'left',
             editable: true,
             editingBorderColor: activeColors.selectionBorder,
@@ -1165,7 +1184,6 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       } else {
         const isActivelyDragging = (canvas as any)._currentTransform && (canvas as any)._currentTransform.target === fabricObj;
         const isInGroup = !!fabricObj.group;
-
         if (!isActivelyDragging && !isInGroup) {
           if (obj.type !== 'line') {
             fabricObj.set({
@@ -1196,16 +1214,17 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         if (obj.type === 'text') {
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
-          const fontWeight = textObj.bold ? 'bold' : 'normal';
+          const fontWeight = textObj.fontWeight ?? (textObj.bold ? 700 : 400);
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           fabricObj.set({
             text: presentation.text,
             width: textObj.width || DEFAULT_TEXT_WIDTH,
+            charSpacing: normalizeLetterSpacing(textObj.letterSpacing),
             fontSize: textObj.fontSize,
             fontFamily: textObj.fontFamily,
             fill: presentation.fill,
             fontStyle: fontStyle as any,
-            fontWeight: fontWeight,
+            fontWeight,
             textAlign: textObj.textAlign || 'left',
           });
         } else if (obj.type === 'rect' || obj.type === 'circle') {
@@ -1324,7 +1343,6 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         <canvas ref={fabricContainerRef} />
       </div>
 
-      
     </div>
   );
 });

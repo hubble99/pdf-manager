@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Temp directory — for intermediate files
     TEMP_DIR: Path = Path.home() / "PDFManager" / "temp"
 
+    # App data directory — persistent app-managed assets (e.g. font library)
+    APP_DATA_DIR: Path = Path.home() / "PDFManager" / "data"
+
     # Logging
     LOG_LEVEL: str = "INFO"
 
@@ -39,6 +42,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure output and temp directories exist
+# Ensure output, temp, and app data directories exist
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 settings.TEMP_DIR.mkdir(parents=True, exist_ok=True)
+settings.APP_DATA_DIR.mkdir(parents=True, exist_ok=True)

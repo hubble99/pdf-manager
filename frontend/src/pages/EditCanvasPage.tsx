@@ -12,6 +12,8 @@ import {
   Square,
   Circle as CircleIcon,
   Minus,
+  MoveHorizontal,
+  Plus,
   Eraser,
   Undo2,
   Redo2,
@@ -47,7 +49,25 @@ import type {
   ShapeObject,
   TextObject,
 } from '../types/canvas';
-import { generateCanvasObjectId } from '../features/edit-pdf/ids';
+import { generateCanvasObjectId } from '../features/edit-canvas/ids';
+import {
+  DEFAULT_LETTER_SPACING,
+  formatLetterSpacing,
+  MAX_LETTER_SPACING,
+  MIN_LETTER_SPACING,
+  normalizeLetterSpacing,
+  stepLetterSpacing,
+} from '../features/edit-canvas/letterSpacing';
+import {
+  ensureApplicationFontFace,
+  getAvailableFontWeights,
+  getFontWeightLabel,
+  loadApplicationFontLibrary,
+  mergeFontFamilies,
+  nearestAvailableFontWeight,
+  toggleBoldWeight,
+} from '../features/edit-canvas/fontLibrary';
+import type { ApplicationFontEntry } from '../features/edit-canvas/fontLibrary';
 import {
   HISTORY_DEBOUNCE_MS,
   HISTORY_LIMIT,
@@ -59,7 +79,7 @@ import {
   PREVIEW_BASE_DPI,
   PREVIEW_MAX_DPI,
   PREVIEW_MIN_DPI,
-} from '../features/edit-pdf/constants';
+} from '../features/edit-canvas/constants';
 
 interface PdfPageData {
   index: number;
@@ -167,10 +187,11 @@ function LazyPageContainer({
 
 import { PageCanvas } from '../components/PageCanvas';
 
-// ── Main EditPdfPage Component ────────────────────────────────────────────────
-export function EditPdfPage() {
+// ── Main EditCanvasPage Component ────────────────────────────────────────────
+export function EditCanvasPage() {
   const { showToast } = useToast();
-  const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('edit-pdf');
+  const showToastRef = useRef(showToast);
+  const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('edit-canvas');
 
   const [pages, setPages] = useState<PageData[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
@@ -182,13 +203,14 @@ export function EditPdfPage() {
   const [saving, setSaving] = useState(false);
   const [outputFilename, setOutputFilename] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [applicationFontEntries, setApplicationFontEntries] = useState<ApplicationFontEntry[]>([]);
   const previewRequestTokenRef = useRef<Record<number, number>>({});
 
   // Default properties untuk object BARU yang akan dibuat (saat tidak ada selection)
   const [defaultTextProps, setDefaultTextProps] = useState<{
-    fontFamily: string; fontSize: number; bold: boolean; italic: boolean; color: string; textAlign: 'left' | 'center' | 'right';
+    fontFamily: string; fontSize: number; letterSpacing: number; fontWeight: number; bold: boolean; italic: boolean; color: string; textAlign: 'left' | 'center' | 'right';
   }>({
-    fontFamily: 'Arial', fontSize: DEFAULT_FONT_SIZE, bold: false, italic: false, color: DEFAULT_TEXT_COLOR, textAlign: 'left'
+    fontFamily: 'Arial', fontSize: DEFAULT_FONT_SIZE, letterSpacing: DEFAULT_LETTER_SPACING, fontWeight: 400, bold: false, italic: false, color: DEFAULT_TEXT_COLOR, textAlign: 'left'
   });
   const [defaultShapeProps, setDefaultShapeProps] = useState({
     fillColor: DEFAULT_SHAPE_FILL, fillOpacity: 100, strokeColor: DEFAULT_TEXT_COLOR, strokeWidth: 2
@@ -204,6 +226,35 @@ export function EditPdfPage() {
   const clipboardRef = useRef<{ objects: any[], sourcePageIndex: number, pasteCountByPage: Record<number, number> } | null>(null);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; visible: boolean } | null>(null);
+
+  const fontFamilies = useMemo(
+    () => mergeFontFamilies(FONT_FAMILIES, applicationFontEntries.map((entry) => entry.family)),
+    [applicationFontEntries],
+  );
+
+  useEffect(() => {
+    showToastRef.current = showToast;
+  }, [showToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadApplicationFontLibrary()
+      .then(({ entries }) => {
+        if (cancelled) return;
+        setApplicationFontEntries(entries);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        showToastRef.current({
+          type: 'warning',
+          title: 'Font library unavailable',
+          message: error instanceof Error ? error.message : 'Could not load application fonts.',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const closeMenu = () => {
@@ -229,6 +280,68 @@ export function EditPdfPage() {
     if (!selectedObjectId) return null;
     return pages[activePageIndex]?.objects.find(o => o.id === selectedObjectId) ?? null;
   }, [selectedObjectId, pages, activePageIndex]);
+
+  const currentFontFamily = selectedObject?.type === 'text'
+    ? (selectedObject as TextObject).fontFamily
+    : defaultTextProps.fontFamily;
+  const currentFontWeight = selectedObject?.type === 'text'
+    ? ((selectedObject as TextObject).fontWeight ?? ((selectedObject as TextObject).bold ? 700 : 400))
+    : defaultTextProps.fontWeight;
+  const currentFontItalic = selectedObject?.type === 'text'
+    ? (selectedObject as TextObject).italic
+    : defaultTextProps.italic;
+  const availableFontWeights = useMemo(
+    () => getAvailableFontWeights(currentFontFamily, applicationFontEntries),
+    [currentFontFamily, applicationFontEntries],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    ensureApplicationFontFace(
+      applicationFontEntries,
+      currentFontFamily,
+      currentFontWeight,
+      currentFontItalic,
+    )
+      .then((registered) => {
+        if (!cancelled && registered) {
+          Object.values(fabricRefs.current).forEach((canvas) => canvas.requestRenderAll());
+        }
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        showToastRef.current({
+          type: 'warning',
+          title: 'Font face unavailable',
+          message: error instanceof Error ? error.message : 'The selected font face could not be loaded.',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationFontEntries, currentFontFamily, currentFontWeight, currentFontItalic]);
+
+  // Instantly commits current objects state of page to history (for drag/transform/draw finishes)
+  const commitPageObjectsToHistory = useCallback((pageIndex: number, finalObjects: CanvasObject[]) => {
+    setPages(prev => prev.map((page, idx) => {
+      if (idx !== pageIndex) return page;
+      const lastSnapshot = page.history[page.historyIndex];
+      if (JSON.stringify(lastSnapshot) === JSON.stringify(finalObjects)) {
+        return page;
+      }
+      const nextHistory = page.history.slice(0, page.historyIndex + 1);
+      nextHistory.push(finalObjects);
+      if (nextHistory.length > HISTORY_LIMIT) {
+        nextHistory.shift();
+      }
+      return {
+        ...page,
+        objects: finalObjects,
+        history: nextHistory,
+        historyIndex: nextHistory.length - 1
+      };
+    }));
+  }, []);
 
   const handleLayering = useCallback((action: 'front' | 'back' | 'forward' | 'backward') => {
     if (!selectedObjectId) return;
@@ -344,27 +457,41 @@ export function EditPdfPage() {
     });
   }, [selectedObjectId, activePageIndex]);
 
-  // Instantly commits current objects state of page to history (for drag/transform/draw finishes)
-  const commitPageObjectsToHistory = useCallback((pageIndex: number, finalObjects: CanvasObject[]) => {
-    setPages(prev => prev.map((page, idx) => {
-      if (idx !== pageIndex) return page;
-      const lastSnapshot = page.history[page.historyIndex];
-      if (JSON.stringify(lastSnapshot) === JSON.stringify(finalObjects)) {
-        return page;
-      }
-      const nextHistory = page.history.slice(0, page.historyIndex + 1);
-      nextHistory.push(finalObjects);
-      if (nextHistory.length > HISTORY_LIMIT) {
-        nextHistory.shift();
-      }
-      return {
-        ...page,
-        objects: finalObjects,
-        history: nextHistory,
-        historyIndex: nextHistory.length - 1
-      };
-    }));
-  }, []);
+  const setFontWeight = useCallback((requestedWeight: number) => {
+    const weight = nearestAvailableFontWeight(requestedWeight, availableFontWeights);
+    const patch = { fontWeight: weight, bold: weight >= 700 };
+    if (selectedObject?.type === 'text') {
+      updateSelectedObject(patch);
+    } else {
+      setDefaultTextProps(previous => ({ ...previous, ...patch }));
+    }
+  }, [availableFontWeights, selectedObject, updateSelectedObject]);
+
+  const setFontFamily = useCallback((family: string) => {
+    const weights = getAvailableFontWeights(family, applicationFontEntries);
+    const weight = nearestAvailableFontWeight(currentFontWeight, weights);
+    const patch = { fontFamily: family, fontWeight: weight, bold: weight >= 700 };
+    if (selectedObject?.type === 'text') {
+      updateSelectedObject(patch);
+    } else {
+      setDefaultTextProps(previous => ({ ...previous, ...patch }));
+    }
+  }, [applicationFontEntries, currentFontWeight, selectedObject, updateSelectedObject]);
+
+  const currentLetterSpacing = normalizeLetterSpacing(
+    selectedObject?.type === 'text'
+      ? (selectedObject as TextObject).letterSpacing
+      : defaultTextProps.letterSpacing,
+  );
+
+  const setLetterSpacing = useCallback((nextValue: number) => {
+    const value = normalizeLetterSpacing(nextValue);
+    if (selectedObject?.type === 'text') {
+      updateSelectedObject({ letterSpacing: value });
+    } else {
+      setDefaultTextProps(previous => ({ ...previous, letterSpacing: value }));
+    }
+  }, [selectedObject, updateSelectedObject]);
 
   // Undo/Redo trigger
   const handleUndo = useCallback(() => {
@@ -881,7 +1008,7 @@ export function EditPdfPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleFitToPage, handleZoomIn, handleZoomOut, selectedObjectId, activePageIndex, handleLayering, selectedObject, pages]);
+  }, [handleUndo, handleRedo, handleFitToPage, handleZoomIn, handleZoomOut, selectedObjectId, activePageIndex, handleLayering, selectedObject, pages, activeTool]);
 
   // Ctrl+Scroll Native Event Listener
   useEffect(() => {
@@ -996,7 +1123,7 @@ export function EditPdfPage() {
           
           // All supported editor objects are emitted as native PDF operators.
           // The raster channel remains in the contract for future unsupported
-          // objects, but is empty for the current Edit PDF tool set.
+          // objects, but is empty for the current Edit Canvas tool set.
           for (const hiddenObject of temporarilyHiddenObjects) {
             const fObj = fabricCanvas.getObjects().find((f: fabric.Object) => (f as any).id === hiddenObject.id);
             if (fObj) fObj.set('visible', false);
@@ -1037,7 +1164,7 @@ export function EditPdfPage() {
       );
       formData.append('output_filename', outputFilename || 'edited_document');
 
-      const response = await apiClient.post('/api/v1/edit-pdf/save', formData, {
+      const response = await apiClient.post('/api/v1/edit-canvas/save', formData, {
         responseType: 'blob',
       });
 
@@ -1073,7 +1200,7 @@ export function EditPdfPage() {
 
   return (
     <div
-      className="page-body edit-pdf-page"
+      className="page-body edit-canvas-page"
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -1115,7 +1242,7 @@ export function EditPdfPage() {
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-[var(--canvas-accent)] font-bold text-sm flex items-center gap-1.5">
             <FileEdit size={18} />
-            <span>Edit PDF</span>
+            <span>Edit Canvas</span>
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--canvas-panel-border)] text-[var(--canvas-text-muted)] font-semibold">
             BETA
@@ -1196,7 +1323,7 @@ export function EditPdfPage() {
         {/* Separator 1 */}
         <div style={{ width: '1px', height: '24px', background: 'var(--canvas-topbar-border)', flexShrink: 0 }} />
 
-        {/* 8 Tool Buttons (Icon Only) */}
+        {/* Canvas Tool Buttons (Icon Only) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {[
             { id: 'select', label: 'Select (V)', icon: MousePointer },
@@ -1207,15 +1334,16 @@ export function EditPdfPage() {
             { id: 'circle', label: 'Circle (C)', icon: CircleIcon },
             { id: 'line', label: 'Line (L)', icon: Minus },
             { id: 'eraser', label: 'Eraser (E)', icon: Eraser },
-            { id: 'eyedropper', label: 'Sample Background Color', icon: Pipette },
+            { id: 'eyedropper', label: 'Smart Eyedropper — sample nearby foreground color', icon: Pipette },
           ].map((t) => {
             const Icon = t.icon;
             const isActive = activeTool === t.id;
+            const disabled = pages.length === 0;
             return (
               <button
                 key={t.id}
                 onClick={() => handleToolSelect(t.id as EditTool)}
-                disabled={pages.length === 0}
+                disabled={disabled}
                 title={t.label}
                 style={{
                   width: '32px',
@@ -1225,14 +1353,14 @@ export function EditPdfPage() {
                   justifyContent: 'center',
                   borderRadius: '6px',
                   border: 'none',
-                  cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease',
                   background: isActive ? 'var(--primary-container)' : 'transparent',
                   color: isActive ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
                   opacity: pages.length === 0 ? 0.4 : 1,
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive && pages.length > 0) e.currentTarget.style.background = 'var(--surface-container-high)';
+                  if (!isActive && !disabled) e.currentTarget.style.background = 'var(--surface-container-high)';
                 }}
                 onMouseLeave={(e) => {
                   if (!isActive) e.currentTarget.style.background = 'transparent';
@@ -1511,19 +1639,29 @@ export function EditPdfPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Font</span>
                   <select
-                    value={selectedObject ? (selectedObject as TextObject).fontFamily : defaultTextProps.fontFamily}
-                    onChange={(e) => {
-                      if (selectedObject) {
-                        updateSelectedObject({ fontFamily: e.target.value });
-                      } else {
-                        setDefaultTextProps(prev => ({ ...prev, fontFamily: e.target.value }));
-                      }
-                    }}
+                    value={currentFontFamily}
+                    onChange={(e) => setFontFamily(e.target.value)}
                     style={{ background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
                   >
-                    {FONT_FAMILIES.map((font) => (
+                    {fontFamilies.map((font) => (
                       <option key={font} value={font} style={{ fontFamily: font }}>
                         {font}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Weight</span>
+                  <select
+                    aria-label="Font weight"
+                    title="Font weight"
+                    value={nearestAvailableFontWeight(currentFontWeight, availableFontWeights)}
+                    onChange={(event) => setFontWeight(Number(event.target.value))}
+                    style={{ width: '118px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
+                  >
+                    {availableFontWeights.map((weight) => (
+                      <option key={weight} value={weight} style={{ fontWeight: weight }}>
+                        {getFontWeightLabel(weight)}
                       </option>
                     ))}
                   </select>
@@ -1546,6 +1684,53 @@ export function EditPdfPage() {
                     style={{ width: '60px', height: '28px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 6px', borderRadius: '4px', outline: 'none', fontSize: '12px' }}
                   />
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span
+                    title="Letter spacing"
+                    style={{ display: 'inline-flex', color: 'var(--canvas-text-muted)' }}
+                  >
+                    <MoveHorizontal size={16} aria-hidden="true" />
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm"
+                    aria-label="Decrease letter spacing by 1"
+                    title="Decrease letter spacing by 1"
+                    disabled={currentLetterSpacing <= MIN_LETTER_SPACING}
+                    onClick={() => setLetterSpacing(stepLetterSpacing(currentLetterSpacing, -1))}
+                  >
+                    <Minus size={14} aria-hidden="true" />
+                  </button>
+                  <input
+                    id="canvas-letter-spacing"
+                    type="range"
+                    min={MIN_LETTER_SPACING}
+                    max={MAX_LETTER_SPACING}
+                    step={1}
+                    aria-label="Letter spacing"
+                    title="Tighten or expand the space between letters"
+                    value={currentLetterSpacing}
+                    onChange={(e) => setLetterSpacing(Number(e.target.value))}
+                    style={{ width: '96px', height: '28px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm"
+                    aria-label="Increase letter spacing by 1"
+                    title="Increase letter spacing by 1"
+                    disabled={currentLetterSpacing >= MAX_LETTER_SPACING}
+                    onClick={() => setLetterSpacing(stepLetterSpacing(currentLetterSpacing, 1))}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                  </button>
+                  <output
+                    htmlFor="canvas-letter-spacing"
+                    className="text-xs text-[var(--canvas-text-muted)]"
+                    style={{ minWidth: '30px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}
+                  >
+                    {formatLetterSpacing(currentLetterSpacing)}
+                  </output>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title="Rotation Angle">Rot°</span>
                   <input
@@ -1564,23 +1749,20 @@ export function EditPdfPage() {
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <button
                     onClick={() => {
-                      if (selectedObject) {
-                        updateSelectedObject({ bold: !(selectedObject as TextObject).bold });
-                      } else {
-                        setDefaultTextProps(prev => ({ ...prev, bold: !prev.bold }));
-                      }
+                      setFontWeight(toggleBoldWeight(currentFontWeight, availableFontWeights));
                     }}
-                    title="Bold"
+                    title="Toggle Bold (700)"
+                    aria-label="Toggle Bold (700)"
                     style={{
                       width: '28px',
                       height: '28px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      background: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+                      background: currentFontWeight >= 700 ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)',
                       borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).bold : defaultTextProps.bold) ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
+                      color: currentFontWeight >= 700 ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
                       cursor: 'pointer'
                     }}
                   >

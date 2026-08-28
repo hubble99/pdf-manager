@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
+import { PageHeader } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 
@@ -227,23 +228,12 @@ export function QrBarcodePage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <QrCode size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">QR & Barcode</h1>
-            <p className="page-subtitle">Generate custom QR codes and barcodes</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={QrCode}
+        title="QR & Barcode"
+        description="Generate custom QR codes and barcodes"
+      />
 
       {/* ── Tabs ────────────────────────────────────────────────────────────── */}
       <div style={{ borderBottom: '1px solid var(--outline-variant)', padding: '0 24px' }}>
@@ -548,9 +538,6 @@ export function QrBarcodePage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

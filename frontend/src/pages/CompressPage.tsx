@@ -12,6 +12,7 @@ import apiClient from '../api/client';
 import { API_BASE_URL } from '../api/config';
 import { Filename } from '../components/Filename';
 import { PdfThumbnail } from '../components/PdfThumbnail';
+import { PageHeader } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
@@ -181,23 +182,12 @@ export function CompressPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <Minimize2 size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Compress PDF</h1>
-            <p className="page-subtitle">Reduce PDF file size by re-encoding embedded images</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={Minimize2}
+        title="Compress PDF"
+        description="Reduce PDF file size by re-encoding embedded images"
+      />
 
       {/* Body */}
       <div className="page-body">
@@ -440,9 +430,6 @@ export function CompressPage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

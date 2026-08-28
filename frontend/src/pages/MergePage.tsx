@@ -15,6 +15,7 @@ import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -186,23 +187,12 @@ export function MergePage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <Merge size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Merge PDF</h1>
-            <p className="page-subtitle">Combine multiple PDF files into one document</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={Merge}
+        title="Merge PDF"
+        description="Combine multiple PDF files into one document"
+      />
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="page-body">
@@ -390,9 +380,6 @@ export function MergePage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

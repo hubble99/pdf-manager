@@ -3,7 +3,7 @@ from pathlib import Path
 
 import fitz
 
-from core.edit_pdf_shapes import (
+from core.edit_canvas_shapes import (
     draw_native_ellipse,
     draw_native_ellipse_from_corners,
     draw_native_path,
@@ -13,7 +13,7 @@ from core.edit_pdf_shapes import (
 )
 
 
-class EditPdfStampError(Exception):
+class EditCanvasStampError(Exception):
     def __init__(self, page_index: int, cause: Exception):
         self.page_index = page_index
         super().__init__(f"Could not stamp annotation on page index {page_index}: {cause}")
@@ -127,7 +127,7 @@ def save_edited_pdf(input_path: Path, annotations: list, output_path: Path) -> d
                         target_rect = fitz.Rect(raster_rect[0] * scale_x, raster_rect[1] * scale_y, (raster_rect[0] + raster_rect[2]) * scale_x, (raster_rect[1] + raster_rect[3]) * scale_y)
                     _insert_raster(page, page_b64, target_rect)
             except Exception as exc:
-                raise EditPdfStampError(page_index, exc) from exc
+                raise EditCanvasStampError(page_index, exc) from exc
         output_path.parent.mkdir(parents=True, exist_ok=True)
         document.save(str(output_path), garbage=4, deflate=True)
         return {"total_pages": document.page_count, "size_bytes": output_path.stat().st_size}

@@ -6,6 +6,7 @@ import { PageNavigation } from './PageNavigation';
 import { RotationControl } from './RotationControl';
 import { ZoomControl } from './ZoomControl';
 import { calculatePreviewFitZoom } from '../../utils/previewZoom';
+import { StateView } from '../ui';
 
 export interface PreviewPanelProps {
   pdfFile?: File | null;
@@ -129,9 +130,12 @@ export function PreviewPanel({
 
   if (!pdfFile && !imageFile) {
     return (
-      <div className={`card ${className}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 400, color: 'var(--text-muted)' }}>
-        <FileSearch size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
-        <span style={{ fontSize: 16, fontWeight: 500 }}>Select a file to preview</span>
+      <div className={`card preview-panel preview-panel--empty ${className}`}>
+        <StateView
+          icon={FileSearch}
+          title="Select a file to preview"
+          description="The document preview will use the available workspace here."
+        />
       </div>
     );
   }
@@ -140,10 +144,10 @@ export function PreviewPanel({
   const isPdf = !!pdfFile;
 
   return (
-    <div className={`card ${className}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+    <div className={`card preview-panel ${className}`}>
       {topSlot}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface-container-high)', gap: 16 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div className="preview-toolbar">
+        <div className="preview-toolbar-main">
           {isPdf && totalPages !== undefined && (
             <PageNavigation
               currentPage={currentPage}
@@ -153,7 +157,7 @@ export function PreviewPanel({
           )}
           {showRotation && onRotationChange && (
             <>
-              <div style={{ width: 1, height: 24, background: 'var(--border)' }} />
+              <div className="preview-divider" />
               <RotationControl rotation={rotation} onChange={onRotationChange} />
               {onFlipChange && (
                 <button

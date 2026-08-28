@@ -1,13 +1,56 @@
-"""Geometry and native drawing helpers for the Edit PDF feature."""
+"""Geometry and native drawing helpers for the Edit Canvas feature."""
 
 from __future__ import annotations
 
+import logging
 import math
 import os
+import re
+import unicodedata
 from pathlib import Path
 from typing import Iterable
 
 import fitz
+
+from core.font_library import resolve_font_file
+
+logger = logging.getLogger(__name__)
+
+_PDF_SUBSET_PREFIX = re.compile(r"^[A-Z]{6}\+")
+_PDF_STYLE_SUFFIX = re.compile(
+    r"(?:[-_,\s]?(?:bolditalic|boldoblique|semibolditalic|semibold|demibold|bold|italic|oblique|regular|roman|medium|light|black|book|bi|bd|it)(?:mt)?)$",
+    re.IGNORECASE,
+)
+
+
+def _canonical_font_family(font_name: str) -> str:
+    """Strip subset/PostScript style markers and return a system family."""
+    family = _PDF_SUBSET_PREFIX.sub("", (font_name or "").strip())
+    aliases = {
+        "arial": "Arial",
+        "arialps": "Arial",
+        "calibri": "Calibri",
+        "cambria": "Cambria",
+        "couriernew": "Courier New",
+        "couriernewps": "Courier New",
+        "georgia": "Georgia",
+        "tahoma": "Tahoma",
+        "timesnewroman": "Times New Roman",
+        "timesnewromanps": "Times New Roman",
+        "trebuchetms": "Trebuchet MS",
+        "verdana": "Verdana",
+    }
+    full_compact = re.sub(r"[^a-z0-9]", "", family.lower())
+    if full_compact in aliases:
+        return aliases[full_compact]
+
+    previous = None
+    while family and family != previous:
+        previous = family
+        family = _PDF_STYLE_SUFFIX.sub("", family).rstrip("-_, ")
+    family = re.sub(r"MT$", "", family, flags=re.IGNORECASE).rstrip("-_, ")
+    compact = re.sub(r"[^a-z0-9]", "", family.lower())
+    return aliases.get(compact, family or "Helvetica")
 
 
 def rotate_point(x: float, y: float, origin_x: float, origin_y: float, angle: float) -> fitz.Point:
@@ -242,36 +285,106 @@ def draw_native_path(
         shape.commit()
 
 
-def _font_candidates(family: str, bold: bool, italic: bool) -> list[str]:
-    suffix = "bi" if bold and italic else "bd" if bold else "i" if italic else ""
-    normalized = (family or "Arial").lower()
+def _font_candidates(
+    family: str,
+    bold: bool,
+    italic: bool,
+    weight: int | None = None,
+) -> list[str]:
+    requested_weight = max(1, min(1000, int(weight if weight is not None else (700 if bold else 400))))
+    normalized = _canonical_font_family(family).lower()
+    available_weights = [300, 400, 700] if normalized == "calibri" else [400, 700]
+    system_weight = min(
+        available_weights,
+        key=lambda value: (abs(value - requested_weight), -value if requested_weight >= 500 else value),
+    )
+    system_bold = system_weight >= 700
+    suffix = "bi" if system_bold and italic else "bd" if system_bold else "i" if italic else ""
     families = {
         "arial": f"arial{suffix}.ttf",
-        "calibri": f"calibri{'z' if bold and italic else 'b' if bold else 'i' if italic else ''}.ttf",
-        "cambria": f"cambria{'z' if bold and italic else 'b' if bold else 'i' if italic else ''}.ttf",
+        "calibri": (
+            f"calibri{'li' if italic else 'l'}.ttf"
+            if system_weight == 300
+            else f"calibri{'z' if system_bold and italic else 'b' if system_bold else 'i' if italic else ''}.ttf"
+        ),
+        "cambria": "cambria.ttc" if not system_bold and not italic else f"cambria{'z' if system_bold and italic else 'b' if system_bold else 'i'}.ttf",
         "times new roman": f"times{suffix}.ttf",
         "courier new": f"cour{suffix}.ttf",
-        "georgia": f"georgia{'z' if bold and italic else 'b' if bold else 'i' if italic else ''}.ttf",
-        "verdana": f"verdana{'z' if bold and italic else 'b' if bold else 'i' if italic else ''}.ttf",
-        "tahoma": f"tahoma{'bd' if bold else ''}.ttf" if not italic else f"arial{suffix}.ttf",
-        "trebuchet ms": f"trebuc{'bi' if bold and italic else 'bd' if bold else 'it' if italic else ''}.ttf",
-        "century gothic": f"gothic{'bi' if bold and italic else 'b' if bold else 'i' if italic else ''}.ttf",
+        "georgia": f"georgia{'z' if system_bold and italic else 'b' if system_bold else 'i' if italic else ''}.ttf",
+        "verdana": f"verdana{'z' if system_bold and italic else 'b' if system_bold else 'i' if italic else ''}.ttf",
+        # Windows ships no italic Tahoma face. Preserve the requested family
+        # with its plain/bold face instead of silently switching to Arial.
+        "tahoma": f"tahoma{'bd' if system_bold else ''}.ttf",
+        "trebuchet ms": f"trebuc{'bi' if system_bold and italic else 'bd' if system_bold else 'it' if italic else ''}.ttf",
+        "century gothic": f"gothic{'bi' if system_bold and italic else 'b' if system_bold else 'i' if italic else ''}.ttf",
     }
-    return [families.get(normalized, f"arial{suffix}.ttf"), "arial.ttf"]
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    requested = f"{compact}{suffix}.ttf" if compact else f"arial{suffix}.ttf"
+    return [families.get(normalized, requested), f"{compact}.ttf" if compact else "arial.ttf", "arial.ttf"]
 
 
-def load_font(family: str, bold: bool = False, italic: bool = False) -> fitz.Font:
+def load_font(
+    family: str,
+    bold: bool = False,
+    italic: bool = False,
+    weight: int | None = None,
+) -> fitz.Font:
+    """Resolve fonts in layered order: app font library > system fonts > Helvetica.
+
+    No synthetic fake-bold is applied; when no bold/italic variant exists, the
+    plain family (or the built-in fallback) is used as-is.
+    """
+    canonical_family = _canonical_font_family(family)
+    library_path = (
+        resolve_font_file(family, bold, italic, weight)
+        or resolve_font_file(canonical_family, bold, italic, weight)
+    )
+    if library_path is not None:
+        try:
+            return fitz.Font(fontfile=str(library_path), embed=True)
+        except Exception as exc:
+            logger.warning("Could not load library font %s: %s", library_path, exc)
+
     font_dir = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
-    for filename in _font_candidates(family, bold, italic):
+    for filename in _font_candidates(canonical_family, bold, italic, weight):
         path = font_dir / filename
         if path.exists():
             return fitz.Font(fontfile=str(path), embed=True)
     return fitz.Font("helv")
 
 
+def _text_clusters(text: str) -> list[str]:
+    """Approximate Fabric graphemes so tracking never splits combining marks."""
+    clusters: list[str] = []
+    for character in text:
+        joins_previous = (
+            bool(clusters)
+            and (
+                unicodedata.combining(character) != 0
+                or unicodedata.category(character).startswith("M")
+                or character == "\u200d"
+                or clusters[-1].endswith("\u200d")
+            )
+        )
+        if joins_previous:
+            clusters[-1] += character
+        else:
+            clusters.append(character)
+    return clusters
+
+
 def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float, color) -> None:
-    font = load_font(item.get("fontFamily", "Arial"), item.get("bold", False), item.get("italic", False))
+    raw_weight = item.get("fontWeight")
+    font_weight = int(raw_weight) if raw_weight is not None else None
+    font = load_font(
+        item.get("fontFamily", "Arial"),
+        item.get("bold", False),
+        item.get("italic", False),
+        font_weight,
+    )
     font_size = max(1.0, float(item.get("fontSize", 12)) * (scale_x + scale_y) / 2)
+    letter_spacing = max(-100.0, min(500.0, float(item.get("letterSpacing", 0))))
+    tracking_gap = font_size * letter_spacing / 1000
     x, y = float(item.get("x", 0)) * scale_x, float(item.get("y", 0)) * scale_y
     width = float(item.get("width") or 0) * scale_x
     lines = item.get("lines") or str(item.get("text", "")).splitlines() or [""]
@@ -282,12 +395,29 @@ def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float
     baseline = y + font_size * font.ascender
     for index, line in enumerate(lines):
         offset = 0.0
-        line_width = float(line_widths[index]) * scale_x if index < len(line_widths) else font.text_length(line, fontsize=font_size)
+        clusters = _text_clusters(line)
+        line_width = (
+            float(line_widths[index]) * scale_x
+            if index < len(line_widths)
+            else font.text_length(line, fontsize=font_size) + tracking_gap * max(0, len(clusters) - 1)
+        )
         if align == "center":
             offset = max(0.0, (width - line_width) / 2)
         elif align == "right":
             offset = max(0.0, width - line_width)
-        writer.append(fitz.Point(x + offset, baseline + index * line_height), line, font=font, fontsize=font_size)
+        position = fitz.Point(x + offset, baseline + index * line_height)
+        if letter_spacing == 0 or len(clusters) <= 1:
+            writer.append(position, line, font=font, fontsize=font_size)
+        else:
+            cursor_x = position.x
+            for cluster in clusters:
+                writer.append(
+                    fitz.Point(cursor_x, position.y),
+                    cluster,
+                    font=font,
+                    fontsize=font_size,
+                )
+                cursor_x += font.text_length(cluster, fontsize=font_size) + tracking_gap
     transform_matrix = item.get("transformMatrix")
     if transform_matrix and len(transform_matrix) == 6:
         angle = math.degrees(math.atan2(float(transform_matrix[1]), float(transform_matrix[0])))

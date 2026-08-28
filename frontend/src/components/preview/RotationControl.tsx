@@ -15,13 +15,13 @@ export function RotationControl({ rotation, onChange }: RotationControlProps) {
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderBottom: '1px solid var(--border)', justifyContent: 'center' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 16px', borderBottom: '1px solid var(--outline-variant)', justifyContent: 'center' }}>
       <button className="btn btn-secondary btn-sm" onClick={handleRotateLeft}>
         <RotateCcw size={14} style={{ marginRight: 6 }} />
         90°
       </button>
-      <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-        Current: <span style={{ fontWeight: 500, color: 'var(--text)' }}>{rotation}°</span>
+      <div style={{ fontSize: 13, color: 'var(--on-surface-variant)' }}>
+        Current: <span style={{ fontWeight: 500, color: 'var(--on-surface)' }}>{rotation}°</span>
       </div>
       <button className="btn btn-secondary btn-sm" onClick={handleRotateRight}>
         90°

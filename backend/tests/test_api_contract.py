@@ -27,7 +27,11 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/protect/"),
     ("POST", "/api/v1/protect/remove"),
     ("POST", "/api/v1/preview/"),
-    ("POST", "/api/v1/edit-pdf/save"),
+    ("POST", "/api/v1/edit-canvas/save"),
+    ("GET", "/api/v1/fonts"),
+    ("POST", "/api/v1/fonts"),
+    ("DELETE", "/api/v1/fonts/{font_id}"),
+    ("GET", "/api/v1/fonts/{font_id}/file"),
 }
 
 
@@ -142,10 +146,15 @@ REQUEST_BODY_CONTRACTS = {
         "required": {"file"},
         "defaults": {"page": 1, "dpi": 72, "quality_hint": "auto"},
     },
-    ("POST", "/api/v1/edit-pdf/save"): {
+    ("POST", "/api/v1/edit-canvas/save"): {
         "media_type": "multipart/form-data",
         "required": {"file", "annotations"},
         "defaults": {"output_filename": "edited_document"},
+    },
+    ("POST", "/api/v1/fonts"): {
+        "media_type": "multipart/form-data",
+        "required": {"file"},
+        "defaults": {},
     },
 }
 
@@ -153,6 +162,9 @@ NO_BODY_ROUTES = {
     ("GET", "/api/v1/compress/download/{download_id}"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
+    ("GET", "/api/v1/fonts"),
+    ("DELETE", "/api/v1/fonts/{font_id}"),
+    ("GET", "/api/v1/fonts/{font_id}/file"),
 }
 
 
@@ -303,7 +315,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.1.3"
+    assert body["data"]["version"] == "1.2.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

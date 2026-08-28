@@ -63,6 +63,15 @@ backend/test*.png
 # ── Assets ───────────────────────────────────────────────────────────────────────
 ui_images/
 
+# ── Local agent tooling and planning ─────────────────────────────────────────────
+# Konfigurasi, skills, prompt, hook, dan artifact planning milik environment lokal.
+# `openspec/` dipertahankan lokal sebagai baseline/audit history, tetapi tidak
+# dipublikasikan bersama source aplikasi.
+.agents/
+.codex/
+.pi/
+openspec/
+
 # -- Internal documentation (private, not for public repo) ------------------------
 # Seluruh dokumentasi kerja internal dikonsolidasikan di project-docs/.
 # Folder ini sengaja TIDAK di-commit ke repo publik karena berisi session log,

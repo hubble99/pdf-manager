@@ -13,6 +13,7 @@ import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PreviewPanel, ThumbnailStrip } from '../components/preview';
+import { PageHeader } from '../components/ui';
 import { parsePageRange } from '../utils/pageRange';
 import type { PdfInfoResult, PdfToImageResult } from '../types';
 import { useToast } from '../hooks/useToast';
@@ -190,26 +191,15 @@ export function PdfToImagePage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <ImageIcon size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">PDF to Image</h1>
-            <p className="page-subtitle">Convert PDF pages into high-quality images</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={ImageIcon}
+        title="PDF to Image"
+        description="Convert PDF pages into high-quality images"
+      />
 
       {/* Body */}
-      <div className="page-body">
+      <div className="page-body page-body--workspace">
         <div className="feature-split-layout">
 
           {/* Controls */}
@@ -217,7 +207,7 @@ export function PdfToImagePage() {
             {!file ? (
               <div
                 id="pdf-to-image-drop-zone"
-                className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+                className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -488,9 +478,6 @@ export function PdfToImagePage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

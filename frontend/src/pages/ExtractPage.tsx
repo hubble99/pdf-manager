@@ -13,6 +13,7 @@ import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PreviewPanel } from '../components/preview';
+import { PageHeader } from '../components/ui';
 import { isPageInRange } from '../utils/pageRange';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
@@ -173,26 +174,15 @@ export function ExtractPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <Scissors size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Split PDF</h1>
-            <p className="page-subtitle">Split or extract pages from a PDF into separate files</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={Scissors}
+        title="Split PDF"
+        description="Split or extract pages from a PDF into separate files"
+      />
 
       {/* Body */}
-      <div className="page-body">
+      <div className="page-body page-body--workspace">
         <div className="feature-split-layout">
 
           {/* Controls */}
@@ -200,7 +190,7 @@ export function ExtractPage() {
             {!file ? (
               <div
                 id="extract-drop-zone"
-                className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+                className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -418,9 +408,6 @@ export function ExtractPage() {
 
       
 
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }

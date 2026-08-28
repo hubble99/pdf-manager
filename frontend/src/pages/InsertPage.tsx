@@ -13,6 +13,7 @@ import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PreviewPanel } from '../components/preview';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -306,24 +307,14 @@ const loadFile = useCallback(
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 'var(--radius-md)',
-            background: 'var(--accent-dim)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'var(--accent)',
-          }}>
-            <FilePlus2 size={20} strokeWidth={1.75} />
-          </div>
-          <div>
-            <h1 className="page-title">Insert Content</h1>
-            <p className="page-subtitle">Add images or PDF pages into an existing document</p>
-          </div>
-        </div>
-      </div>
+    <div className="feature-page">
+      <PageHeader
+        icon={FilePlus2}
+        title="Insert Content"
+        description="Add images or PDF pages into an existing document"
+      />
 
-      <div className="page-body">
+      <div className="page-body page-body--workspace">
         <div className="feature-split-layout">
           
           {/* Controls Panel */}
@@ -333,7 +324,7 @@ const loadFile = useCallback(
             {!file ? (
               <div
                 id="insert-drop-zone"
-                className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+                className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
@@ -659,7 +650,6 @@ const loadFile = useCallback(
       )}
 
       
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

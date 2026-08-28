@@ -27,6 +27,8 @@ export interface TextObject extends BaseCanvasObject {
   text: string;
   fontFamily: string;
   fontSize: number;
+  letterSpacing?: number;
+  fontWeight?: number;
   bold: boolean;
   italic: boolean;
   color: string;
@@ -71,6 +73,8 @@ export interface PageData {
 export interface DefaultTextProps {
   fontFamily: string;
   fontSize: number;
+  letterSpacing: number;
+  fontWeight: number;
   bold: boolean;
   italic: boolean;
   color: string;

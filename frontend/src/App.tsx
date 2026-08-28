@@ -24,8 +24,8 @@ import { ToastContainer } from './components/ToastContainer';
 type AppState = 'splash' | 'ready' | 'error';
 type BackendStatus = 'checking' | 'online' | 'offline';
 
-const EditPdfPage = lazy(() =>
-  import('./pages/EditPdfPage').then((module) => ({ default: module.EditPdfPage }))
+const EditCanvasPage = lazy(() =>
+  import('./pages/EditCanvasPage').then((module) => ({ default: module.EditCanvasPage }))
 );
 
 function RouteFallback() {
@@ -148,10 +148,10 @@ export default function App() {
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />
                 <Route path="/insert"        element={<InsertPage />} />
                 <Route
-                  path="/edit-pdf"
+                  path="/edit-canvas"
                   element={(
                     <Suspense fallback={<RouteFallback />}>
-                      <EditPdfPage />
+                      <EditCanvasPage />
                     </Suspense>
                   )}
                 />

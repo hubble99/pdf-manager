@@ -8,7 +8,7 @@ export type NavItemId =
   | 'image-to-pdf'
   | 'qr-barcode'
   | 'insert'
-  | 'edit-pdf'
+  | 'edit-canvas'
   | 'organize'
   | 'metadata'
   | 'protect';
