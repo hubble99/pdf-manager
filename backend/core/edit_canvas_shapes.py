@@ -423,6 +423,10 @@ def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float
         angle = math.degrees(math.atan2(float(transform_matrix[1]), float(transform_matrix[0])))
     else:
         angle = float(item.get("angle", 0) or 0)
+    # TextWriter does not isolate existing page graphics state like Shape.commit
+    # does. Source transforms (including remove_rotation's matrix) must not
+    # leak into the new text's coordinates or glyph orientation.
+    page.wrap_contents()
     writer.write_text(
         page,
         color=color,
