@@ -2,7 +2,7 @@
 
 This internal component has no routes and never regenerates a PDF. Callers
 must supply the worker's verified checkpoint metadata and closed candidate.
-The production worker handoff remains a separate gate.
+Candidate handoff is accepted only through the feature-owned coordinator.
 """
 
 from __future__ import annotations
@@ -23,10 +23,11 @@ from features.edit_content.transaction_state import (
 )
 
 
-# Absolute parsing ceiling comes from the frozen session working-set budget.
-# Full preparation-space accounting is enforced at the coordinator integration
-# gate; this ceiling alone is not proof of the complete working-set budget.
+# Absolute parsing and transaction ceilings come from the frozen session
+# working-set budget. The reservation is held and consumed as prepared files
+# replace its bytes, so all transaction-critical allocation precedes commit.
 MAX_RECORD_BYTES = 64 * 1024 * 1024
+MAX_PREPARATION_BYTES = 64 * 1024 * 1024
 STORE_SCHEMA = "edit-content-commit-record/v1"
 
 
@@ -206,6 +207,40 @@ class ContentCommitStore:
                 temporary.unlink()
             raise
 
+    def _reserve(self, byte_count: int) -> Path:
+        if not 0 < byte_count <= MAX_PREPARATION_BYTES:
+            raise TransitionRejected("transaction exceeds the preparation budget")
+        reservation = self._staging()
+        try:
+            block = bytes(1024 * 1024)
+            with reservation.open("xb") as writer:
+                remaining = byte_count
+                while remaining:
+                    chunk = block[: min(len(block), remaining)]
+                    writer.write(chunk)
+                    remaining -= len(chunk)
+                writer.flush()
+                self._boundary("before-reservation-flush")
+                os.fsync(writer.fileno())
+            return reservation
+        except BaseException:
+            if reservation.exists():
+                reservation.unlink()
+            raise TransitionRejected("insufficient preparation space") from None
+
+    def _consume_reservation(self, reservation: Path, byte_count: int) -> None:
+        """Release only the bytes that the next prepared artifact will use."""
+        try:
+            current = reservation.stat().st_size
+            if byte_count < 0 or byte_count > current:
+                raise OSError("invalid reservation consumption")
+            with reservation.open("r+b") as held:
+                held.truncate(current - byte_count)
+                held.flush()
+                os.fsync(held.fileno())
+        except OSError:
+            raise TransitionRejected("preparation space reservation was lost") from None
+
     def _read_checked(self) -> SessionState:
         try:
             record = self.root / "record.json"
@@ -286,6 +321,7 @@ class ContentCommitStore:
             if cancelled():
                 raise TransitionRejected("cancelled before commit")
             record = None
+            reservation = None
             installed: list[Path] = []
             switched = False
             try:
@@ -305,16 +341,24 @@ class ContentCommitStore:
                 transition = prepare_transition(old, request_id=request_id, expected_revision=expected_revision,
                                                 operation=operation, pending_draft=pending_draft,
                                                 checkpoint=checkpoint, publication=publication)
+                record_size = len(_encoded({"schema": STORE_SCHEMA, "state": asdict(transition.next_state),
+                    "sha256": "0" * 64}))
+                install_bytes = (checkpoint.byte_size if checkpoint is not None else 0) + (
+                    publication.byte_size if publication is not None else 0)
+                reservation = self._reserve(max(1, record_size + install_bytes))
                 if checkpoint is not None:
+                    self._consume_reservation(reservation, checkpoint.byte_size)
                     destination = self._artifact("checkpoints", checkpoint.checkpoint_id)
                     self._install(candidate, destination, checkpoint.accepted_artifact_hash, checkpoint.byte_size)
                     installed.append(destination)
                     candidate = destination
                 if publication is not None:
+                    self._consume_reservation(reservation, publication.byte_size)
                     destination = self._artifact("outputs", publication.output_id)
                     self._install(candidate, destination, publication.artifact_hash, publication.byte_size)
                     installed.append(destination)
                 self._boundary("after-files-prepared")
+                self._consume_reservation(reservation, record_size)
                 record = self._prepare_record(transition.next_state)
                 # Last checks belong before the one commit point.
                 if self._read_checked() != old or cancelled():
@@ -343,6 +387,11 @@ class ContentCommitStore:
                     self._remove_owned_unreferenced(path)
                 raise
             finally:
+                if reservation is not None and reservation.exists():
+                    try:
+                        reservation.unlink()
+                    except OSError:
+                        pass
                 if record is not None and record.exists() and not self._blocked:
                     try:
                         record.unlink()

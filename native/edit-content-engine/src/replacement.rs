@@ -129,6 +129,31 @@ pub fn prepare_from_checkpoint(
     inspector: &dyn ResourceInspector,
     cancellation: &CancellationToken,
 ) -> Result<Candidate, &'static str> {
+    let mut observe = |_: RegenerationStage| Ok(());
+    prepare_from_checkpoint_observed(
+        pdfium,
+        workspace,
+        accepted,
+        registry,
+        target_id,
+        input,
+        inspector,
+        cancellation,
+        &mut observe,
+    )
+}
+
+fn prepare_from_checkpoint_observed(
+    pdfium: &Pdfium,
+    workspace: &SessionWorkspace,
+    accepted: &AcceptedCheckpointRef<'_>,
+    registry: &ObjectRegistry,
+    target_id: &str,
+    input: &PreflightInput,
+    inspector: &dyn ResourceInspector,
+    cancellation: &CancellationToken,
+    observe: &mut dyn FnMut(RegenerationStage) -> Result<(), &'static str>,
+) -> Result<Candidate, &'static str> {
     let revision = accepted.revision;
     cancellation.check().map_err(|_| "CANCELLED")?;
     workspace
@@ -204,7 +229,7 @@ pub fn prepare_from_checkpoint(
             return Err("REJECTED_PERSISTENCE");
         }
         cancellation.check().map_err(|_| "CANCELLED")?;
-        regenerate(pdfium, &working, &mut output, &expectation)?;
+        regenerate_observed(pdfium, &working, &mut output, &expectation, observe)?;
         drop(output);
         let reopened = pdfium
             .load_pdf_from_file(&path, None)
@@ -242,11 +267,19 @@ pub fn prepare_from_checkpoint(
     result
 }
 
-fn regenerate(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegenerationStage {
+    Mutated,
+    Regenerated,
+    BeforeSerialization,
+}
+
+fn regenerate_observed(
     pdfium: &Pdfium,
     working: &Path,
     output: &mut File,
     edit: &EditExpectation,
+    observe: &mut dyn FnMut(RegenerationStage) -> Result<(), &'static str>,
 ) -> Result<(), &'static str> {
     let document = pdfium
         .load_pdf_from_file(working, None)
@@ -273,8 +306,10 @@ fn regenerate(
             if !edit.removed {
                 text.set_text(&edit.resulting_text)
                     .map_err(|_| "REJECTED_PERSISTENCE")?;
+                observe(RegenerationStage::Mutated)?;
                 text.apply_matrix(PdfMatrix::IDENTITY)
                     .map_err(|_| "REJECTED_PERSISTENCE")?;
+                observe(RegenerationStage::Regenerated)?;
             }
         }
         if edit.removed {
@@ -285,8 +320,11 @@ fn regenerate(
                 .remove_object_at_index(edit.target.object_path[0] as _)
                 .map_err(|_| "REJECTED_PERSISTENCE")?;
             drop(detached);
+            observe(RegenerationStage::Mutated)?;
+            observe(RegenerationStage::Regenerated)?;
         }
     }
+    observe(RegenerationStage::BeforeSerialization)?;
     document
         .save_to_writer(output)
         .map_err(|_| "REJECTED_PERSISTENCE")?;
@@ -294,4 +332,172 @@ fn regenerate(
     output.sync_all().map_err(|_| "REJECTED_PERSISTENCE")?;
     drop(document);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::discovery::discover_document;
+    use crate::resource_inspector::{InspectionOutcome, ProcessResourceInspector};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn write_fixture(path: &Path) {
+        let stream = "BT /F1 12 Tf 30 100 Td (word) Tj ET";
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{stream}\nendstream", stream.len()),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_string(),
+        ];
+        let mut bytes = b"%PDF-1.4\n".to_vec();
+        let mut offsets = Vec::new();
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(bytes.len());
+            bytes.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", index + 1).as_bytes());
+        }
+        let xref = bytes.len();
+        bytes.extend_from_slice(
+            format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+        );
+        for offset in offsets {
+            bytes.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        bytes.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objects.len() + 1
+            )
+            .as_bytes(),
+        );
+        fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn stage_failures_discard_candidate_and_leave_source_and_checkpoint_unchanged() {
+        let library = PathBuf::from(
+            std::env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH")
+                .expect("the exact pinned PDFium library is required"),
+        );
+        crate::verify_pdfium_library(&library).unwrap();
+        let pdfium = Pdfium::new(Pdfium::bind_to_library(&library).unwrap());
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "edit-content-stage-failure-{}-{nonce}",
+            std::process::id()
+        ));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source.pdf");
+        write_fixture(&source);
+        let source_hash = file_hash(&source).unwrap();
+        let sessions = root.join("sessions");
+        let workspace = SessionWorkspace::create(
+            &sessions,
+            &source,
+            "stage-failure",
+            &CancellationToken::default(),
+        )
+        .unwrap();
+        let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("backend");
+        let inspector = ProcessResourceInspector::new(
+            "env".into(),
+            vec![
+                format!(
+                    "PYTHONPATH={}:{}",
+                    backend.display(),
+                    backend.join(".venv/Lib/site-packages").display()
+                ),
+                "python3".into(),
+                backend
+                    .join("features/edit_content/resource_inspector_cli.py")
+                    .display()
+                    .to_string(),
+            ],
+        );
+        let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
+        else {
+            panic!("real resource inspection required");
+        };
+        let mut registry = ObjectRegistry::new("stage-failure");
+        let target = {
+            let document = pdfium
+                .load_pdf_from_file(workspace.source_path(), None)
+                .unwrap();
+            discover_document(&document, &inspection, &mut registry, 0)
+                .unwrap()
+                .text_objects[0]
+                .target_id
+                .clone()
+        };
+        let input = PreflightInput {
+            expected_text: "word".into(),
+            expected_old_text: "word".into(),
+            replacement_text: "text".into(),
+            utf16_start: 0,
+            utf16_end: 4,
+        };
+        for failure in [
+            RegenerationStage::Mutated,
+            RegenerationStage::Regenerated,
+            RegenerationStage::BeforeSerialization,
+        ] {
+            let accepted = AcceptedCheckpointRef {
+                path: workspace.source_path(),
+                sha256: workspace.source_hash(),
+                checkpoint_id: "source",
+                revision: 0,
+            };
+            let mut observe = |stage| {
+                if stage == failure {
+                    Err("REJECTED_PERSISTENCE")
+                } else {
+                    Ok(())
+                }
+            };
+            let result = prepare_from_checkpoint_observed(
+                &pdfium,
+                &workspace,
+                &accepted,
+                &registry,
+                &target,
+                &input,
+                &inspector,
+                &CancellationToken::default(),
+                &mut observe,
+            );
+            assert!(matches!(result, Err("REJECTED_PERSISTENCE")));
+            assert_eq!(file_hash(&source).unwrap(), source_hash);
+            assert_eq!(file_hash(workspace.source_path()).unwrap(), source_hash);
+            assert_eq!(
+                fs::read_dir(workspace.working_path().parent().unwrap())
+                    .unwrap()
+                    .count(),
+                1
+            );
+            assert_eq!(
+                fs::read_dir(
+                    workspace
+                        .contained_path(WorkspaceArea::Staging, Path::new("probe"))
+                        .unwrap()
+                        .parent()
+                        .unwrap()
+                )
+                .unwrap()
+                .count(),
+                0
+            );
+        }
+        workspace.cleanup().unwrap();
+        fs::remove_dir(sessions).unwrap();
+        fs::remove_file(source).unwrap();
+        fs::remove_dir(root).unwrap();
+    }
 }

@@ -1,6 +1,6 @@
 # Edit Content engine worker
 
-This crate is the independent, read-only worker foundation for Edit Content V1.
+This crate is the independent worker foundation for Edit Content V1.
 It is not registered with FastAPI or Edit Canvas.
 
 The worker requires explicit `--pdfium-library`, `--workspace-root`, and
@@ -41,22 +41,24 @@ EDIT_CONTENT_TEST_PDFIUM_PATH=/home/user-dhoni/pdfium/lib/libpdfium.so \
   cargo test --locked
 ```
 
-## Phase-5 components under development
+## Phase-5 transaction boundary
 
 The library now has a private regeneration adapter (`replacement`) and a
 saved/reopened evidence verifier (`verification`). Empty results explicitly
 remove only the selected TextObject; `set_text("")` is not used for deletion.
 The adapter captures the accepted-checkpoint baseline before mutation and
-returns an unverified candidate. Verification is a separate step. Neither step
-is connected to a public mutation route or advances accepted worker state.
+returns an unverified candidate. Verification is a separate fresh-reopen step.
+The worker returns a private `edit-content-preparation/v1` result containing an
+opaque candidate token and complete hash-bound evidence; preparation never
+advances accepted worker state or authorizes publication.
 
-The Python Content feature contains immutable transition contracts and an
-isolated Windows commit store. Its file/fault tests use synthetic bytes and
-do not replace native PDF integrity tests. Worker handoff, complete resource
-proof/corpus coverage, full preparation-budget accounting, failed-request
-reconciliation, and end-to-end checkpoint/history integration are still gates.
-The internal prepared-result handshake must be reconciled with the frozen
-reply contract before wiring these components together. These components do
-not mean that phase 5 is complete or production mutation is enabled.
+The Python Content coordinator is the sole commit authority. It resolves the
+token only within the owned worker workspace, rechecks the verified bytes,
+prepares bounded immutable checkpoints/outputs, and makes state visible through
+one Windows atomic commit-record switch. Content history stores checked bytes,
+not inverse mutations. Pre-commit failure retains prior state; post-commit
+reply or cleanup failure retains the recorded outcome and is never replayed.
 
-Public backend routing and packaging remain later tasks.
+Phase 5 is complete at this internal boundary. Public backend routing,
+frontend workflow, packaging, corpus release evidence, and user acceptance
+remain later tasks; no production Content mutation route is registered yet.

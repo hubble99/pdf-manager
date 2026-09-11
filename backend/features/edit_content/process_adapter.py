@@ -1,4 +1,4 @@
-"""Private framed-process adapter for the phase-2 Edit Content worker."""
+"""Private framed-process adapter for the isolated Edit Content worker."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import queue
+import re
 import struct
 import subprocess
 import threading
@@ -15,12 +16,28 @@ import uuid
 
 REQUEST_SCHEMA = "edit-content-request/v1"
 REPLY_SCHEMA = "edit-content-reply/v1"
+PREPARATION_SCHEMA = "edit-content-preparation/v1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_REPLY_BYTES = 16 * 1024 * 1024
 
 
 class ContentWorkerError(RuntimeError):
     """Safe adapter failure that never includes private paths or worker stderr."""
+
+
+class ContentPreparationRejected(ContentWorkerError):
+    def __init__(self, reason: str, *, unknown: bool = False):
+        super().__init__(reason)
+        self.reason = reason
+        self.unknown = unknown
+
+
+@dataclass(frozen=True)
+class PreparedArtifactLease:
+    """Coordinator-private path paired with its validated preparation response."""
+
+    path: Path
+    response: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -62,6 +79,7 @@ class ContentWorkerAdapter:
         self._lock = threading.Lock()
         self._session_id: str | None = None
         self._source: Path | None = None
+        self._accepted_revision = 0
 
     @property
     def process_id(self) -> int | None:
@@ -71,7 +89,9 @@ class ContentWorkerAdapter:
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
-    def start(self, source: Path, *, session_id: str | None = None) -> str:
+    def start(
+        self, source: Path, *, session_id: str | None = None, accepted_revision: int = 0
+    ) -> str:
         with self._lock:
             if self.is_running:
                 raise ContentWorkerError("Content worker is already running")
@@ -82,6 +102,8 @@ class ContentWorkerAdapter:
                 raise ContentWorkerError("Content source is unavailable")
             self._config.workspace_root.mkdir(parents=True, exist_ok=True)
             active_session = session_id or uuid.uuid4().hex
+            if accepted_revision < 0:
+                raise ContentWorkerError("Content revision is invalid")
             inspector_program, *inspector_args = self._config.inspector_command
             command = [
                 *self._config.worker_command,
@@ -93,6 +115,8 @@ class ContentWorkerAdapter:
                 str(self._config.workspace_root),
                 "--source-file",
                 str(source_path),
+                "--accepted-revision",
+                str(accepted_revision),
                 "--inspector-program",
                 inspector_program,
             ]
@@ -113,6 +137,7 @@ class ContentWorkerAdapter:
             self._process = process
             self._session_id = active_session
             self._source = source_path
+            self._accepted_revision = accepted_revision
             self._replies = queue.Queue(maxsize=1)
             threading.Thread(target=self._read_replies, args=(process,), daemon=True).start()
             threading.Thread(target=self._drain_stderr, args=(process,), daemon=True).start()
@@ -122,7 +147,46 @@ class ContentWorkerAdapter:
         return self._request("open", expected_revision=None, timeout=self._config.startup_timeout_seconds)
 
     def inspect(self) -> dict[str, Any]:
-        return self._request("inspect", expected_revision=0, timeout=self._config.inspect_timeout_seconds)
+        return self._request(
+            "inspect",
+            expected_revision=self._accepted_revision,
+            timeout=self._config.inspect_timeout_seconds,
+        )
+
+    def prepare_apply(
+        self,
+        *,
+        request_id: str,
+        expected_revision: int,
+        target_id: str,
+        accepted_checkpoint_id: str,
+        accepted_artifact_hash: str,
+        edit: dict[str, Any],
+    ) -> PreparedArtifactLease:
+        response = self._request(
+            "apply",
+            expected_revision=expected_revision,
+            timeout=120.0,
+            request_id=request_id,
+            target_id=target_id,
+            request_payload={
+                "acceptedCheckpointId": accepted_checkpoint_id,
+                "acceptedArtifactHash": accepted_artifact_hash,
+                "edit": edit,
+            },
+            response_schema=PREPARATION_SCHEMA,
+        )
+        if response.get("status") != "prepared":
+            raise ContentPreparationRejected(
+                str(response.get("guardReason") or "Content candidate preparation failed"),
+                unknown=response.get("status") == "unknown",
+            )
+        result = response.get("result")
+        token = result.get("candidateToken") if isinstance(result, dict) else None
+        if not isinstance(token, str) or re.fullmatch(r"candidate-[0-9]+-[0-9]+", token) is None:
+            self.terminate()
+            raise ContentWorkerError("Content worker returned an invalid candidate identity")
+        return PreparedArtifactLease(self._resolve_candidate(token), response)
 
     def close(self) -> dict[str, Any]:
         with self._lock:
@@ -131,7 +195,9 @@ class ContentWorkerAdapter:
                 return {"status": "closed"}
         try:
             reply = self._request(
-                "close", expected_revision=0, timeout=self._config.close_timeout_seconds
+                "close",
+                expected_revision=self._accepted_revision,
+                timeout=self._config.close_timeout_seconds,
             )
             try:
                 process.wait(timeout=self._config.close_timeout_seconds)
@@ -146,7 +212,9 @@ class ContentWorkerAdapter:
                 if self._process is process:
                     self._clear_process()
 
-    def restart(self, source: Path | None = None) -> dict[str, Any]:
+    def restart(
+        self, source: Path | None = None, *, accepted_revision: int | None = None
+    ) -> dict[str, Any]:
         previous_source = Path(source) if source is not None else self._source
         previous_session = self._session_id
         if previous_source is None:
@@ -161,7 +229,8 @@ class ContentWorkerAdapter:
             else:
                 with self._lock:
                     self._clear_process()
-        self.start(previous_source, session_id=previous_session)
+        revision = self._accepted_revision if accepted_revision is None else accepted_revision
+        self.start(previous_source, session_id=previous_session, accepted_revision=revision)
         return self.open()
 
     def terminate(self) -> None:
@@ -179,22 +248,28 @@ class ContentWorkerAdapter:
         *,
         expected_revision: int | None,
         timeout: float,
+        request_id: str | None = None,
+        target_id: str | None = None,
+        request_payload: dict[str, Any] | None = None,
+        response_schema: str = REPLY_SCHEMA,
     ) -> dict[str, Any]:
         with self._lock:
             process = self._process
             session_id = self._session_id
             if process is None or session_id is None or process.poll() is not None:
                 raise ContentWorkerError("Content worker is unavailable")
-            request_id = uuid.uuid4().hex
+            request_id = request_id or uuid.uuid4().hex
             envelope: dict[str, Any] = {
                 "schemaVersion": REQUEST_SCHEMA,
                 "requestId": request_id,
                 "sessionId": session_id,
                 "command": command,
-                "payload": {},
+                "payload": request_payload or {},
             }
             if expected_revision is not None:
                 envelope["expectedAcceptedRevision"] = expected_revision
+            if target_id is not None:
+                envelope["targetId"] = target_id
             payload = json.dumps(envelope, separators=(",", ":")).encode("utf-8")
             if len(payload) > MAX_REQUEST_BYTES:
                 raise ContentWorkerError("Content request exceeds the configured limit")
@@ -213,13 +288,43 @@ class ContentWorkerAdapter:
             if isinstance(outcome, BaseException):
                 raise ContentWorkerError("Content worker is unavailable") from outcome
             if (
-                outcome.get("schemaVersion") != REPLY_SCHEMA
+                outcome.get("schemaVersion") != response_schema
                 or outcome.get("requestId") != request_id
                 or outcome.get("sessionId") != session_id
             ):
                 self._terminate(process)
                 raise ContentWorkerError("Content worker returned an invalid reply")
             return outcome
+
+    def _resolve_candidate(self, token: str) -> Path:
+        process = self._process
+        session_id = self._session_id
+        if process is None or session_id is None:
+            raise ContentWorkerError("Content worker is unavailable")
+        matches = []
+        for directory in self._config.workspace_root.glob("edit-content-*"):
+            marker = directory / ".owner.json"
+            try:
+                if directory.is_symlink() or marker.is_symlink() or not marker.is_file():
+                    continue
+                owner = json.loads(marker.read_text(encoding="utf-8"))
+                if (
+                    owner == {
+                        "schema": "edit-content-workspace/v1",
+                        "owner": "edit-content-engine",
+                        "sessionId": session_id,
+                        "processId": process.pid,
+                    }
+                ):
+                    candidate = directory / "staging" / f"{token}.pdf"
+                    if candidate.is_file() and not candidate.is_symlink():
+                        matches.append(candidate)
+            except (OSError, ValueError, TypeError):
+                continue
+        if len(matches) != 1:
+            self.terminate()
+            raise ContentWorkerError("Content candidate ownership could not be proven")
+        return matches[0]
 
     def _read_replies(self, process: subprocess.Popen[bytes]) -> None:
         try:

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -71,7 +72,7 @@ def test_joint_save_unchanged_save_history_and_published_output_survival(store, 
         reopened.close()
 
 
-@pytest.mark.parametrize("boundary", ["before-worker", "after-worker", "before-file-flush",
+@pytest.mark.parametrize("boundary", ["before-worker", "after-worker", "before-reservation-flush", "before-file-flush",
                                      "before-artifact-install", "after-files-prepared", "before-record-flush",
                                      "before-record-switch"])
 def test_every_precommit_fault_retains_checkpoint_history_and_saved_output(store, tmp_path, boundary):
@@ -82,14 +83,14 @@ def test_every_precommit_fault_retains_checkpoint_history_and_saved_output(store
         if name == boundary:
             raise OSError("injected storage/worker failure")
     store._boundary = fail
-    with pytest.raises(OSError):
+    with pytest.raises((OSError, TransitionRejected)):
         store.transact(request_id="edit", expected_revision=0, operation="save-with-draft", pending_draft=True,
                        prepare=prepared(tmp_path / "candidate.pdf", operation="save-with-draft"))
     assert store.state() == old
     assert (store.root / "record.json").read_bytes() == old_bytes
     assert store.output_bytes(published.output_id) == (tmp_path / "source.pdf").read_bytes()
-    with pytest.raises(TransitionRejected):
-        store.output_bytes("checkpoint_edit")
+    assert not (store.root / "checkpoints" / "checkpoint_edit.pdf").exists()
+    assert not any((store.root / "staging").iterdir())
 
 
 @pytest.mark.parametrize("boundary", ["after-record-switch", "before-reply"])
@@ -101,6 +102,7 @@ def test_postcommit_failure_reports_recorded_success_without_replay(store, tmp_p
     worker = prepared(tmp_path / "candidate.pdf")
     outcome = store.transact(request_id="edit", expected_revision=0, operation="apply", pending_draft=True, prepare=worker)
     assert outcome.revision == 1 and store.state().revision == 1
+    assert not any((store.root / "staging").iterdir())
     def must_not_run(*args):
         pytest.fail("duplicate mutation was replayed")
     assert store.transact(request_id="edit", expected_revision=0, operation="apply", pending_draft=True,
@@ -132,6 +134,65 @@ def test_cancellation_collision_and_tampering_fail_closed(store, tmp_path):
     with pytest.raises(UnknownOutcome):
         store.transact(request_id="later", expected_revision=0, operation="save")
     assert (store.root / "record.json").read_bytes() == b"corrupt record"
+
+
+def test_preparation_reservation_is_held_and_consumed_exactly(store):
+    reservation = store._reserve(4097)
+    try:
+        assert reservation.stat().st_size == 4097
+        store._consume_reservation(reservation, 4096)
+        assert reservation.stat().st_size == 1
+        store._consume_reservation(reservation, 1)
+        assert reservation.stat().st_size == 0
+        with pytest.raises(TransitionRejected, match="reservation was lost"):
+            store._consume_reservation(reservation, 1)
+    finally:
+        reservation.unlink(missing_ok=True)
+
+
+def test_insufficient_preparation_space_rejects_without_eviction(store, tmp_path, monkeypatch):
+    old = store.state()
+    old_record = (store.root / "record.json").read_bytes()
+    monkeypatch.setattr("features.edit_content.commit_store.MAX_PREPARATION_BYTES", 1)
+    with pytest.raises(TransitionRejected, match="preparation budget"):
+        store.transact(request_id="too-large", expected_revision=0, operation="apply",
+                       pending_draft=True,
+                       prepare=prepared(tmp_path / "candidate.pdf", request_id="too-large"))
+    assert store.state() == old
+    assert (store.root / "record.json").read_bytes() == old_record
+    assert not (store.root / "checkpoints" / "checkpoint_too-large.pdf").exists()
+
+
+def test_output_identity_collision_preserves_existing_bytes_and_state(store, monkeypatch):
+    existing = store.root / "outputs" / "collision.pdf"
+    existing.write_bytes(b"existing private output")
+    old = store.state()
+    identities = iter(("collision", "reservation", "temporary"))
+    monkeypatch.setattr("features.edit_content.commit_store.uuid.uuid4",
+                        lambda: SimpleNamespace(hex=next(identities)))
+    with pytest.raises(OSError):
+        store.transact(request_id="save-collision", expected_revision=0, operation="save")
+    assert existing.read_bytes() == b"existing private output"
+    assert store.state() == old
+
+
+def test_unreferenced_orphans_are_never_promoted_on_reopen(store):
+    orphan_checkpoint = store.root / "checkpoints" / "orphan.pdf"
+    orphan_output = store.root / "outputs" / "orphan.pdf"
+    orphan_staging = store.root / "staging" / "orphan"
+    for path in (orphan_checkpoint, orphan_output, orphan_staging):
+        path.write_bytes(b"uncommitted orphan")
+    root, session_id, source_hash = store.root, store.session_id, store.source_hash
+    expected = store.state()
+    store.close()
+    reopened = ContentCommitStore(root, session_id, source_hash)
+    try:
+        assert reopened.state() == expected
+        with pytest.raises(TransitionRejected, match="not published"):
+            reopened.output_bytes("orphan")
+        assert (root / "checkpoints" / "source.pdf").exists()
+    finally:
+        reopened.close()
 
 
 def test_second_coordinator_cannot_own_the_same_store(store):

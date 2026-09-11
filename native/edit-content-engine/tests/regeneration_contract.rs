@@ -20,6 +20,14 @@ struct Fixture(PathBuf);
 
 impl Fixture {
     fn new() -> Self {
+        Self::with_stream("BT /F1 12 Tf 30 100 Td (word) Tj ET")
+    }
+
+    fn styled_rotated() -> Self {
+        Self::with_stream("BT /F1 12 Tf 1 0 0 rg 0 0 1 RG 2 Tr 0 1 -1 0 150 40 Tm (word) Tj ET")
+    }
+
+    fn with_stream(text: &str) -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -33,10 +41,7 @@ impl Fixture {
             "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".to_string(),
-            {
-                let text = "BT /F1 12 Tf 30 100 Td (word) Tj ET";
-                format!("<< /Length {} >>\nstream\n{text}\nendstream", text.len())
-            },
+            format!("<< /Length {} >>\nstream\n{text}\nendstream", text.len()),
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_string(),
         ];
         let mut bytes = b"%PDF-1.4\n".to_vec();
@@ -161,12 +166,29 @@ fn pinned_regeneration_and_empty_replacement_contract() {
         result.0, result.1
     );
     assert_eq!(result, (String::new(), 1));
+    guarded_round_trip(&pdfium, "x", 1);
     guarded_round_trip(&pdfium, "text", 1);
+    guarded_round_trip(&pdfium, "textual", 1);
     guarded_round_trip(&pdfium, "", 0);
+    guarded_styled_rotated_round_trip(&pdfium);
+}
+
+fn guarded_styled_rotated_round_trip(pdfium: &Pdfium) {
+    let fixture = Fixture::styled_rotated();
+    guarded_fixture_round_trip(pdfium, fixture, "text", 1, true);
 }
 
 fn guarded_round_trip(pdfium: &Pdfium, replacement: &str, expected_count: usize) {
-    let fixture = Fixture::new();
+    guarded_fixture_round_trip(pdfium, Fixture::new(), replacement, expected_count, false);
+}
+
+fn guarded_fixture_round_trip(
+    pdfium: &Pdfium,
+    fixture: Fixture,
+    replacement: &str,
+    expected_count: usize,
+    assert_styled_rotated: bool,
+) {
     let source = fixture.0.join("source.pdf");
     let original_hash = hash(&source);
     let root = fixture.0.join("sessions");
@@ -228,15 +250,23 @@ fn guarded_round_trip(pdfium: &Pdfium, replacement: &str, expected_count: usize)
         let page = reopened.pages().get(0).unwrap();
         assert_eq!(page.objects().len() as usize, expected_count);
         if expected_count != 0 {
-            assert_eq!(
-                page.objects()
-                    .get(0)
-                    .unwrap()
-                    .as_text_object()
-                    .unwrap()
-                    .text(),
-                replacement
-            );
+            let object = page.objects().get(0).unwrap();
+            let text = object.as_text_object().unwrap();
+            assert_eq!(text.text(), replacement);
+            if assert_styled_rotated {
+                assert!(text.get_rotation_counter_clockwise_degrees().abs() > 89.0);
+                let fill = text.fill_color().unwrap();
+                assert_eq!(
+                    (fill.red(), fill.green(), fill.blue(), fill.alpha()),
+                    (255, 0, 0, 255)
+                );
+                let stroke = text.stroke_color().unwrap();
+                assert_eq!(
+                    (stroke.red(), stroke.green(), stroke.blue(), stroke.alpha()),
+                    (0, 0, 255, 255)
+                );
+                assert_eq!(format!("{:?}", text.render_mode()), "FilledThenStroked");
+            }
         }
     }
     let independent = std::process::Command::new("python3")

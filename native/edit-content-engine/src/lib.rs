@@ -13,12 +13,13 @@ pub mod identity;
 pub mod preflight;
 pub mod replacement;
 pub mod resource_inspector;
-pub mod viewport;
 pub mod verification;
+pub mod viewport;
 pub mod workspace;
 
 pub const REQUEST_SCHEMA: &str = "edit-content-request/v1";
 pub const REPLY_SCHEMA: &str = "edit-content-reply/v1";
+pub const PREPARATION_SCHEMA: &str = "edit-content-preparation/v1";
 pub const PDFIUM_RENDER_VERSION: &str = "0.9.4";
 pub const PDFIUM_BUILD_IDENTITY: &str = "154.0.8035";
 pub const PDFIUM_LIBRARY_SHA256: &str =
@@ -116,6 +117,89 @@ impl Reply {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparationReply {
+    pub schema_version: String,
+    pub request_id: String,
+    pub session_id: String,
+    pub status: String,
+    pub accepted_revision: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guard_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub result: Value,
+}
+
+impl PreparationReply {
+    pub fn prepared(request: &Request, revision: u64, result: Value) -> Self {
+        Self {
+            schema_version: PREPARATION_SCHEMA.into(),
+            request_id: request.request_id.clone(),
+            session_id: request.session_id.clone(),
+            status: "prepared".into(),
+            accepted_revision: revision,
+            guard_reason: None,
+            error: None,
+            result,
+        }
+    }
+
+    pub fn rejected(request: &Request, revision: u64, reason: &str) -> Self {
+        Self {
+            schema_version: PREPARATION_SCHEMA.into(),
+            request_id: request.request_id.clone(),
+            session_id: request.session_id.clone(),
+            status: "rejected".into(),
+            accepted_revision: revision,
+            guard_reason: Some(reason.into()),
+            error: Some("candidate preparation was rejected".into()),
+            result: Value::Null,
+        }
+    }
+
+    pub fn unknown(request: &Request, revision: u64, error: &str) -> Self {
+        Self {
+            schema_version: PREPARATION_SCHEMA.into(),
+            request_id: request.request_id.clone(),
+            session_id: request.session_id.clone(),
+            status: "unknown".into(),
+            accepted_revision: revision,
+            guard_reason: None,
+            error: Some(error.into()),
+            result: Value::Null,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum WorkerResponse {
+    Public(Reply),
+    Preparation(PreparationReply),
+}
+
+impl WorkerResponse {
+    pub fn duplicate(&self) -> Self {
+        match self {
+            Self::Public(reply) => Self::Public(Reply {
+                status: "duplicate".into(),
+                result: json!({"originalOutcome": reply.status, "mutationReplayed": false}),
+                ..reply.clone()
+            }),
+            Self::Preparation(reply) => {
+                let mut duplicate = reply.clone();
+                if let Value::Object(result) = &mut duplicate.result {
+                    result.insert("duplicateRequest".into(), Value::Bool(true));
+                    result.insert("mutationReplayed".into(), Value::Bool(false));
+                }
+                Self::Preparation(duplicate)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum FrameRead {
     End,
@@ -157,7 +241,7 @@ pub fn read_frame<R: Read>(reader: &mut R) -> io::Result<FrameRead> {
     }
 }
 
-pub fn write_frame<W: Write>(writer: &mut W, reply: &Reply) -> io::Result<()> {
+pub fn write_frame<W: Write, T: Serialize>(writer: &mut W, reply: &T) -> io::Result<()> {
     let payload = serde_json::to_vec(reply)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     if payload.len() > MAX_REPLY_BYTES {
@@ -405,14 +489,33 @@ pub fn send_reply<W: Write>(writer: &SharedWriter<W>, reply: &Reply) -> io::Resu
     write_frame(&mut *writer, reply)
 }
 
+pub fn send_response<W: Write>(
+    writer: &SharedWriter<W>,
+    response: &WorkerResponse,
+) -> io::Result<()> {
+    let mut writer = writer
+        .lock()
+        .map_err(|_| io::Error::other("protocol writer unavailable"))?;
+    write_frame(&mut *writer, response)
+}
+
 pub fn send_backpressure<W: Write>(writer: &SharedWriter<W>, request: &Request, revision: u64) {
-    let reply = Reply::unknown(
-        &request.session_id,
-        &request.request_id,
-        revision,
-        "worker queue capacity exceeded",
-    );
-    let _ = send_reply(writer, &reply);
+    if request.command == "apply" {
+        let response = WorkerResponse::Preparation(PreparationReply::unknown(
+            request,
+            revision,
+            "worker queue capacity exceeded",
+        ));
+        let _ = send_response(writer, &response);
+    } else {
+        let reply = Reply::unknown(
+            &request.session_id,
+            &request.request_id,
+            revision,
+            "worker queue capacity exceeded",
+        );
+        let _ = send_reply(writer, &reply);
+    }
 }
 
 pub fn bounded_request_channel() -> (mpsc::SyncSender<Request>, mpsc::Receiver<Request>) {

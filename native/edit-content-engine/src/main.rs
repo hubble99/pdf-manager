@@ -4,16 +4,18 @@ use edit_content_engine::identity::{utf16_range_to_scalar, ObjectRegistry, Resol
 use edit_content_engine::preflight::{
     evaluate_preflight, rejected_preflight_report, PreflightInput,
 };
+use edit_content_engine::replacement::{prepare_from_checkpoint, AcceptedCheckpointRef};
 use edit_content_engine::resource_inspector::{
     InspectionOutcome, ProcessResourceInspector, ResourceInspector, TestResourceInspector,
     UnavailableResourceInspector,
 };
+use edit_content_engine::verification::verify;
 use edit_content_engine::viewport::{Point, ViewportTransform};
 use edit_content_engine::workspace::{CancellationToken, SessionWorkspace};
 use edit_content_engine::{
-    bounded_request_channel, duplicate_reply, read_frame, send_backpressure, send_reply,
-    sha256_reader, timeout_for, validate_request, verify_pdfium_library, FrameRead, Reply, Request,
-    RequestLedger, SharedWriter, MAX_REPLY_BYTES, PDFIUM_BUILD_IDENTITY, PDFIUM_LIBRARY_SHA256,
+    bounded_request_channel, read_frame, send_backpressure, send_reply, sha256_reader, timeout_for,
+    validate_request, verify_pdfium_library, FrameRead, PreparationReply, Reply, Request,
+    SharedWriter, WorkerResponse, MAX_REPLY_BYTES, PDFIUM_BUILD_IDENTITY, PDFIUM_LIBRARY_SHA256,
     PDFIUM_RENDER_VERSION, STARTUP_TIMEOUT,
 };
 use image::codecs::jpeg::JpegEncoder;
@@ -36,6 +38,7 @@ struct Config {
     inspector_arguments: Vec<String>,
     test_mode: bool,
     test_timeout: Option<Duration>,
+    accepted_revision: u64,
 }
 
 struct NativeJob {
@@ -45,7 +48,7 @@ struct NativeJob {
 }
 
 struct NativeOutcome {
-    reply: Reply,
+    reply: WorkerResponse,
     shutdown: bool,
 }
 
@@ -58,6 +61,7 @@ fn parse_config() -> Result<Config, String> {
     let mut inspector_arguments = Vec::new();
     let mut test_mode = false;
     let mut test_timeout = None;
+    let mut accepted_revision = 0;
     let mut args = env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -79,6 +83,13 @@ fn parse_config() -> Result<Config, String> {
                     .map_err(|_| "invalid test timeout value".to_string())?;
                 test_timeout = Some(Duration::from_millis(value));
             }
+            "--accepted-revision" => {
+                accepted_revision = args
+                    .next()
+                    .ok_or_else(|| "missing accepted revision".to_string())?
+                    .parse::<u64>()
+                    .map_err(|_| "invalid accepted revision".to_string())?;
+            }
             _ => return Err("unsupported worker argument".into()),
         }
     }
@@ -99,6 +110,7 @@ fn parse_config() -> Result<Config, String> {
         inspector_arguments,
         test_mode,
         test_timeout,
+        accepted_revision,
     })
 }
 
@@ -168,17 +180,25 @@ fn execute_native<'a>(
     request: &Request,
     revision: u64,
     sequence: u64,
-) -> (Reply, bool) {
+) -> (WorkerResponse, bool) {
+    if request.command == "apply" {
+        return (
+            WorkerResponse::Preparation(prepare_apply(
+                pdfium, workspace, inspector, registry, request, revision,
+            )),
+            false,
+        );
+    }
     let result = match request.command.as_str() {
         "open" => {
             let Some(active_workspace) = workspace.as_ref() else {
                 return (
-                    Reply::unknown(
+                    WorkerResponse::Public(Reply::unknown(
                         &request.session_id,
                         &request.request_id,
                         revision,
                         "private workspace is unavailable",
-                    ),
+                    )),
                     false,
                 );
             };
@@ -187,13 +207,13 @@ fn execute_native<'a>(
                     Ok(opened) => *document = Some(opened),
                     Err(_) => {
                         return (
-                            Reply::rejected(
+                            WorkerResponse::Public(Reply::rejected(
                                 request,
                                 revision,
                                 "rejected",
                                 "REJECTED_UNSUPPORTED_STRUCTURE",
                                 "source PDF could not be opened by the pinned engine",
-                            ),
+                            )),
                             false,
                         )
                     }
@@ -206,13 +226,13 @@ fn execute_native<'a>(
             if page_count > 256 {
                 drop(document.take());
                 return (
-                    Reply::rejected(
+                    WorkerResponse::Public(Reply::rejected(
                         request,
                         revision,
                         "rejected",
                         "REJECTED_UNSUPPORTED_STRUCTURE",
                         "source PDF exceeds the configured page limit",
-                    ),
+                    )),
                     false,
                 );
             }
@@ -236,12 +256,12 @@ fn execute_native<'a>(
         "inspect" => {
             let Some(active_workspace) = workspace.as_ref() else {
                 return (
-                    Reply::unknown(
+                    WorkerResponse::Public(Reply::unknown(
                         &request.session_id,
                         &request.request_id,
                         revision,
                         "private workspace is unavailable",
-                    ),
+                    )),
                     false,
                 );
             };
@@ -485,13 +505,13 @@ fn execute_native<'a>(
         "render" => {
             let Some(opened) = document.as_ref() else {
                 return (
-                    Reply::rejected(
+                    WorkerResponse::Public(Reply::rejected(
                         request,
                         revision,
                         "rejected",
                         "REJECTED_UNSUPPORTED_STRUCTURE",
                         "source PDF is not open",
-                    ),
+                    )),
                     false,
                 );
             };
@@ -597,7 +617,92 @@ fn execute_native<'a>(
             "command is unavailable in the read-only worker foundation",
         ),
     };
-    (result, request.command == "close")
+    (WorkerResponse::Public(result), request.command == "close")
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreparationPayload {
+    accepted_checkpoint_id: String,
+    accepted_artifact_hash: String,
+    edit: PreflightInput,
+}
+
+fn prepare_apply(
+    pdfium: &Pdfium,
+    workspace: &mut Option<SessionWorkspace>,
+    inspector: &dyn ResourceInspector,
+    registry: &ObjectRegistry,
+    request: &Request,
+    revision: u64,
+) -> PreparationReply {
+    let Some(active) = workspace.as_ref() else {
+        return PreparationReply::unknown(request, revision, "private workspace is unavailable");
+    };
+    let payload: PreparationPayload =
+        match serde_json::from_value(Value::Object(request.payload.clone())) {
+            Ok(value) => value,
+            Err(_) => {
+                return PreparationReply::rejected(
+                    request,
+                    revision,
+                    "REJECTED_UNSUPPORTED_STRUCTURE",
+                )
+            }
+        };
+    if payload.accepted_artifact_hash != active.source_hash() {
+        return PreparationReply::rejected(request, revision, "REJECTED_STALE_REVISION");
+    }
+    let accepted = AcceptedCheckpointRef {
+        path: active.source_path(),
+        sha256: active.source_hash(),
+        checkpoint_id: &payload.accepted_checkpoint_id,
+        revision,
+    };
+    let candidate = match prepare_from_checkpoint(
+        pdfium,
+        active,
+        &accepted,
+        registry,
+        request.target_id.as_deref().unwrap_or_default(),
+        &payload.edit,
+        inspector,
+        &CancellationToken::default(),
+    ) {
+        Ok(value) => value,
+        Err(reason) => return PreparationReply::rejected(request, revision, reason),
+    };
+    let verified = match verify(pdfium, candidate, inspector) {
+        Ok(value) => value,
+        Err(reason) => return PreparationReply::rejected(request, revision, reason),
+    };
+    let (candidate, report) = verified.into_parts();
+    let Some(token) = candidate.path.file_stem().and_then(|value| value.to_str()) else {
+        return PreparationReply::unknown(
+            request,
+            revision,
+            "prepared candidate identity is unavailable",
+        );
+    };
+    PreparationReply::prepared(
+        request,
+        revision,
+        json!({
+            "acceptedCheckpointId": candidate.checkpoint_id,
+            "baselineHash": candidate.baseline_sha256,
+            "candidateToken": token,
+            "candidateHash": candidate.sha256,
+            "candidateBytes": candidate.bytes,
+            "editExpectation": candidate.expectation,
+            "engineIdentity": {
+                "build": PDFIUM_BUILD_IDENTITY,
+                "sha256": PDFIUM_LIBRARY_SHA256,
+                "wrapper": PDFIUM_RENDER_VERSION,
+            },
+            "verifierIdentity": {"policy": report.policy},
+            "verificationResults": report,
+        }),
+    )
 }
 
 fn base64_encode(bytes: &[u8]) -> String {
@@ -723,12 +828,13 @@ fn run(config: Config) -> Result<(), String> {
     let input_session = config.session_id.clone();
     thread::spawn(move || input_loop(request_sender, input_writer, input_session));
 
-    let mut ledger = RequestLedger::new();
-    let revision = 0_u64;
+    let mut ledger = std::collections::HashMap::<String, WorkerResponse>::new();
+    let revision = config.accepted_revision;
     while let Ok(request) = request_receiver.recv() {
-        if let Some(original) = ledger.outcome(&request.request_id) {
-            let reply = duplicate_reply(&request, revision, original);
-            send_reply(&writer, &reply).map_err(|_| "protocol output failed".to_string())?;
+        if let Some(original) = ledger.get(&request.request_id) {
+            let reply = original.duplicate();
+            edit_content_engine::send_response(&writer, &reply)
+                .map_err(|_| "protocol output failed".to_string())?;
             continue;
         }
         if let Err((reason, error)) = validate_request(&request, &config.session_id) {
@@ -737,12 +843,35 @@ fn run(config: Config) -> Result<(), String> {
             } else {
                 "rejected"
             };
+            if request.command == "apply" {
+                let reply = WorkerResponse::Preparation(PreparationReply::rejected(
+                    &request, revision, reason,
+                ));
+                ledger.insert(request.request_id.clone(), reply.clone());
+                edit_content_engine::send_response(&writer, &reply)
+                    .map_err(|_| "protocol output failed".to_string())?;
+                continue;
+            }
             let reply = Reply::rejected(&request, revision, status, reason, error);
-            ledger.remember(request.request_id.clone(), reply.clone());
+            ledger.insert(
+                request.request_id.clone(),
+                WorkerResponse::Public(reply.clone()),
+            );
             send_reply(&writer, &reply).map_err(|_| "protocol output failed".to_string())?;
             continue;
         }
         if request.command != "open" && request.expected_accepted_revision != Some(revision) {
+            if request.command == "apply" {
+                let reply = WorkerResponse::Preparation(PreparationReply::rejected(
+                    &request,
+                    revision,
+                    "REJECTED_STALE_REVISION",
+                ));
+                ledger.insert(request.request_id.clone(), reply.clone());
+                edit_content_engine::send_response(&writer, &reply)
+                    .map_err(|_| "protocol output failed".to_string())?;
+                continue;
+            }
             let reply = Reply::rejected(
                 &request,
                 revision,
@@ -750,13 +879,17 @@ fn run(config: Config) -> Result<(), String> {
                 "REJECTED_STALE_REVISION",
                 "request revision is not current",
             );
-            ledger.remember(request.request_id.clone(), reply.clone());
+            ledger.insert(
+                request.request_id.clone(),
+                WorkerResponse::Public(reply.clone()),
+            );
             send_reply(&writer, &reply).map_err(|_| "protocol output failed".to_string())?;
             continue;
         }
 
         let request_id = request.request_id.clone();
         let request_session = request.session_id.clone();
+        let preparation = request.command == "apply";
         let command_timeout = config
             .test_timeout
             .unwrap_or_else(|| timeout_for(&request.command));
@@ -770,31 +903,67 @@ fn run(config: Config) -> Result<(), String> {
             .map_err(|_| "native worker exited".to_string())?;
         match response_receiver.recv_timeout(command_timeout) {
             Ok(outcome) => {
-                ledger.remember(request_id, outcome.reply.clone());
-                send_reply(&writer, &outcome.reply)
+                ledger.insert(request_id, outcome.reply.clone());
+                edit_content_engine::send_response(&writer, &outcome.reply)
                     .map_err(|_| "protocol output failed".to_string())?;
                 if outcome.shutdown {
                     break;
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                let reply = Reply::unknown(
-                    &request_session,
-                    &request_id,
-                    revision,
-                    "native command timed out; worker terminated",
-                );
-                let _ = send_reply(&writer, &reply);
+                if preparation {
+                    let request = Request {
+                        schema_version: edit_content_engine::REQUEST_SCHEMA.into(),
+                        request_id: request_id.clone(),
+                        session_id: request_session.clone(),
+                        command: "apply".into(),
+                        expected_accepted_revision: Some(revision),
+                        target_id: None,
+                        payload: serde_json::Map::new(),
+                    };
+                    let reply = WorkerResponse::Preparation(PreparationReply::unknown(
+                        &request,
+                        revision,
+                        "native command timed out; worker terminated",
+                    ));
+                    let _ = edit_content_engine::send_response(&writer, &reply);
+                } else {
+                    let reply = Reply::unknown(
+                        &request_session,
+                        &request_id,
+                        revision,
+                        "native command timed out; worker terminated",
+                    );
+                    let _ = send_reply(&writer, &reply);
+                }
                 return Err("native command timeout".into());
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                let reply = Reply::unknown(
-                    &request_session,
-                    &request_id,
-                    revision,
-                    "native worker exited; request outcome is unknown",
-                );
-                let _ = send_reply(&writer, &reply);
+                if preparation {
+                    let request = Request {
+                        schema_version: edit_content_engine::REQUEST_SCHEMA.into(),
+                        request_id: request_id.clone(),
+                        session_id: request_session.clone(),
+                        command: "apply".into(),
+                        expected_accepted_revision: Some(revision),
+                        target_id: None,
+                        payload: serde_json::Map::new(),
+                    };
+                    let reply = WorkerResponse::Preparation(PreparationReply::unknown(
+                        &request,
+                        revision,
+                        "native worker exited; request outcome is unknown",
+                    ));
+                    let _ = edit_content_engine::send_response(&writer, &reply);
+                } else {
+                    let reply = Reply::unknown(
+                        &request_session,
+                        &request_id,
+                        revision,
+                        "native worker exited; request outcome is unknown",
+                    );
+                    let _ = send_reply(&writer, &reply);
+                }
                 return Err("native worker exited".into());
             }
         }

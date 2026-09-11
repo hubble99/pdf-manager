@@ -23,6 +23,9 @@ import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--mode", default="normal")
+parser.add_argument("--session-id")
+parser.add_argument("--workspace-root")
+parser.add_argument("--accepted-revision", type=int, default=0)
 args, _ = parser.parse_known_args()
 
 def read_exact(length):
@@ -44,13 +47,26 @@ while True:
     request = json.loads(payload)
     if args.mode == "crash" and request["command"] == "open":
         os._exit(17)
+    if request["command"] == "apply":
+        token = "candidate-%s-0" % os.getpid()
+        workspace = os.path.join(args.workspace_root, "edit-content-fake-%s" % os.getpid())
+        os.makedirs(os.path.join(workspace, "staging"), exist_ok=True)
+        with open(os.path.join(workspace, ".owner.json"), "w", encoding="utf-8") as marker:
+            json.dump({"schema": "edit-content-workspace/v1", "owner": "edit-content-engine",
+                       "sessionId": args.session_id, "processId": os.getpid()}, marker)
+        with open(os.path.join(workspace, "staging", token + ".pdf"), "wb") as candidate:
+            candidate.write(b"verified candidate")
+        schema, status, result = "edit-content-preparation/v1", "prepared", {"candidateToken": token}
+    else:
+        schema, status, result = "edit-content-reply/v1", "accepted", {
+            "command": request["command"], "workerPid": os.getpid()}
     reply = {
-        "schemaVersion": "edit-content-reply/v1",
+        "schemaVersion": schema,
         "requestId": request["requestId"],
         "sessionId": request["sessionId"],
-        "status": "accepted",
-        "acceptedRevision": 0,
-        "result": {"command": request["command"], "workerPid": os.getpid()},
+        "status": status,
+        "acceptedRevision": args.accepted_revision,
+        "result": result,
     }
     encoded = json.dumps(reply, separators=(",", ":")).encode()
     sys.stdout.buffer.write(struct.pack(">I", len(encoded)) + encoded)
@@ -66,7 +82,9 @@ def _adapter(tmp_path: Path, *, mode: str = "normal") -> ContentWorkerAdapter:
     source = tmp_path / "source.pdf"
     source.write_bytes(b"%PDF-1.4\n%%EOF")
     config = WorkerLaunchConfig.create(
-        worker_command=(sys.executable, str(worker_script), "--mode", mode),
+        # Use the base interpreter, not the venv launcher process, so the fake
+        # worker's ownership PID has the same semantics as the real Rust binary.
+        worker_command=(getattr(sys, "_base_executable", sys.executable), str(worker_script), "--mode", mode),
         pdfium_library=tmp_path / "pdfium.dll",
         workspace_root=tmp_path / "workspaces",
         inspector_command=(sys.executable, "resource-inspector.py"),
@@ -74,6 +92,20 @@ def _adapter(tmp_path: Path, *, mode: str = "normal") -> ContentWorkerAdapter:
     adapter = ContentWorkerAdapter(config)
     adapter.start(source, session_id="adapter-test")
     return adapter
+
+
+def test_preparation_token_resolves_only_inside_the_owned_worker_workspace(tmp_path):
+    adapter = _adapter(tmp_path)
+    adapter.restart(accepted_revision=4)
+    lease = adapter.prepare_apply(
+        request_id="prepare1", expected_revision=4, target_id="opaque-target",
+        accepted_checkpoint_id="checkpoint", accepted_artifact_hash="a" * 64,
+        edit={"expectedText": "word", "expectedOldText": "word", "replacementText": "text",
+              "utf16Start": 0, "utf16End": 4},
+    )
+    assert lease.path.read_bytes() == b"verified candidate"
+    assert "candidatePath" not in lease.response["result"]
+    adapter.close()
 
 
 def test_adapter_open_close_and_restart_are_scoped(tmp_path):

@@ -1,5 +1,7 @@
 use edit_content_engine::viewport::{PageRotation, Point, Rect, ViewportTransform};
-use edit_content_engine::{sha256_reader, Reply, MAX_REQUEST_BYTES, REQUEST_SCHEMA};
+use edit_content_engine::{
+    sha256_reader, Reply, MAX_REQUEST_BYTES, PREPARATION_SCHEMA, REQUEST_SCHEMA,
+};
 use serde_json::{json, Value};
 use std::env;
 use std::fs::File;
@@ -23,6 +25,10 @@ impl Worker {
 
     fn start_phase3(extra: &[&str]) -> Self {
         Self::start_with_writer(extra, write_phase3_pdf)
+    }
+
+    fn start_phase5(extra: &[&str]) -> Self {
+        Self::start_with_writer(extra, write_phase5_pdf)
     }
 
     fn start_with_writer(extra: &[&str], writer: fn(&Path)) -> Self {
@@ -143,6 +149,18 @@ fn write_phase3_pdf(path: &Path) {
         stream("ff0000>", "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode"),
         stream("0 0 500 700 re f", ""),
         stream("BT /F1 18 Tf 30 140 Td (Office-like duplicate) Tj ET", ""),
+    ];
+    write_pdf_objects(path, &objects);
+}
+
+fn write_phase5_pdf(path: &Path) {
+    let content = "BT /F1 12 Tf 30 100 Td (word) Tj ET";
+    let objects = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>".into(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
     ];
     write_pdf_objects(path, &objects);
 }
@@ -832,4 +850,101 @@ fn worker_open_inspect_close_uses_the_pinned_read_only_companion() {
     assert_eq!(repeated_render.status, "accepted");
     assert_eq!(repeated_render.result["sha256"], first_render_hash);
     worker.close("close-real-inspector");
+}
+
+#[test]
+fn worker_preparation_is_verified_private_and_never_an_accepted_outcome() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let backend = manifest.parent().unwrap().parent().unwrap().join("backend");
+    let python_path = format!(
+        "PYTHONPATH={}:{}",
+        backend.display(),
+        backend.join(".venv/Lib/site-packages").display()
+    );
+    let script = backend.join("features/edit_content/resource_inspector_cli.py");
+    let arguments = [
+        "--inspector-program",
+        "/usr/bin/env",
+        "--inspector-arg",
+        python_path.as_str(),
+        "--inspector-arg",
+        "python3",
+        "--inspector-arg",
+        script.to_str().unwrap(),
+    ];
+    let mut worker = Worker::start_phase5(&arguments);
+    let original_hash = sha256_reader(&mut File::open(&worker.source).unwrap()).unwrap();
+    worker.send(request("open-phase5", "open", None, json!({})));
+    assert_eq!(worker.reply().status, "accepted");
+    worker.send(request("inspect-phase5", "inspect", Some(0), json!({})));
+    let inspected = worker.reply();
+    let target = inspected.result["discovery"]["textObjects"][0]["targetId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let mut apply = request(
+        "prepare-phase5",
+        "apply",
+        Some(0),
+        json!({
+            "acceptedCheckpointId": "source",
+            "acceptedArtifactHash": original_hash,
+            "edit": {"expectedText": "word", "expectedOldText": "word",
+                "replacementText": "text", "utf16Start": 0, "utf16End": 4}
+        }),
+    );
+    apply["targetId"] = json!(target);
+    worker.send(apply.clone());
+    let prepared = worker.reply();
+    assert_eq!(prepared.schema_version, PREPARATION_SCHEMA);
+    assert_eq!(prepared.status, "prepared");
+    assert_eq!(prepared.accepted_revision, 0);
+    assert!(prepared.result.get("candidatePath").is_none());
+    assert_eq!(
+        prepared.result["verificationResults"]["checks"]
+            .as_array()
+            .unwrap()
+            .len(),
+        8
+    );
+    let token = prepared.result["candidateToken"].as_str().unwrap();
+    let workspace = std::fs::read_dir(&worker.workspace_root)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let candidate = workspace.join("staging").join(format!("{token}.pdf"));
+    assert!(candidate.is_file());
+    let before_count = std::fs::read_dir(workspace.join("staging"))
+        .unwrap()
+        .count();
+    worker.send(apply);
+    let duplicate = worker.reply();
+    assert_eq!(duplicate.schema_version, PREPARATION_SCHEMA);
+    assert_eq!(duplicate.status, "prepared");
+    assert_eq!(duplicate.result["mutationReplayed"], false);
+    assert_eq!(
+        duplicate.result["candidateToken"],
+        prepared.result["candidateToken"]
+    );
+    assert_eq!(
+        std::fs::read_dir(workspace.join("staging"))
+            .unwrap()
+            .count(),
+        before_count
+    );
+    let independent = Command::new("python3")
+        .env("PYTHONPATH", backend.join(".venv/Lib/site-packages"))
+        .args(["-c", "import sys; from pypdf import PdfReader; print(PdfReader(sys.argv[1]).pages[0].extract_text(), end='')"])
+        .arg(&candidate)
+        .output()
+        .unwrap();
+    assert!(independent.status.success());
+    assert_eq!(independent.stdout, b"text");
+    assert_eq!(
+        sha256_reader(&mut File::open(&worker.source).unwrap()).unwrap(),
+        original_hash
+    );
+    worker.close("close-phase5");
 }

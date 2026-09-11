@@ -173,10 +173,14 @@ pub fn capture(
                 style["fillColor"] = color(text.fill_color().map_err(|_| INTEGRITY)?);
                 style["strokeColor"] = color(text.stroke_color().map_err(|_| INTEGRITY)?);
                 style["renderMode"] = json!(descriptor.render_mode);
+                style["rotation"] = json!(finite(descriptor.rotation)?);
                 style["font"] = json!({"name": descriptor.font.name, "family": descriptor.font.family,
                     "weight": descriptor.font.weight, "embedded": descriptor.font.embedded, "identity": fingerprint});
                 ("text", Some(text.text()), Value::Null)
             } else if let Some(path) = object.as_path_object() {
+                if path.has_transparency() {
+                    return Err(INTEGRITY);
+                }
                 style["fillColor"] = color(path.fill_color().map_err(|_| INTEGRITY)?);
                 style["strokeColor"] = color(path.stroke_color().map_err(|_| INTEGRITY)?);
                 style["strokeWidth"] =
@@ -344,6 +348,10 @@ impl VerifiedCandidate {
             Ok(())
         }
     }
+
+    pub fn into_parts(self) -> (Candidate, VerificationReport) {
+        (self.candidate, self.report)
+    }
 }
 
 pub fn verify(
@@ -378,6 +386,14 @@ pub fn compare(
     candidate: &Snapshot,
     edit: &EditExpectation,
 ) -> Result<VerificationReport, &'static str> {
+    if baseline
+        .objects
+        .iter()
+        .chain(&candidate.objects)
+        .any(|object| !has_supported_preservation_evidence(object))
+    {
+        return Err(INTEGRITY);
+    }
     if baseline.revision != candidate.revision
         || baseline.pages.len() != candidate.pages.len()
         || !baseline
@@ -433,8 +449,7 @@ pub fn compare(
         used[matches[0]] = true;
         correspondence.push((index, matches[0]));
     }
-    if used.iter().any(|used| !used) || correspondence.windows(2).any(|pair| pair[0].1 >= pair[1].1)
-    {
+    if used.iter().any(|used| !used) {
         return Err(INTEGRITY);
     }
     let occurrences = |text: &str| text.matches(&edit.old_text).count();
@@ -502,6 +517,36 @@ pub fn compare(
         .map(str::to_owned)
         .collect(),
     })
+}
+
+fn has_supported_preservation_evidence(object: &ObjectEvidence) -> bool {
+    match object.kind.as_str() {
+        "text" => object.text.is_some() && object.payload.is_null(),
+        "path" => {
+            object.text.is_none()
+                && object.payload["fill"].is_string()
+                && object.payload["stroked"].is_boolean()
+                && object.payload["segments"].is_array()
+        }
+        "image" => {
+            object.text.is_none()
+                && object.payload["width"]
+                    .as_i64()
+                    .is_some_and(|value| value > 0)
+                && object.payload["height"]
+                    .as_i64()
+                    .is_some_and(|value| value > 0)
+                && object.payload["pixels"]
+                    .as_str()
+                    .is_some_and(|value| value.len() == 64)
+                && !object.payload["resourceIdentity"].is_null()
+                && object.payload["colorSpace"].is_string()
+                && object.payload["bitsPerPixel"]
+                    .as_u64()
+                    .is_some_and(|value| value > 0)
+        }
+        _ => false,
+    }
 }
 
 // Convex native quads; uncertain/degenerate geometry rejects rather than reflowing.
@@ -659,6 +704,16 @@ mod tests {
         result
     }
 
+    // This helper exists only in the cfg(test) module. Production has no flag
+    // or protocol field that can bypass preflight before verification.
+    fn test_only_bypass_preflight(
+        baseline: &Snapshot,
+        candidate: &Snapshot,
+        edit: &EditExpectation,
+    ) -> Result<VerificationReport, &'static str> {
+        compare(baseline, candidate, edit)
+    }
+
     #[test]
     fn repeated_and_boundary_created_occurrences_use_the_planned_full_string() {
         for (text, old, replacement, before, after) in [
@@ -694,11 +749,77 @@ mod tests {
     }
 
     #[test]
+    fn test_only_preflight_bypass_still_rejects_web_resource_and_font_corruption() {
+        let (mut baseline, edit) = fixture("word", "word", "text");
+        baseline.pages[0]["resources"] = json!({"/XObject": ["a".repeat(64)]});
+        let good = candidate(&baseline, &edit);
+
+        let mut corrupted_resource = good.clone();
+        corrupted_resource.pages[0]["resources"] = json!({"/XObject": ["b".repeat(64)]});
+        assert!(test_only_bypass_preflight(&baseline, &corrupted_resource, &edit).is_err());
+
+        let mut corrupted_font = good;
+        corrupted_font.objects[0].style["font"] = json!({"identity": "b".repeat(64)});
+        assert!(test_only_bypass_preflight(&baseline, &corrupted_font, &edit).is_err());
+    }
+
+    #[test]
+    fn supported_path_and_image_fingerprints_are_exact_and_unknown_opaque_rejects() {
+        let (mut baseline, edit) = fixture("word", "word", "text");
+        baseline.objects.push(ObjectEvidence {
+            page: 0,
+            index: 1,
+            kind: "path".into(),
+            text: None,
+            quad: quad(30.0, 40.0),
+            style: json!({"matrix": [1, 0, 0, 1, 0, 0], "fillColor": [0, 0, 0, 255]}),
+            payload: json!({"fill": "Winding", "stroked": true,
+                "segments": [{"kind": "LineTo", "close": false, "point": [30.0, 10.0]}]}),
+        });
+        baseline.objects.push(ObjectEvidence {
+            page: 0,
+            index: 2,
+            kind: "image".into(),
+            text: None,
+            quad: quad(50.0, 60.0),
+            style: json!({"matrix": [1, 0, 0, 1, 50, 10]}),
+            payload: json!({"width": 10, "height": 10, "pixels": "a".repeat(64),
+                "resourceIdentity": "b".repeat(64), "colorSpace": "DeviceRGB",
+                "bitsPerPixel": 24}),
+        });
+        let good = candidate(&baseline, &edit);
+        assert!(compare(&baseline, &good, &edit).is_ok());
+
+        let mut changed_path = good.clone();
+        changed_path.objects[1].payload["segments"][0]["point"][0] = json!(30.02);
+        assert!(compare(&baseline, &changed_path, &edit).is_err());
+        let mut changed_image = good.clone();
+        changed_image.objects[2].payload["pixels"] = json!("c".repeat(64));
+        assert!(compare(&baseline, &changed_image, &edit).is_err());
+
+        let mut opaque = baseline.clone();
+        opaque.objects[1].kind = "opaque".into();
+        assert!(compare(&opaque, &candidate(&opaque, &edit), &edit).is_err());
+        let mut missing = baseline.clone();
+        missing.objects[2].payload = Value::Null;
+        assert!(compare(&missing, &candidate(&missing, &edit), &edit).is_err());
+    }
+
+    #[test]
     fn renumbering_is_not_identity_but_ambiguous_correspondence_rejects() {
         let (baseline, edit) = fixture("word", "word", "text");
         let mut good = candidate(&baseline, &edit);
         good.objects[0].index = 900;
         assert!(compare(&baseline, &good, &edit).is_ok());
+        let mut reordered_baseline = baseline.clone();
+        let mut neighbor = reordered_baseline.objects[0].clone();
+        neighbor.index = 1;
+        neighbor.text = Some("neighbor".into());
+        neighbor.quad = quad(30.0, 40.0);
+        reordered_baseline.objects.push(neighbor);
+        let mut reordered = candidate(&reordered_baseline, &edit);
+        reordered.objects.reverse();
+        assert!(compare(&reordered_baseline, &reordered, &edit).is_ok());
         let mut ambiguous = baseline.clone();
         let mut duplicate = ambiguous.objects[0].clone();
         duplicate.index = 1;
