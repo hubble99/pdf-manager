@@ -81,10 +81,53 @@ class ContentSessionCoordinator:
             store.close()
             raise
 
-    def inspect(self) -> dict[str, Any]:
+    def inspect(
+        self,
+        *,
+        request_id: str | None = None,
+        expected_revision: int | None = None,
+        target_id: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         with self._lock:
             self._ensure_worker()
-            return self.adapter.inspect()
+            state = self.store.state()
+            revision = state.revision if expected_revision is None else expected_revision
+            if revision != state.revision:
+                raise ContentCoordinatorError("stale", "REJECTED_STALE_REVISION")
+            if request_id is None and expected_revision is None and target_id is None and payload is None:
+                reply = self.adapter.inspect()
+            else:
+                reply = self.adapter.inspect_request(
+                    request_id=request_id,
+                    expected_revision=revision,
+                    target_id=target_id,
+                    payload=payload,
+                )
+            return self._checked_read_reply(reply, state.revision)
+
+    def render(
+        self,
+        *,
+        request_id: str,
+        expected_revision: int,
+        page_index: int,
+        width_px: int,
+        height_px: int,
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._ensure_worker()
+            state = self.store.state()
+            if expected_revision != state.revision:
+                raise ContentCoordinatorError("stale", "REJECTED_STALE_REVISION")
+            reply = self.adapter.render(
+                request_id=request_id,
+                expected_revision=expected_revision,
+                page_index=page_index,
+                width_px=width_px,
+                height_px=height_px,
+            )
+            return self._checked_read_reply(reply, state.revision)
 
     def apply(
         self, *, request_id: str, expected_revision: int, target_id: str,
@@ -258,6 +301,17 @@ class ContentSessionCoordinator:
             self._restart_current()
         except Exception:
             self.adapter.terminate()
+
+    @staticmethod
+    def _checked_read_reply(reply: dict[str, Any], revision: int) -> dict[str, Any]:
+        status = reply.get("status")
+        if reply.get("acceptedRevision") != revision:
+            raise ContentCoordinatorError("unknown", "Content worker revision could not be established")
+        if status != "accepted":
+            reason = str(reply.get("guardReason") or "REJECTED_UNSUPPORTED_STRUCTURE")
+            safe_status = "stale" if status == "stale" else "rejected"
+            raise ContentCoordinatorError(safe_status, reason)
+        return reply
 
 
 def _file_hash(path: Path) -> str:

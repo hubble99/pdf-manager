@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
-from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, metadata, protect, preview, edit_canvas, fonts
+from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, metadata, protect, preview, edit_canvas, edit_content, fonts
 from version import APP_VERSION
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -193,6 +193,7 @@ app.include_router(metadata.router, prefix="/api/v1")
 app.include_router(protect.router, prefix="/api/v1")
 app.include_router(preview.router, prefix="/api/v1")
 app.include_router(edit_canvas.router, prefix="/api/v1")
+app.include_router(edit_content.router, prefix="/api/v1")
 app.include_router(fonts.router, prefix="/api/v1")
 
 # ── Health Check ────────────────────────────────────────────────────────────────
@@ -275,5 +276,4 @@ if __name__ == "__main__":
             reload=False,
             log_level=settings.LOG_LEVEL.lower(),
         )
-
 

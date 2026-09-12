@@ -696,7 +696,7 @@ body {
   position: relative;
 }
 
-/* Semua elemen di dalam controls wajib full-width */
+/* Controls inside the feature rail use the full available width. */
 .feature-controls .card { width: 100%; }
 .feature-controls input { width: 100%; box-sizing: border-box; }
 .feature-controls button.primary { width: 100%; }
@@ -1254,6 +1254,398 @@ select.input {
 .badge-info {
   background: var(--info-container);
   color: var(--info);
+}
+
+/* ── Edit Content ─────────────────────────────────────────────────────────── */
+.edit-content-page {
+  --edit-content-rail-width: 340px;
+}
+
+.edit-content-onboarding {
+  width: min(620px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.edit-content-safety-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  color: var(--success);
+  background: var(--success-container);
+}
+
+.edit-content-safety-note p {
+  margin-top: var(--space-1);
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.edit-content-layout {
+  gap: var(--space-4);
+}
+
+.edit-content-controls {
+  width: var(--edit-content-rail-width);
+  min-width: var(--edit-content-rail-width);
+  gap: var(--space-4);
+}
+
+.edit-content-file-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.edit-content-file-row > svg {
+  color: var(--accent);
+}
+
+.edit-content-file-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.edit-content-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.edit-content-section h2 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--on-surface);
+}
+
+.edit-content-section p,
+.edit-content-hint {
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.edit-content-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.edit-content-section-heading p {
+  margin-top: var(--space-1);
+}
+
+.edit-content-editor-section {
+  padding: var(--space-4);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+}
+
+.edit-content-object-picker {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.edit-content-object-picker select {
+  width: 100%;
+}
+
+.edit-content-textarea {
+  min-height: 112px;
+  padding: var(--space-3);
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.edit-content-object-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--on-surface-variant);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.edit-content-object-meta span:not(:last-child)::after {
+  content: "·";
+  margin-left: var(--space-2);
+  color: var(--outline);
+}
+
+.edit-content-editor-actions,
+.edit-content-history-actions,
+.edit-content-decision-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.edit-content-editor-actions .btn-primary {
+  flex: 1;
+}
+
+.edit-content-history-actions .btn {
+  flex: 1;
+}
+
+.edit-content-decision,
+.edit-content-progress,
+.status-banner {
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.edit-content-decision {
+  background: var(--warning-container);
+  color: var(--warning);
+}
+
+.edit-content-decision p {
+  margin: var(--space-1) 0 var(--space-3);
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.edit-content-progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--info-container);
+  color: var(--info);
+}
+
+.edit-content-progress > svg,
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.edit-content-progress div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.edit-content-progress span {
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-xs);
+}
+
+.status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.status-banner--error {
+  color: var(--error);
+  background: var(--error-container);
+}
+
+.status-banner--info {
+  color: var(--info);
+  background: var(--info-container);
+}
+
+.edit-content-object-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.edit-content-object-option {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--surface-container);
+  color: var(--on-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.edit-content-object-option:hover,
+.edit-content-object-option:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.edit-content-object-option span,
+.edit-content-object-option small {
+  display: block;
+}
+
+.edit-content-object-option small {
+  margin-top: var(--space-1);
+  color: var(--on-surface-variant);
+}
+
+.edit-content-preview {
+  overflow: hidden;
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--surface-container-low);
+}
+
+.edit-content-toolbar,
+.edit-content-preview-footer {
+  min-height: var(--control-height-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  flex-shrink: 0;
+}
+
+.edit-content-toolbar {
+  border-bottom: 1px solid var(--outline-variant);
+}
+
+.edit-content-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.edit-content-toolbar .text-mono,
+.edit-content-preview-footer {
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.edit-content-preview-footer {
+  border-top: 1px solid var(--outline-variant);
+}
+
+.edit-content-preview-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.edit-content-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--background);
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline-variant) transparent;
+}
+
+.edit-content-viewport--empty {
+  align-items: center;
+}
+
+.edit-content-document {
+  position: relative;
+  flex: 0 0 auto;
+  background: var(--on-surface);
+  box-shadow: var(--shadow-md);
+  cursor: text;
+  outline: none;
+}
+
+.edit-content-document:focus-visible {
+  box-shadow: var(--shadow-md), var(--focus-ring);
+}
+
+.edit-content-document img,
+.edit-content-selection-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.edit-content-selection-layer {
+  pointer-events: none;
+}
+
+.edit-content-selection-layer polygon {
+  fill: color-mix(in srgb, var(--accent) 18%, transparent);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.edit-content-rendering {
+  position: sticky;
+  left: 50%;
+  bottom: var(--space-4);
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-sm);
+}
+
+.edit-content-rendering svg {
+  animation: spin 1s linear infinite;
+}
+
+@media (max-width: 860px) {
+  .edit-content-page .page-header {
+    align-items: flex-start;
+  }
+
+  .edit-content-page .page-header-actions {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .edit-content-controls {
+    width: 100%;
+    min-width: 0;
+    max-height: 46vh;
+  }
+
+  .edit-content-preview {
+    min-height: 48vh;
+  }
+
+  .edit-content-preview-footer span:nth-child(2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edit-content-progress > svg,
+  .edit-content-rendering svg,
+  .spin {
+    animation-duration: 2s;
+  }
 }
 
 .badge-neutral {

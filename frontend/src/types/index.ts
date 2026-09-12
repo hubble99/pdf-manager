@@ -9,6 +9,7 @@ export type NavItemId =
   | 'qr-barcode'
   | 'insert'
   | 'edit-canvas'
+  | 'edit-content'
   | 'organize'
   | 'metadata'
   | 'protect';

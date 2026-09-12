@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   PenLine,
+  FilePenLine,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../../types';
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'qr-barcode',    label: 'QR & Barcode',    icon: QrCode,     path: '/qr-barcode' },
   { id: 'insert',        label: 'Insert Content',  icon: FilePlus,   path: '/insert', badge: 'ADV' },
   { id: 'edit-canvas',   label: 'Edit Canvas',     icon: PenLine,    path: '/edit-canvas' },
+  { id: 'edit-content',  label: 'Edit Content',    icon: FilePenLine, path: '/edit-content' },
 ];
 
 export function Sidebar() {

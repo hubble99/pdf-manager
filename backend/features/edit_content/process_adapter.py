@@ -147,10 +147,44 @@ class ContentWorkerAdapter:
         return self._request("open", expected_revision=None, timeout=self._config.startup_timeout_seconds)
 
     def inspect(self) -> dict[str, Any]:
+        return self.inspect_request()
+
+    def inspect_request(
+        self,
+        *,
+        expected_revision: int | None = None,
+        request_id: str | None = None,
+        target_id: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return self._request(
             "inspect",
-            expected_revision=self._accepted_revision,
+            expected_revision=self._accepted_revision if expected_revision is None else expected_revision,
             timeout=self._config.inspect_timeout_seconds,
+            request_id=request_id,
+            target_id=target_id,
+            request_payload=payload,
+        )
+
+    def render(
+        self,
+        *,
+        request_id: str,
+        expected_revision: int,
+        page_index: int,
+        width_px: int,
+        height_px: int,
+    ) -> dict[str, Any]:
+        return self._request(
+            "render",
+            expected_revision=expected_revision,
+            timeout=60.0,
+            request_id=request_id,
+            request_payload={
+                "pageIndex": page_index,
+                "widthPx": width_px,
+                "heightPx": height_px,
+            },
         )
 
     def prepare_apply(

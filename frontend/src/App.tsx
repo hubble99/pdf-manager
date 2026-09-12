@@ -27,6 +27,9 @@ type BackendStatus = 'checking' | 'online' | 'offline';
 const EditCanvasPage = lazy(() =>
   import('./pages/EditCanvasPage').then((module) => ({ default: module.EditCanvasPage }))
 );
+const EditContentPage = lazy(() =>
+  import('./pages/EditContentPage').then((module) => ({ default: module.EditContentPage }))
+);
 
 function RouteFallback() {
   return (
@@ -152,6 +155,14 @@ export default function App() {
                   element={(
                     <Suspense fallback={<RouteFallback />}>
                       <EditCanvasPage />
+                    </Suspense>
+                  )}
+                />
+                <Route
+                  path="/edit-content"
+                  element={(
+                    <Suspense fallback={<RouteFallback />}>
+                      <EditContentPage />
                     </Suspense>
                   )}
                 />

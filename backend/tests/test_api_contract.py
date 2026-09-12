@@ -28,6 +28,15 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/protect/remove"),
     ("POST", "/api/v1/preview/"),
     ("POST", "/api/v1/edit-canvas/save"),
+    ("POST", "/api/v1/edit-content/sessions"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/objects"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/render"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/apply"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/history"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/save"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/close"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/requests/{request_id}/cancel"),
+    ("GET", "/api/v1/edit-content/sessions/{session_id}/outputs/{output_id}"),
     ("GET", "/api/v1/fonts"),
     ("POST", "/api/v1/fonts"),
     ("DELETE", "/api/v1/fonts/{font_id}"),
@@ -151,12 +160,38 @@ REQUEST_BODY_CONTRACTS = {
         "required": {"file", "annotations"},
         "defaults": {"output_filename": "edited_document"},
     },
+    ("POST", "/api/v1/edit-content/sessions"): {
+        "media_type": "multipart/form-data",
+        "required": {"file", "schemaVersion", "requestId", "command"},
+        "defaults": {},
+    },
     ("POST", "/api/v1/fonts"): {
         "media_type": "multipart/form-data",
         "required": {"file"},
         "defaults": {},
     },
 }
+
+for edit_content_path in (
+    "/api/v1/edit-content/sessions/{session_id}/objects",
+    "/api/v1/edit-content/sessions/{session_id}/render",
+    "/api/v1/edit-content/sessions/{session_id}/apply",
+    "/api/v1/edit-content/sessions/{session_id}/history",
+    "/api/v1/edit-content/sessions/{session_id}/save",
+    "/api/v1/edit-content/sessions/{session_id}/close",
+):
+    REQUEST_BODY_CONTRACTS[("POST", edit_content_path)] = {
+        "media_type": "application/json",
+        "required": {
+            "schemaVersion",
+            "requestId",
+            "sessionId",
+            "command",
+            "expectedAcceptedRevision",
+            "payload",
+        },
+        "defaults": {"targetId": None},
+    }
 
 NO_BODY_ROUTES = {
     ("GET", "/api/v1/compress/download/{download_id}"),
@@ -165,6 +200,8 @@ NO_BODY_ROUTES = {
     ("GET", "/api/v1/fonts"),
     ("DELETE", "/api/v1/fonts/{font_id}"),
     ("GET", "/api/v1/fonts/{font_id}/file"),
+    ("POST", "/api/v1/edit-content/sessions/{session_id}/requests/{request_id}/cancel"),
+    ("GET", "/api/v1/edit-content/sessions/{session_id}/outputs/{output_id}"),
 }
 
 
