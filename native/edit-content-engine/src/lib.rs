@@ -20,10 +20,9 @@ pub mod workspace;
 pub const REQUEST_SCHEMA: &str = "edit-content-request/v1";
 pub const REPLY_SCHEMA: &str = "edit-content-reply/v1";
 pub const PREPARATION_SCHEMA: &str = "edit-content-preparation/v1";
-pub const PDFIUM_RENDER_VERSION: &str = "0.9.4";
-pub const PDFIUM_BUILD_IDENTITY: &str = "154.0.8035";
-pub const PDFIUM_LIBRARY_SHA256: &str =
-    "3619765195cfc2d91b1fd51d7cce8817a6f5726031995f005deed563d9bc6d08";
+pub const PDFIUM_RENDER_VERSION: &str = env!("PDFIUM_RENDER_VERSION");
+pub const PDFIUM_BUILD_IDENTITY: &str = env!("PDFIUM_BUILD_IDENTITY");
+pub const PDFIUM_LIBRARY_SHA256: &str = env!("PDFIUM_LIBRARY_SHA256");
 
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_REPLY_BYTES: usize = 16 * 1024 * 1024;

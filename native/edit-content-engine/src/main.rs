@@ -39,6 +39,7 @@ struct Config {
     test_mode: bool,
     test_timeout: Option<Duration>,
     accepted_revision: u64,
+    parent_process_id: Option<u32>,
 }
 
 struct NativeJob {
@@ -62,6 +63,7 @@ fn parse_config() -> Result<Config, String> {
     let mut test_mode = false;
     let mut test_timeout = None;
     let mut accepted_revision = 0;
+    let mut parent_process_id = None;
     let mut args = env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
@@ -90,6 +92,17 @@ fn parse_config() -> Result<Config, String> {
                     .parse::<u64>()
                     .map_err(|_| "invalid accepted revision".to_string())?;
             }
+            "--parent-process-id" => {
+                let process_id = args
+                    .next()
+                    .ok_or_else(|| "missing parent process ID".to_string())?
+                    .parse::<u32>()
+                    .map_err(|_| "invalid parent process ID".to_string())?;
+                if process_id == 0 || process_id == std::process::id() {
+                    return Err("invalid parent process ID".into());
+                }
+                parent_process_id = Some(process_id);
+            }
             _ => return Err("unsupported worker argument".into()),
         }
     }
@@ -111,6 +124,7 @@ fn parse_config() -> Result<Config, String> {
         test_mode,
         test_timeout,
         accepted_revision,
+        parent_process_id,
     })
 }
 
@@ -779,6 +793,9 @@ fn input_loop<W: io::Write + Send + 'static>(
 
 fn run(config: Config) -> Result<(), String> {
     verify_pdfium_library(&config.pdfium_library)?;
+    if let Some(parent_process_id) = config.parent_process_id {
+        watch_parent_process(parent_process_id);
+    }
     let cancellation = CancellationToken::default();
     let workspace = SessionWorkspace::create(
         &config.workspace_root,
@@ -974,6 +991,44 @@ fn run(config: Config) -> Result<(), String> {
         .map_err(|_| "native worker exited".to_string())?;
     Ok(())
 }
+
+#[cfg(windows)]
+fn watch_parent_process(parent_process_id: u32) {
+    use std::ffi::c_void;
+
+    unsafe extern "system" {
+        fn OpenProcess(access: u32, inherit_handle: i32, process_id: u32) -> *mut c_void;
+        fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const WAIT_OBJECT_0: u32 = 0;
+    const WAIT_TIMEOUT: u32 = 0x0000_0102;
+
+    thread::spawn(move || unsafe {
+        let process = OpenProcess(SYNCHRONIZE, 0, parent_process_id);
+        if process.is_null() {
+            std::process::exit(0);
+        }
+        loop {
+            match WaitForSingleObject(process, 1_000) {
+                WAIT_TIMEOUT => {}
+                WAIT_OBJECT_0 => {
+                    CloseHandle(process);
+                    std::process::exit(0);
+                }
+                _ => {
+                    CloseHandle(process);
+                    std::process::exit(0);
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn watch_parent_process(_parent_process_id: u32) {}
 
 fn main() -> ExitCode {
     match parse_config().and_then(run) {

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hmac
+import os
 from pathlib import Path
 import re
 from typing import Any, Literal
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -117,6 +119,15 @@ class ClosePayload(StrictModel):
 
 def get_content_registry() -> ContentSessionRegistry:
     return _registry
+
+
+@router.post("/shutdown")
+def shutdown(request: Request):
+    lifecycle_token = os.environ.get("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN")
+    supplied_token = request.headers.get("X-PDF-Manager-Lifecycle", "")
+    if not lifecycle_token or not hmac.compare_digest(supplied_token, lifecycle_token):
+        raise HTTPException(status_code=404, detail="Endpoint not found.")
+    return {"closedSessions": _registry.close_all()}
 
 
 def _validate_envelope(session_id: str, envelope: CommandEnvelope, command: str) -> None:

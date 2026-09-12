@@ -54,6 +54,7 @@ a = Analysis(
         # python-multipart (for file uploads)
         'multipart',
         'multipart.multipart',
+        'features.edit_content.resource_inspector_cli',
     ],
     hookspath=[],
     hooksconfig={},

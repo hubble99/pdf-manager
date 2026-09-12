@@ -16,6 +16,32 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn test_python() -> PathBuf {
+    if let Some(path) = std::env::var_os("EDIT_CONTENT_TEST_PYTHON") {
+        return PathBuf::from(path);
+    }
+    let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("backend");
+    if cfg!(windows) {
+        backend.join(".venv/Scripts/python.exe")
+    } else {
+        backend.join(".venv/bin/python")
+    }
+}
+
+fn backend_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("backend")
+}
+
 struct Fixture(PathBuf);
 
 impl Fixture {
@@ -121,15 +147,10 @@ fn round_trip(pdfium: &Pdfium, replacement: &str, regenerate: bool) -> (String, 
         (text, count as usize)
     };
     if replacement.is_empty() {
-        let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("backend");
-        let inspection = std::process::Command::new("python3")
-            .env("PYTHONPATH", backend.join(".venv/Lib/site-packages"))
-            .args(["-c", "import json,sys; from pypdf import PdfReader; p=PdfReader(sys.argv[1]).pages[0]; print(json.dumps({'stream':p.get_contents().get_data().decode('ascii'), 'text':p.extract_text()}))"])
+        let backend = backend_root();
+        let inspection = std::process::Command::new(test_python())
+            .args(["-c", "import json,sys; sys.path.insert(0,sys.argv.pop(1)); from pypdf import PdfReader; p=PdfReader(sys.argv[1]).pages[0]; print(json.dumps({'stream':p.get_contents().get_data().decode('ascii'), 'text':p.extract_text()}))"])
+            .arg(&backend)
             .arg(&candidate)
             .output().unwrap();
         assert!(
@@ -199,25 +220,13 @@ fn guarded_fixture_round_trip(
         &CancellationToken::default(),
     )
     .unwrap();
-    let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("backend");
+    let backend = backend_root();
     let inspector = ProcessResourceInspector::new(
-        "env".into(),
+        test_python(),
         vec![
-            format!(
-                "PYTHONPATH={}:{}",
-                backend.display(),
-                backend.join(".venv/Lib/site-packages").display()
-            ),
-            "python3".into(),
-            backend
-                .join("features/edit_content/resource_inspector_cli.py")
-                .display()
-                .to_string(),
+            "-c".into(),
+            "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
+            backend.display().to_string(),
         ],
     );
     let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
@@ -269,9 +278,9 @@ fn guarded_fixture_round_trip(
             }
         }
     }
-    let independent = std::process::Command::new("python3")
-        .env("PYTHONPATH", backend.join(".venv/Lib/site-packages"))
-        .args(["-c", "import json,sys; from pypdf import PdfReader; print(json.dumps(PdfReader(sys.argv[1]).pages[0].extract_text()))"])
+    let independent = std::process::Command::new(test_python())
+        .args(["-c", "import json,sys; sys.path.insert(0,sys.argv.pop(1)); from pypdf import PdfReader; print(json.dumps(PdfReader(sys.argv[1]).pages[0].extract_text()))"])
+        .arg(&backend)
         .arg(&candidate.path).output().unwrap();
     assert!(
         independent.status.success(),

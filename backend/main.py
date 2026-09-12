@@ -69,6 +69,10 @@ async def lifespan(app: FastAPI):
 
     # ─ SHUTDOWN ─────────────────────────────────────────────────────
     logger.info("PDF Manager shutting down — performing final cleanup...")
+    try:
+        edit_content.get_content_registry().close_all()
+    except Exception:
+        logger.exception("Edit Content workers did not all close cleanly")
     _clean_directory(settings.TEMP_DIR, "temp")
     _clean_directory(settings.OUTPUT_DIR, "output")
     logger.info("Shutdown cleanup complete.")
@@ -217,8 +221,15 @@ async def root():
 
 # ── Entry point (for direct run / Tauri sidecar) ─────────────────────────────────
 if __name__ == "__main__":
-    import uvicorn
     import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--edit-content-inspector":
+        from features.edit_content.resource_inspector_cli import main as run_inspector
+
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        raise SystemExit(run_inspector())
+
+    import uvicorn
     import threading
     import os
     import time
@@ -276,4 +287,3 @@ if __name__ == "__main__":
             reload=False,
             log_level=settings.LOG_LEVEL.lower(),
         )
-

@@ -1,0 +1,41 @@
+{
+  "schema": "edit-content-pdfium-artifacts/v1",
+  "upstream": "https://github.com/bblanchon/pdfium-binaries",
+  "releaseTag": "chromium/8035",
+  "buildIdentity": "154.0.8035.0",
+  "wrapperVersion": "0.9.4",
+  "targets": {
+    "windows-x86_64": {
+      "archiveUrl": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8035/pdfium-win-x64.tgz",
+      "archiveSha256": "61513d611ad200a383456140739be77d156f1e3a2eef22bd89f6c3bda79bdd41",
+      "libraryPath": "bin/pdfium.dll",
+      "libraryFile": "pdfium.dll",
+      "librarySha256": "ccfac1aad9e78624ebfb3f54f3f4ddb77af6db2f52803f150e2f9876beda49fe",
+      "notices": [
+        { "path": "LICENSE", "sha256": "8854f4388f1ca13b3ad9baa42e95f5546b4c0b17109c159256d3eca7be39b09b" },
+        { "path": "licenses/abseil.txt", "sha256": "f54fff0b905df5b3464527c652a30e903b172d6dcab4d89b5e6f105d5e4a4603" },
+        { "path": "licenses/agg23.txt", "sha256": "c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5" },
+        { "path": "licenses/fast_float.txt", "sha256": "bf1b57355feca8fce77ee95f48002f8d4789fb71b30ec7599c06cda4901fbb2b" },
+        { "path": "licenses/freetype.txt", "sha256": "f4b133e25df1f86ad3ffea453aa0e613f0474f34778dbbb3e437e7b2724937d8" },
+        { "path": "licenses/icu.txt", "sha256": "93679f4389d53b6835d89843f251844fb9bc455b35bab036d3c8e7abe497a47a" },
+        { "path": "licenses/lcms.txt", "sha256": "7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a" },
+        { "path": "licenses/libjpeg_turbo.ijg", "sha256": "db16a04128171879c60708d171b88d97345a2dd20f9bfc173680a4497c73f704" },
+        { "path": "licenses/libjpeg_turbo.md", "sha256": "be2b2b5ab168bce87bc3e31f2a5c5adba4b7f6e9e51d618e958d1d46972ebd95" },
+        { "path": "licenses/libopenjpeg.txt", "sha256": "c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2" },
+        { "path": "licenses/libpng.txt", "sha256": "452390433ba0f88aa3e2b122c647741b72a0c117cd6ed7a329b49785aecb5511" },
+        { "path": "licenses/llvm-libc.txt", "sha256": "3b6226c32e168c83b891d8d6f0d3c29c2116dc3ef93dc93c307b54f279ecf383" },
+        { "path": "licenses/pdfium.txt", "sha256": "961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e" },
+        { "path": "licenses/simdutf.txt", "sha256": "c172a0ba936ff31230febb5dad869e25cb7c1a07480c7a381be8cf011bb52719" },
+        { "path": "licenses/zlib.txt", "sha256": "33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe" }
+      ]
+    },
+    "linux-x86_64": {
+      "archiveUrl": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8035/pdfium-linux-x64.tgz",
+      "archiveSha256": "2e6db042dd2cff2d5247023dbec6c7ebb800042ce83c835d6468d45229669bd4",
+      "libraryPath": "lib/libpdfium.so",
+      "libraryFile": "libpdfium.so",
+      "librarySha256": "3619765195cfc2d91b1fd51d7cce8817a6f5726031995f005deed563d9bc6d08",
+      "notices": []
+    }
+  }
+}

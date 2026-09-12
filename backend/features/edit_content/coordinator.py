@@ -15,7 +15,7 @@ from features.edit_content.process_adapter import (
     WorkerLaunchConfig,
 )
 from features.edit_content.transaction_state import (
-    Checkpoint, EditMetadata, ENGINE_SHA256, Outcome, REQUIRED_CHECKS, SessionState,
+    Checkpoint, EditMetadata, ENGINE_BUILD, ENGINE_SHA256, ENGINE_WRAPPER, Outcome, REQUIRED_CHECKS, SessionState,
     TransitionRejected, VERIFIER_POLICY,
 )
 
@@ -251,7 +251,7 @@ class ContentSessionCoordinator:
                 or result.get("baselineHash") != state.current.accepted_artifact_hash
                 or verification.get("baselineHash") != state.current.accepted_artifact_hash
                 or result.get("candidateHash") != verification.get("candidateHash")
-                or engine != {"build": "154.0.8035", "sha256": ENGINE_SHA256, "wrapper": "0.9.4"}
+                or engine != {"build": ENGINE_BUILD, "sha256": ENGINE_SHA256, "wrapper": ENGINE_WRAPPER}
                 or verifier != {"policy": VERIFIER_POLICY}):
             raise TransitionRejected("preparation verification identity is invalid")
         metadata = EditMetadata(

@@ -46,6 +46,15 @@ impl Worker {
                 source.to_str().unwrap(),
             ])
             .args(extra)
+            .env(
+                "PYTHONPATH",
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("backend"),
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -94,6 +103,23 @@ fn pinned_library() -> PathBuf {
     env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH")
         .map(PathBuf::from)
         .expect("EDIT_CONTENT_TEST_PDFIUM_PATH must identify the pinned phase-1 library")
+}
+
+fn test_python() -> PathBuf {
+    if let Some(path) = env::var_os("EDIT_CONTENT_TEST_PYTHON") {
+        return PathBuf::from(path);
+    }
+    let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("backend");
+    if cfg!(windows) {
+        backend.join(".venv/Scripts/python.exe")
+    } else {
+        backend.join(".venv/bin/python")
+    }
 }
 
 fn worker_files(writer: fn(&Path)) -> (PathBuf, PathBuf) {
@@ -464,22 +490,15 @@ fn production_inspection_fails_closed_without_the_companion_parser() {
 fn worker_open_inspect_close_uses_the_pinned_read_only_companion() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let backend = manifest.parent().unwrap().parent().unwrap().join("backend");
-    let site_packages = backend.join(".venv/Lib/site-packages");
-    let python_path = format!(
-        "PYTHONPATH={}:{}",
-        backend.display(),
-        site_packages.display()
-    );
+    let python = test_python();
+    let python = python.to_string_lossy().to_string();
     let script = backend.join("features/edit_content/resource_inspector_cli.py");
+    let script = script.to_string_lossy().to_string();
     let arguments = [
         "--inspector-program",
-        "/usr/bin/env",
+        python.as_str(),
         "--inspector-arg",
-        python_path.as_str(),
-        "--inspector-arg",
-        "python3",
-        "--inspector-arg",
-        script.to_str().unwrap(),
+        script.as_str(),
     ];
     let mut worker = Worker::start_phase3(&arguments);
     let source_sha256 = sha256_reader(&mut File::open(&worker.source).unwrap()).unwrap();
@@ -856,21 +875,15 @@ fn worker_open_inspect_close_uses_the_pinned_read_only_companion() {
 fn worker_preparation_is_verified_private_and_never_an_accepted_outcome() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let backend = manifest.parent().unwrap().parent().unwrap().join("backend");
-    let python_path = format!(
-        "PYTHONPATH={}:{}",
-        backend.display(),
-        backend.join(".venv/Lib/site-packages").display()
-    );
+    let python = test_python();
+    let python = python.to_string_lossy().to_string();
     let script = backend.join("features/edit_content/resource_inspector_cli.py");
+    let script = script.to_string_lossy().to_string();
     let arguments = [
         "--inspector-program",
-        "/usr/bin/env",
+        python.as_str(),
         "--inspector-arg",
-        python_path.as_str(),
-        "--inspector-arg",
-        "python3",
-        "--inspector-arg",
-        script.to_str().unwrap(),
+        script.as_str(),
     ];
     let mut worker = Worker::start_phase5(&arguments);
     let original_hash = sha256_reader(&mut File::open(&worker.source).unwrap()).unwrap();
@@ -934,9 +947,9 @@ fn worker_preparation_is_verified_private_and_never_an_accepted_outcome() {
             .count(),
         before_count
     );
-    let independent = Command::new("python3")
-        .env("PYTHONPATH", backend.join(".venv/Lib/site-packages"))
-        .args(["-c", "import sys; from pypdf import PdfReader; print(PdfReader(sys.argv[1]).pages[0].extract_text(), end='')"])
+    let independent = Command::new(test_python())
+        .args(["-c", "import sys; sys.path.insert(0,sys.argv.pop(1)); from pypdf import PdfReader; print(PdfReader(sys.argv[1]).pages[0].extract_text(), end='')"])
+        .arg(backend)
         .arg(&candidate)
         .output()
         .unwrap();

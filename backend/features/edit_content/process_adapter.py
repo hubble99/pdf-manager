@@ -49,6 +49,7 @@ class WorkerLaunchConfig:
     startup_timeout_seconds: float = 10.0
     inspect_timeout_seconds: float = 30.0
     close_timeout_seconds: float = 10.0
+    parent_process_id: int | None = None
 
     @classmethod
     def create(
@@ -58,6 +59,7 @@ class WorkerLaunchConfig:
         pdfium_library: Path,
         workspace_root: Path,
         inspector_command: Sequence[str],
+        parent_process_id: int | None = None,
     ) -> "WorkerLaunchConfig":
         if not worker_command or not inspector_command:
             raise ValueError("worker and inspector commands are required")
@@ -66,6 +68,7 @@ class WorkerLaunchConfig:
             Path(pdfium_library),
             Path(workspace_root),
             tuple(str(part) for part in inspector_command),
+            parent_process_id=parent_process_id,
         )
 
 
@@ -122,6 +125,8 @@ class ContentWorkerAdapter:
             ]
             for argument in inspector_args:
                 command.extend(("--inspector-arg", argument))
+            if self._config.parent_process_id is not None:
+                command.extend(("--parent-process-id", str(self._config.parent_process_id)))
             creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
             try:
                 process = subprocess.Popen(

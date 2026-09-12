@@ -407,19 +407,17 @@ mod tests {
             .parent()
             .unwrap()
             .join("backend");
+        let python = if cfg!(windows) {
+            backend.join(".venv/Scripts/python.exe")
+        } else {
+            backend.join(".venv/bin/python")
+        };
         let inspector = ProcessResourceInspector::new(
-            "env".into(),
+            python,
             vec![
-                format!(
-                    "PYTHONPATH={}:{}",
-                    backend.display(),
-                    backend.join(".venv/Lib/site-packages").display()
-                ),
-                "python3".into(),
-                backend
-                    .join("features/edit_content/resource_inspector_cli.py")
-                    .display()
-                    .to_string(),
+                "-c".into(),
+                "import sys; sys.path.insert(0, sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
+                backend.display().to_string(),
             ],
         );
         let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())

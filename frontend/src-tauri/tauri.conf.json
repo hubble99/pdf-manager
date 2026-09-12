@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build:desktop"
   },
   "app": {
     "windows": [
@@ -40,6 +40,9 @@
     "externalBin": [
       "binaries/pdf-manager-backend"
     ],
+    "resources": {
+      "target/edit-content-runtime/": "edit-content/"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser"

@@ -1,5 +1,7 @@
 use tauri::Manager;
 
+struct DesktopLifecycleToken(String);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let builder = tauri::Builder::default()
@@ -46,14 +48,22 @@ pub fn run() {
       } else {
         // Production: spawn the Python sidecar
         use tauri_plugin_shell::ShellExt;
+        let resource_dir = app.path().resource_dir()?;
+        let lifecycle_token = DesktopLifecycleToken(uuid::Uuid::new_v4().simple().to_string());
         let sidecar = app.shell()
           .sidecar("pdf-manager-backend")
-          .expect("sidecar not found — run tauri build first");
+          .expect("sidecar not found — run tauri build first")
+          .env(
+            "PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR",
+            resource_dir.join("edit-content").to_string_lossy().into_owned(),
+          )
+          .env("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN", lifecycle_token.0.clone());
         let (_rx, child) = sidecar
           .spawn()
           .expect("failed to spawn pdf-manager-backend sidecar");
         
         app.manage(std::sync::Mutex::new(Some(child)));
+        app.manage(lifecycle_token);
       }
       Ok(())
     });
@@ -70,6 +80,17 @@ pub fn run() {
       // 3. Kill the sidecar process (safety net in case step 1 fails).
       #[cfg(not(debug_assertions))]
       {
+        if let Some(token) = app_handle.try_state::<DesktopLifecycleToken>() {
+          let header = format!("X-PDF-Manager-Lifecycle: {}", token.0);
+          let _ = std::process::Command::new("curl")
+            .args([
+              "-s", "-X", "POST", "-H", header.as_str(),
+              "http://127.0.0.1:8000/api/v1/edit-content/shutdown",
+              "--max-time", "15",
+            ])
+            .output();
+        }
+
         // Best-effort HTTP call — ignore errors (backend may already be gone).
         let _ = std::process::Command::new("curl")
           .args([

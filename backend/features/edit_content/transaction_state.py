@@ -10,12 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import re
 
+from features.edit_content.engine_identity import load_engine_identity
+
 
 MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024
 MAX_HISTORY_BYTES = 128 * 1024 * 1024
 MAX_HISTORY_ENTRIES = 8
 VERIFIER_POLICY = "edit-content-acceptance/v2"
-ENGINE_SHA256 = "3619765195cfc2d91b1fd51d7cce8817a6f5726031995f005deed563d9bc6d08"
+_ENGINE_IDENTITY = load_engine_identity()
+ENGINE_SHA256 = _ENGINE_IDENTITY.library_sha256
+ENGINE_BUILD = _ENGINE_IDENTITY.build.removesuffix(".0")
+ENGINE_WRAPPER = _ENGINE_IDENTITY.wrapper
 REQUIRED_CHECKS = frozenset({
     "target", "occurrences", "unique-correspondence", "font-identity",
     "geometry-style", "census", "resources", "layout",
@@ -70,8 +75,8 @@ class EditMetadata:
             raise TransitionRejected("invalid target expectation")
         if min(self.occurrence_before, self.occurrence_after) < 0 or self.object_delta != (-1 if not self.after_text else 0):
             raise TransitionRejected("invalid planned counts")
-        if (self.engine_sha256 != ENGINE_SHA256 or self.engine_build != "154.0.8035"
-                or self.wrapper != "0.9.4" or self.verifier_policy != VERIFIER_POLICY
+        if (self.engine_sha256 != ENGINE_SHA256 or self.engine_build != ENGINE_BUILD
+                or self.wrapper != ENGINE_WRAPPER or self.verifier_policy != VERIFIER_POLICY
                 or set(self.checks) != REQUIRED_CHECKS or len(self.checks) != len(REQUIRED_CHECKS)):
             raise TransitionRejected("missing verification identity")
 

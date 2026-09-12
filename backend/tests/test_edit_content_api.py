@@ -184,6 +184,12 @@ class FakeRegistry:
         coordinator = self.sessions.pop(session_id)
         coordinator.close()
 
+    def close_all(self):
+        session_ids = tuple(self.sessions)
+        for session_id in session_ids:
+            self.close(session_id)
+        return len(session_ids)
+
 
 def envelope(session_id: str, request_id: str, command: str, revision: int, payload=None, target_id=None):
     value = {
@@ -282,6 +288,26 @@ async def test_strict_session_object_render_apply_history_save_close_surface(reg
             json=envelope(session_id, "close1", "close", 2, {"pendingDraft": False, "decision": "discard"}),
         )
         assert closed.json()["result"]["closed"] is True
+
+
+@pytest.mark.asyncio
+async def test_desktop_shutdown_requires_lifecycle_token_and_closes_content_only(registry, monkeypatch):
+    import os
+
+    monkeypatch.setenv("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN", "shutdown-test-token")
+    coordinator = FakeCoordinator("session-shutdown")
+    registry.sessions[coordinator.session_id] = coordinator
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        denied = await client.post("/api/v1/edit-content/shutdown")
+        closed = await client.post(
+            "/api/v1/edit-content/shutdown",
+            headers={"X-PDF-Manager-Lifecycle": os.environ["PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN"]},
+        )
+
+    assert denied.status_code == 404
+    assert closed.status_code == 200
+    assert closed.json() == {"closedSessions": 1}
+    assert coordinator.closed is True
 
 
 @pytest.mark.asyncio

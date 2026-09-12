@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "prepare:edit-content:desktop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ../scripts/prepare_edit_content_desktop.ps1",
+    "build:desktop": "npm run prepare:edit-content:desktop && npm run build",
     "tauri:build": "tauri build",
     "test": "vitest run"
   },
