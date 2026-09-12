@@ -8,7 +8,8 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        ('.venv/Lib/site-packages/barcode/fonts/DejaVuSansMono.ttf', 'barcode/fonts')
+        ('.venv/Lib/site-packages/barcode/fonts/DejaVuSansMono.ttf', 'barcode/fonts'),
+        ('../native/edit-content-engine/pdfium-artifacts.json', 'edit-content'),
     ],
     hiddenimports=[
         # uvicorn internals

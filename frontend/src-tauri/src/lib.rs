@@ -1,5 +1,8 @@
 use tauri::Manager;
 
+#[cfg(any(not(debug_assertions), test))]
+mod desktop_lifecycle;
+
 struct DesktopLifecycleToken(String);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -74,31 +77,21 @@ pub fn run() {
   app.run(|app_handle, event| match event {
     tauri::RunEvent::Exit => {
       // ── Graceful shutdown sequence ──────────────────────────────────────────
-      // 1. Call the backend's clear-temp API so uvicorn can run its lifespan
-      //    shutdown hook (cleans temp/ and output/ directories).
-      // 2. Give uvicorn a short window to process the request and shut down.
+      // 1. Drain Content requests, then request the existing temp cleanup.
+      // 2. Give the backend a short window to finish cleanup.
       // 3. Kill the sidecar process (safety net in case step 1 fails).
       #[cfg(not(debug_assertions))]
       {
         if let Some(token) = app_handle.try_state::<DesktopLifecycleToken>() {
-          let header = format!("X-PDF-Manager-Lifecycle: {}", token.0);
-          let _ = std::process::Command::new("curl")
-            .args([
-              "-s", "-X", "POST", "-H", header.as_str(),
-              "http://127.0.0.1:8000/api/v1/edit-content/shutdown",
-              "--max-time", "15",
-            ])
-            .output();
+          let _ = desktop_lifecycle::post(
+            "/api/v1/edit-content/shutdown", Some(&token.0), std::time::Duration::from_secs(15),
+          );
         }
 
         // Best-effort HTTP call — ignore errors (backend may already be gone).
-        let _ = std::process::Command::new("curl")
-          .args([
-            "-s", "-X", "POST",
-            "http://127.0.0.1:8000/api/v1/settings/clear-temp",
-            "--max-time", "3",
-          ])
-          .output();
+        let _ = desktop_lifecycle::post(
+          "/api/v1/settings/clear-temp", None, std::time::Duration::from_secs(3),
+        );
 
         // Give the backend a moment to process the cleanup and begin shutdown.
         std::thread::sleep(std::time::Duration::from_millis(500));

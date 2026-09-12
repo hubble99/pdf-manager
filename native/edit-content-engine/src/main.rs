@@ -793,6 +793,7 @@ fn input_loop<W: io::Write + Send + 'static>(
 
 fn run(config: Config) -> Result<(), String> {
     verify_pdfium_library(&config.pdfium_library)?;
+    contain_inspector_processes()?;
     if let Some(parent_process_id) = config.parent_process_id {
         watch_parent_process(parent_process_id);
     }
@@ -989,6 +990,47 @@ fn run(config: Config) -> Result<(), String> {
     native
         .join()
         .map_err(|_| "native worker exited".to_string())?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn contain_inspector_processes() -> Result<(), String> {
+    use std::mem::{size_of, zeroed};
+    use std::ptr::null;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
+        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+
+    // An unnamed, non-inheritable job keeps inspectors (including PyInstaller
+    // descendants) tied to this worker, even on forced exit or parent death.
+    unsafe {
+        let job = CreateJobObjectW(null(), null());
+        if job.is_null() {
+            return Err("Content process containment could not be created".into());
+        }
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32) == 0
+            || AssignProcessToJobObject(job, GetCurrentProcess()) == 0
+        {
+            CloseHandle(job);
+            return Err("Content process containment could not be established".into());
+        }
+        // Deliberately retain the handle for the process lifetime. Closing it
+        // here would also terminate the worker that was just assigned to it.
+        // Windows closes it on every process-exit path and kills descendants.
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn contain_inspector_processes() -> Result<(), String> {
     Ok(())
 }
 

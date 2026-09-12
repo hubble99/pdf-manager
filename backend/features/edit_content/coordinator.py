@@ -10,12 +10,13 @@ from typing import Any, Callable
 import uuid
 
 from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome
+from features.edit_content.engine_identity import load_engine_identity
 from features.edit_content.process_adapter import (
     ContentPreparationRejected, ContentWorkerAdapter, ContentWorkerError, PreparedArtifactLease,
     WorkerLaunchConfig,
 )
 from features.edit_content.transaction_state import (
-    Checkpoint, EditMetadata, ENGINE_BUILD, ENGINE_SHA256, ENGINE_WRAPPER, Outcome, REQUIRED_CHECKS, SessionState,
+    Checkpoint, EditMetadata, Outcome, REQUIRED_CHECKS, SessionState,
     TransitionRejected, VERIFIER_POLICY,
 )
 
@@ -251,7 +252,7 @@ class ContentSessionCoordinator:
                 or result.get("baselineHash") != state.current.accepted_artifact_hash
                 or verification.get("baselineHash") != state.current.accepted_artifact_hash
                 or result.get("candidateHash") != verification.get("candidateHash")
-                or engine != {"build": ENGINE_BUILD, "sha256": ENGINE_SHA256, "wrapper": ENGINE_WRAPPER}
+                or engine != load_engine_identity().verification_identity()
                 or verifier != {"policy": VERIFIER_POLICY}):
             raise TransitionRejected("preparation verification identity is invalid")
         metadata = EditMetadata(

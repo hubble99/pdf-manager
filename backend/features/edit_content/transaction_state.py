@@ -1,7 +1,8 @@
 """Pure preparation contracts for the Content coordinator's single commit.
 
 No function in this module accepts a worker reply as a committed outcome or
-performs I/O. A PreparedTransition becomes visible only after the coordinator
+writes state. Verification reads the backend's pinned engine identity lazily.
+A PreparedTransition becomes visible only after the coordinator
 has verified/installed its files and atomically switched the commit record.
 """
 
@@ -17,10 +18,6 @@ MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024
 MAX_HISTORY_BYTES = 128 * 1024 * 1024
 MAX_HISTORY_ENTRIES = 8
 VERIFIER_POLICY = "edit-content-acceptance/v2"
-_ENGINE_IDENTITY = load_engine_identity()
-ENGINE_SHA256 = _ENGINE_IDENTITY.library_sha256
-ENGINE_BUILD = _ENGINE_IDENTITY.build.removesuffix(".0")
-ENGINE_WRAPPER = _ENGINE_IDENTITY.wrapper
 REQUIRED_CHECKS = frozenset({
     "target", "occurrences", "unique-correspondence", "font-identity",
     "geometry-style", "census", "resources", "layout",
@@ -75,8 +72,12 @@ class EditMetadata:
             raise TransitionRejected("invalid target expectation")
         if min(self.occurrence_before, self.occurrence_after) < 0 or self.object_delta != (-1 if not self.after_text else 0):
             raise TransitionRejected("invalid planned counts")
-        if (self.engine_sha256 != ENGINE_SHA256 or self.engine_build != ENGINE_BUILD
-                or self.wrapper != ENGINE_WRAPPER or self.verifier_policy != VERIFIER_POLICY
+        try:
+            expected_engine = load_engine_identity().verification_identity()
+        except RuntimeError as exc:
+            raise TransitionRejected("verification identity is unavailable") from exc
+        if ({"sha256": self.engine_sha256, "build": self.engine_build, "wrapper": self.wrapper} != expected_engine
+                or self.verifier_policy != VERIFIER_POLICY
                 or set(self.checks) != REQUIRED_CHECKS or len(self.checks) != len(REQUIRED_CHECKS)):
             raise TransitionRejected("missing verification identity")
 

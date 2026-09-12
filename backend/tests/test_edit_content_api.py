@@ -299,12 +299,14 @@ async def test_desktop_shutdown_requires_lifecycle_token_and_closes_content_only
     registry.sessions[coordinator.session_id] = coordinator
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         denied = await client.post("/api/v1/edit-content/shutdown")
+        malformed = await client.post("/api/v1/edit-content/shutdown", headers=[(b"X-PDF-Manager-Lifecycle", b"\xff")])
         closed = await client.post(
             "/api/v1/edit-content/shutdown",
             headers={"X-PDF-Manager-Lifecycle": os.environ["PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN"]},
         )
 
     assert denied.status_code == 404
+    assert malformed.status_code == 404
     assert closed.status_code == 200
     assert closed.json() == {"closedSessions": 1}
     assert coordinator.closed is True

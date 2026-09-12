@@ -12,7 +12,7 @@ import uuid
 
 from config import settings
 from features.edit_content.coordinator import ContentCoordinatorError, ContentSessionCoordinator
-from features.edit_content.engine_identity import load_engine_identity
+from features.edit_content.engine_identity import load_engine_identity, validate_runtime_identity
 from features.edit_content.process_adapter import ContentWorkerError, WorkerLaunchConfig
 from features.edit_content.transaction_state import Outcome, TransitionRejected
 
@@ -25,13 +25,14 @@ class ContentSessionUnavailable(RuntimeError):
 
 
 def default_worker_config() -> WorkerLaunchConfig:
+    identity = load_engine_identity()
     project_root = Path(__file__).resolve().parents[3]
     worker_default = project_root / "native" / "edit-content-engine" / "target" / "debug" / "edit-content-engine.exe"
     library_default = project_root / "native" / "edit-content-engine" / "pdfium.dll"
     resource_dir = os.environ.get("PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR")
     if resource_dir:
         resource_root = Path(resource_dir)
-        identity = load_engine_identity()
+        validate_runtime_identity(resource_root, identity)
         worker_default = resource_root / ("edit-content-engine.exe" if os.name == "nt" else "edit-content-engine")
         library_default = resource_root / identity.library_file
     worker_value = os.environ.get("PDF_MANAGER_EDIT_CONTENT_WORKER")
@@ -70,6 +71,8 @@ class ContentSessionRegistry:
         self._in_flight: dict[tuple[str, str], threading.Event] = {}
         self._lock = threading.RLock()
         self._idle = threading.Condition(self._lock)
+        self._close_lock = threading.Lock()
+        self._closing: set[str] = set()
         self._shutting_down = False
 
     def open(self, source: Path) -> tuple[ContentSessionCoordinator, dict[str, Any]]:
@@ -93,7 +96,7 @@ class ContentSessionRegistry:
 
     def get(self, session_id: str) -> ContentSessionCoordinator:
         with self._lock:
-            if self._shutting_down:
+            if self._shutting_down or session_id in self._closing:
                 raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
             coordinator = self._sessions.get(session_id)
         if coordinator is None:
@@ -106,25 +109,35 @@ class ContentSessionRegistry:
         request_id: str,
         operation: Callable[[ContentSessionCoordinator, Callable[[], bool]], dict[str, Any]],
     ) -> dict[str, Any]:
-        try:
-            coordinator = self.get(session_id)
-        except ContentSessionUnavailable as exc:
-            return _reply(
-                request_id, session_id, "rejected", 0, {},
-                guard_reason=str(exc), error="Content session was not found.",
-            )
         key = (session_id, request_id)
         with self._lock:
+            # Admission and shutdown share one lock: no request can enter after
+            # shutdown has taken its cancellation snapshot.
+            try:
+                coordinator = self.get(session_id)
+            except ContentSessionUnavailable as exc:
+                return _reply(
+                    request_id, session_id, "rejected", 0, {},
+                    guard_reason=str(exc), error="Content session was not found.",
+                )
             previous = self._outcomes[session_id].get(request_id)
             if previous is not None:
                 return _duplicate(previous)
-            if key in self._in_flight:
-                return _reply(
-                    request_id, session_id, "unknown", coordinator.state()["acceptedRevision"],
-                    {}, error="The request outcome is still being established.",
-                )
-            cancelled = threading.Event()
-            self._in_flight[key] = cancelled
+            duplicate_in_flight = key in self._in_flight
+            if not duplicate_in_flight:
+                cancelled = threading.Event()
+                self._in_flight[key] = cancelled
+        if duplicate_in_flight:
+            # Never wait on a coordinator while holding the registry lock;
+            # cancellation and completion must remain able to acquire it.
+            try:
+                revision = coordinator.state()["acceptedRevision"]
+            except Exception:
+                revision = 0
+            return _reply(request_id, session_id, "unknown", revision, {},
+                          error="The request outcome is still being established.")
+        reply = _reply(request_id, session_id, "unknown", 0, {},
+                       error="The request outcome could not be established.")
         try:
             reply = operation(coordinator, cancelled.is_set)
         except ContentCoordinatorError as exc:
@@ -167,16 +180,27 @@ class ContentSessionRegistry:
             return True
 
     def close(self, session_id: str) -> None:
-        with self._lock:
-            coordinator = self._sessions.pop(session_id, None)
-            if coordinator is None:
-                raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
-            self._outcomes.pop(session_id, None)
-            for key, event in list(self._in_flight.items()):
-                if key[0] == session_id:
-                    event.set()
-                    self._in_flight.pop(key, None)
-        coordinator.close()
+        with self._close_lock:
+            with self._idle:
+                coordinator = self._sessions.get(session_id)
+                if coordinator is None:
+                    raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
+                self._closing.add(session_id)
+                for key, event in self._in_flight.items():
+                    if key[0] == session_id:
+                        event.set()
+                if not self._idle.wait_for(
+                    lambda: not any(key[0] == session_id for key in self._in_flight), timeout=12.0
+                ):
+                    raise RuntimeError("active Edit Content requests did not stop before close")
+            # Keep ownership until close succeeds, including after a timeout or
+            # cleanup failure, so shutdown can retry without losing the worker.
+            coordinator.close()
+            with self._idle:
+                self._sessions.pop(session_id, None)
+                self._outcomes.pop(session_id, None)
+                self._closing.discard(session_id)
+                self._idle.notify_all()
 
     def close_all(self) -> int:
         """Cancel active requests and close workers without deleting committed stores."""

@@ -9,12 +9,15 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from features.edit_content.engine_identity import load_engine_identity
 
 from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome, _move
 from features.edit_content.transaction_state import (
-    Checkpoint, EditMetadata, ENGINE_SHA256, REQUIRED_CHECKS, SessionState,
+    Checkpoint, EditMetadata, REQUIRED_CHECKS, SessionState,
     TransitionRejected, VERIFIER_POLICY,
 )
+
+ENGINE_SHA256 = load_engine_identity().library_sha256
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="must exercise the actual Windows commit primitive")
 

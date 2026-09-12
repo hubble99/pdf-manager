@@ -1,6 +1,16 @@
 """
 PDF Manager Backend — FastAPI Application Entry Point
 """
+import sys
+
+# The packaged read-only inspector must not initialize the web application,
+# create application directories, or depend on Content's runtime resources.
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--edit-content-inspector":
+    from features.edit_content.resource_inspector_cli import main as run_inspector
+
+    sys.argv = [sys.argv[0], *sys.argv[2:]]
+    raise SystemExit(run_inspector())
+
 import logging
 import shutil
 from contextlib import asynccontextmanager
@@ -221,14 +231,6 @@ async def root():
 
 # ── Entry point (for direct run / Tauri sidecar) ─────────────────────────────────
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--edit-content-inspector":
-        from features.edit_content.resource_inspector_cli import main as run_inspector
-
-        sys.argv = [sys.argv[0], *sys.argv[2:]]
-        raise SystemExit(run_inspector())
-
     import uvicorn
     import threading
     import os

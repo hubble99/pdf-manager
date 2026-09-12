@@ -32,8 +32,13 @@ impl ProcessResourceInspector {
 
 impl ResourceInspector for ProcessResourceInspector {
     fn inspect(&self, source: &Path) -> InspectionOutcome {
-        let mut child = match Command::new(&self.program)
-            .args(&self.arguments)
+        let mut command = Command::new(&self.program);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW for the console sidecar.
+        }
+        let mut child = match command.args(&self.arguments)
             .arg("--input")
             .arg(source)
             .stdin(Stdio::null())

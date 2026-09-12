@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
+from features.edit_content.engine_identity import load_engine_identity
 
 from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError, ContentSessionCoordinator
@@ -10,8 +11,10 @@ from features.edit_content.process_adapter import (
     ContentPreparationRejected, ContentWorkerError, PreparedArtifactLease,
 )
 from features.edit_content.transaction_state import (
-    Checkpoint, ENGINE_SHA256, REQUIRED_CHECKS, SessionState, VERIFIER_POLICY,
+    Checkpoint, REQUIRED_CHECKS, SessionState, VERIFIER_POLICY,
 )
+
+ENGINE_SHA256 = load_engine_identity().library_sha256
 
 
 def digest(data):

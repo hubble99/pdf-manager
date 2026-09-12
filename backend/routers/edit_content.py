@@ -125,7 +125,7 @@ def get_content_registry() -> ContentSessionRegistry:
 def shutdown(request: Request):
     lifecycle_token = os.environ.get("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN")
     supplied_token = request.headers.get("X-PDF-Manager-Lifecycle", "")
-    if not lifecycle_token or not hmac.compare_digest(supplied_token, lifecycle_token):
+    if not lifecycle_token or not hmac.compare_digest(supplied_token.encode("utf-8"), lifecycle_token.encode("utf-8")):
         raise HTTPException(status_code=404, detail="Endpoint not found.")
     return {"closedSessions": _registry.close_all()}
 

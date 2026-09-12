@@ -1,12 +1,15 @@
 from dataclasses import replace
 
 import pytest
+from features.edit_content.engine_identity import load_engine_identity
 
 from features.edit_content.transaction_state import (
-    Checkpoint, EditMetadata, ENGINE_SHA256, MAX_CHECKPOINT_BYTES,
+    Checkpoint, EditMetadata, MAX_CHECKPOINT_BYTES,
     Publication, REQUIRED_CHECKS, SessionState, TransitionRejected,
     VERIFIER_POLICY, prepare_transition,
 )
+
+ENGINE_SHA256 = load_engine_identity().library_sha256
 
 
 def initial():
