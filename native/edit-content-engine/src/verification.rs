@@ -47,6 +47,70 @@ fn color(value: PdfColor) -> Value {
     json!([value.red(), value.green(), value.blue(), value.alpha()])
 }
 
+/// Capture only clip paths whose fill rule cannot affect their meaning: one
+/// closed, strictly convex polygon made exclusively from straight segments.
+/// All curves, multiple subpaths, open paths, and degenerate geometry remain
+/// unsupported because PDFium does not expose the clip fill rule.
+fn simple_clip_path(object: &PdfPageObject<'_>) -> Result<Value, &'static str> {
+    let Some(clip) = object.get_clip_path() else {
+        return Ok(json!([]));
+    };
+    if clip.is_empty() {
+        return Ok(json!([]));
+    }
+    if clip.len() != 1 {
+        return Err(INTEGRITY);
+    }
+    let path = clip.get(0).map_err(|_| INTEGRITY)?;
+    let segments = path.iter().collect::<Vec<_>>();
+    if !(4..=33).contains(&segments.len())
+        || segments[0].segment_type() != PdfPathSegmentType::MoveTo
+        || segments[0].is_close()
+        || segments[1..]
+            .iter()
+            .any(|segment| segment.segment_type() != PdfPathSegmentType::LineTo)
+        || segments[..segments.len() - 1]
+            .iter()
+            .any(|segment| segment.is_close())
+        || !segments.last().is_some_and(|segment| segment.is_close())
+    {
+        return Err(INTEGRITY);
+    }
+    let points = segments
+        .iter()
+        .map(|segment| Ok([finite(segment.x().value)?, finite(segment.y().value)?]))
+        .collect::<Result<Vec<_>, &'static str>>()?;
+    let first = points[0];
+    let last = *points.last().ok_or(INTEGRITY)?;
+    if !near(first[0], last[0], 0.000001, 0.0) || !near(first[1], last[1], 0.000001, 0.0) {
+        return Err(INTEGRITY);
+    }
+    let vertices = &points[..points.len() - 1];
+    let mut orientation = 0.0_f64;
+    for index in 0..vertices.len() {
+        let a = vertices[index];
+        let b = vertices[(index + 1) % vertices.len()];
+        let c = vertices[(index + 2) % vertices.len()];
+        let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+        if !cross.is_finite() || cross.abs() <= 0.000001 {
+            return Err(INTEGRITY);
+        }
+        if orientation == 0.0 {
+            orientation = cross.signum();
+        } else if cross.signum() != orientation {
+            return Err(INTEGRITY);
+        }
+    }
+    Ok(json!(segments
+        .iter()
+        .map(|segment| json!({
+            "kind": format!("{:?}", segment.segment_type()),
+            "close": segment.is_close(),
+            "point": [segment.x().value, segment.y().value],
+        }))
+        .collect::<Vec<_>>()))
+}
+
 /// Capture all evidence before mutation or from freshly reopened serialized bytes.
 pub fn capture(
     pdfium: &Pdfium,
@@ -106,10 +170,6 @@ pub fn capture(
             .get(descriptor.page_index as _)
             .map_err(|_| INTEGRITY)?;
         for (index, object) in page.objects().iter().enumerate() {
-            // Clipped/opaque content needs a complete proof, never a screenshot.
-            if object.get_clip_path().is_some_and(|clip| !clip.is_empty()) {
-                return Err(INTEGRITY);
-            }
             if !object.is_active().map_err(|_| INTEGRITY)? {
                 return Err(INTEGRITY);
             }
@@ -133,6 +193,7 @@ pub fn capture(
             .map(finite)
             .collect::<Result<Vec<_>, _>>()?;
             let mut style = json!({"matrix": matrix});
+            style["clipPath"] = simple_clip_path(&object)?;
             if object.as_text_object().is_some() || object.as_path_object().is_some() {
                 style["strokeWidth"] =
                     json!(finite(object.stroke_width().map_err(|_| INTEGRITY)?.value)?);
@@ -158,13 +219,10 @@ pub fn capture(
                     .ok_or(INTEGRITY)?;
                 let font_id = descriptor.font.resource_object.as_ref().ok_or(INTEGRITY)?;
                 let fonts = resource_page["fonts"].as_array().ok_or(INTEGRITY)?;
-                let mut matches = fonts.iter().filter(|font| {
+                let matches = fonts.iter().filter(|font| {
                     font["fontObject"].as_str() == Some(font_id.as_str()) && font["scope"] == "page"
                 });
-                let font = matches.next().ok_or(INTEGRITY)?;
-                if matches.next().is_some() {
-                    return Err(INTEGRITY);
-                }
+                let font = crate::resource_inspector::unique_font(matches).ok_or(INTEGRITY)?;
                 let fingerprint = font["semanticSha256"]
                     .as_str()
                     .filter(|hash| hash.len() == 64)
@@ -439,7 +497,14 @@ pub fn compare(
                     && expected_text == other.text.as_deref()
                     && equivalent(&original.style, &other.style, "style")
                     && equivalent(&original.payload, &other.payload, "payload")
-                    && (index == target || same_quad(&original.quad, &other.quad))
+                    // PDFium can recompute a text object's derived tight width
+                    // after serialization even when its text, exact font,
+                    // transform, and rendering style are unchanged. The matrix
+                    // remains the positioning proof; non-text collateral still
+                    // requires the independently measured quad.
+                    && (index == target
+                        || original.kind == "text"
+                        || same_quad(&original.quad, &other.quad))
             })
             .map(|(index, _)| index)
             .collect();
@@ -746,6 +811,13 @@ mod tests {
         bad = good;
         bad.objects[1].text = Some("corrupted collateral".into());
         assert!(compare(&baseline, &bad, &edit).is_err());
+
+        let mut derived_width = candidate(&baseline, &edit);
+        derived_width.objects[1].quad[1][0] += 0.4;
+        derived_width.objects[1].quad[2][0] += 0.4;
+        assert!(compare(&baseline, &derived_width, &edit).is_ok());
+        derived_width.objects[1].style["matrix"][4] = json!(10.1);
+        assert!(compare(&baseline, &derived_width, &edit).is_err());
     }
 
     #[test]

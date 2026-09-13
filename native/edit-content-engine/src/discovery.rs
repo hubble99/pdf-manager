@@ -146,10 +146,12 @@ pub fn discover_document(
                     let text = object
                         .as_text_object()
                         .ok_or_else(|| "native text object conversion failed".to_string())?;
+                    let has_clip_path = object.get_clip_path().is_some_and(|clip| !clip.is_empty());
                     result.text_objects.push(describe_text_object(
                         text,
                         descriptor_page_index,
                         path,
+                        has_clip_path,
                         inspection,
                         registry,
                     )?);
@@ -172,6 +174,7 @@ fn describe_text_object(
     text: &PdfPageTextObject<'_>,
     page_index: u16,
     object_path: Vec<usize>,
+    has_clip_path: bool,
     inspection: &Value,
     registry: &mut ObjectRegistry,
 ) -> Result<NativeTextObjectDescriptor, String> {
@@ -218,14 +221,20 @@ fn describe_text_object(
         .and_then(Value::as_str)
         .map(str::to_owned);
     let type3 = resource_subtype.as_deref() == Some("/Type3");
-    let view_only_reason = type3.then(|| "REJECTED_TYPE3".to_string());
+    let view_only_reason = if type3 {
+        Some("REJECTED_TYPE3".to_string())
+    } else if has_clip_path {
+        Some("REJECTED_UNSUPPORTED_STRUCTURE".to_string())
+    } else {
+        None
+    };
     let render_mode = format!("{:?}", text.render_mode());
     let record: TargetRecord = registry.register(
         page_index,
         object_path.clone(),
         native_text.clone(),
         rotated_quad,
-        !type3,
+        !type3 && !has_clip_path,
         view_only_reason.clone(),
     );
     registry.attach_evidence(
@@ -238,6 +247,7 @@ fn describe_text_object(
                 .cloned(),
             source_scope_kind: "page".into(),
             render_mode: render_mode.clone(),
+            has_clip_path,
         },
     );
     let fill = text
@@ -325,7 +335,7 @@ fn matching_font<'a>(
         .find(|page| page.get("pageIndex").and_then(Value::as_u64) == Some(page_index as u64))?
         .get("fonts")?
         .as_array()?;
-    let mut matches = fonts.iter().filter(|font| {
+    let matches = fonts.iter().filter(|font| {
         ["effectiveBaseFont", "baseFont"]
             .iter()
             .filter_map(|key| font.get(key).and_then(Value::as_str))
@@ -336,11 +346,7 @@ fn matching_font<'a>(
                     .any(|name| !name.is_empty() && *name == candidate)
             })
     });
-    let first = matches.next()?;
-    if matches.next().is_some() {
-        return None;
-    }
-    Some(first)
+    crate::resource_inspector::unique_font(matches)
 }
 
 fn native_type_name(object_type: PdfPageObjectType) -> &'static str {
@@ -358,6 +364,28 @@ fn native_type_name(object_type: PdfPageObjectType) -> &'static str {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn matches_only_proven_aliases_of_the_same_font() {
+        let font = json!({"baseFont": "/Helvetica", "fontObject": "5:0",
+            "semanticSha256": "a".repeat(64), "scope": "page"});
+        let mut inspection = json!({"pages": [{"pageIndex": 0, "fonts": [font.clone(), font]}]});
+        assert!(matching_font(&inspection, 0, "Helvetica", "Helvetica").is_some());
+        for (field, value) in [
+            ("fontObject", json!("6:0")),
+            ("semanticSha256", json!("b".repeat(64))),
+            ("semanticSha256", json!("z".repeat(64))),
+            ("semanticSha256", Value::Null),
+            ("fontObject", Value::Null),
+        ] {
+            let mut ambiguous = inspection.clone();
+            ambiguous["pages"][0]["fonts"][1][field] = value;
+            assert!(matching_font(&ambiguous, 0, "Helvetica", "Helvetica").is_none());
+        }
+        inspection["pages"][0]["fonts"][0]["semanticSha256"] = json!("z".repeat(64));
+        inspection["pages"][0]["fonts"][1]["semanticSha256"] = json!("z".repeat(64));
+        assert!(matching_font(&inspection, 0, "Helvetica", "Helvetica").is_none());
+    }
 
     #[test]
     fn matches_type3_font_from_companion_inspection() {

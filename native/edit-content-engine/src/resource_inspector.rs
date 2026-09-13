@@ -9,6 +9,40 @@ use crate::MAX_REPLY_BYTES;
 
 const INSPECTOR_TIMEOUT: Duration = Duration::from_secs(25);
 
+/// Multiple names are unambiguous only when they reference the same inspected
+/// dictionary with a valid semantic proof. Distinct dictionaries stay distinct,
+/// even when their font names, programs, or semantic hashes happen to match.
+pub(crate) fn unique_font<'a>(mut fonts: impl Iterator<Item = &'a Value>) -> Option<&'a Value> {
+    let first = fonts.next()?;
+    for alias in fonts {
+        let identity = first["fontObject"].as_str().filter(|id| !id.is_empty())?;
+        let hash = first["semanticSha256"].as_str().filter(|hash| {
+            hash.len() == 64
+                && hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })?;
+        if alias["fontObject"].as_str() != Some(identity)
+            || alias["semanticSha256"].as_str() != Some(hash)
+        {
+            return None;
+        }
+        // The inspector must agree on all evidence, not just the fingerprint.
+        let evidence = |value: &'a Value| {
+            value.as_object().map(|object| {
+                object
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != "resourceName")
+                    .collect::<Vec<_>>()
+            })
+        };
+        if evidence(first)? != evidence(alias)? {
+            return None;
+        }
+    }
+    Some(first)
+}
+
 #[derive(Debug)]
 pub enum InspectionOutcome {
     Supported(Value),
@@ -38,7 +72,8 @@ impl ResourceInspector for ProcessResourceInspector {
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW for the console sidecar.
         }
-        let mut child = match command.args(&self.arguments)
+        let mut child = match command
+            .args(&self.arguments)
             .arg("--input")
             .arg(source)
             .stdin(Stdio::null())

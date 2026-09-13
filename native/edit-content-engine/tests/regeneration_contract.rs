@@ -53,6 +53,18 @@ impl Fixture {
         Self::with_stream("BT /F1 12 Tf 1 0 0 rg 0 0 1 RG 2 Tr 0 1 -1 0 150 40 Tm (word) Tj ET")
     }
 
+    fn unrelated_rectangular_clip() -> Self {
+        Self::with_stream(
+            "BT /F1 12 Tf 30 100 Td (word) Tj ET q 20 50 120 30 re W n BT /F1 12 Tf 30 60 Td (kept) Tj ET Q",
+        )
+    }
+
+    fn unrelated_ambiguous_clip() -> Self {
+        Self::with_stream(
+            "BT /F1 12 Tf 30 100 Td (word) Tj ET q 20 50 30 20 re 70 50 30 20 re W n BT /F1 12 Tf 30 60 Td (kept) Tj ET Q",
+        )
+    }
+
     fn with_stream(text: &str) -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -192,6 +204,68 @@ fn pinned_regeneration_and_empty_replacement_contract() {
     guarded_round_trip(&pdfium, "textual", 1);
     guarded_round_trip(&pdfium, "", 0);
     guarded_styled_rotated_round_trip(&pdfium);
+    guarded_fixture_round_trip(
+        &pdfium,
+        Fixture::with_stream(
+            "BT /F1 12 Tf 30 100 Td (word) Tj ET BT /F1 12 Tf 30 70 Td (kept) Tj ET",
+        ),
+        "text",
+        2,
+        false,
+    );
+    guarded_fixture_round_trip(
+        &pdfium,
+        Fixture::unrelated_rectangular_clip(),
+        "text",
+        2,
+        false,
+    );
+    guarded_fixture_rejects(&pdfium, Fixture::unrelated_ambiguous_clip());
+}
+
+fn guarded_fixture_rejects(pdfium: &Pdfium, fixture: Fixture) {
+    let source = fixture.0.join("source.pdf");
+    let root = fixture.0.join("sessions");
+    let workspace = SessionWorkspace::create(
+        &root,
+        &source,
+        "guarded-rejection",
+        &CancellationToken::default(),
+    )
+    .unwrap();
+    let backend = backend_root();
+    let inspector = ProcessResourceInspector::new(
+        test_python(),
+        vec![
+            "-c".into(),
+            "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
+            backend.display().to_string(),
+        ],
+    );
+    let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
+    else {
+        panic!("real resource inspection required");
+    };
+    let mut registry = ObjectRegistry::new("guarded-rejection");
+    let target = {
+        let document = pdfium
+            .load_pdf_from_file(workspace.source_path(), None)
+            .unwrap();
+        let discovery = discover_document(&document, &inspection, &mut registry, 0).unwrap();
+        discovery.text_objects[0].target_id.clone()
+    };
+    let input = PreflightInput {
+        expected_text: "word".into(),
+        expected_old_text: "word".into(),
+        replacement_text: "text".into(),
+        utf16_start: 0,
+        utf16_end: 4,
+    };
+    assert!(
+        prepare_candidate(pdfium, &workspace, &registry, 0, &target, &input, &inspector,).is_err()
+    );
+    workspace.cleanup().unwrap();
+    fs::remove_dir(root).unwrap();
 }
 
 fn guarded_styled_rotated_round_trip(pdfium: &Pdfium) {
@@ -289,7 +363,11 @@ fn guarded_fixture_round_trip(
     );
     assert_eq!(
         serde_json::from_slice::<String>(&independent.stdout).unwrap(),
-        replacement
+        if expected_count == 2 {
+            format!("{replacement}\nkept")
+        } else {
+            replacement.into()
+        }
     );
     assert_eq!(hash(&source), original_hash);
     assert_eq!(hash(workspace.source_path()), original_hash);

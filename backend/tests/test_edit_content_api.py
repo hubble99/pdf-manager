@@ -176,6 +176,9 @@ class FakeRegistry:
         self.outcomes[key] = reply
         return reply
 
+    def output_bytes(self, session_id, output_id):
+        return self.get(session_id).output_bytes(output_id)
+
     def cancel(self, session_id: str, request_id: str):
         self.get(session_id)
         return False

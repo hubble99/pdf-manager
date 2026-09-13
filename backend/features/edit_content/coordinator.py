@@ -70,15 +70,18 @@ class ContentSessionCoordinator:
 
     @classmethod
     def reopen(
-        cls, config: WorkerLaunchConfig, store_root: Path, *, session_id: str, source_hash: str,
+        cls, config: WorkerLaunchConfig, store_root: Path, *, session_id: str, source_hash: str | None = None,
     ) -> ContentSessionCoordinator:
-        store = ContentCommitStore(store_root, session_id, source_hash)
+        store = (ContentCommitStore.recover(store_root, session_id) if source_hash is None
+                 else ContentCommitStore(store_root, session_id, source_hash))
         adapter = ContentWorkerAdapter(config)
         coordinator = cls(adapter, store)
         try:
-            coordinator._restart_current()
+            # A new adapter has no prior session identity to carry into restart.
+            coordinator._ensure_worker()
             return coordinator
         except BaseException:
+            adapter.terminate()
             store.close()
             raise
 

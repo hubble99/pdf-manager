@@ -264,6 +264,7 @@ pub fn cleanup_owned_orphans(root: &Path, session_id: &str) -> Result<usize, Wor
         if marker.schema != WORKSPACE_SCHEMA
             || marker.owner != WORKSPACE_OWNER
             || marker.session_id != session_id
+            || !owner_is_gone(marker.process_id)
         {
             continue;
         }
@@ -278,6 +279,41 @@ pub fn cleanup_owned_orphans(root: &Path, session_id: &str) -> Result<usize, Wor
         removed += 1;
     }
     Ok(removed)
+}
+
+// Ambiguous ownership (including PID reuse or access denied) means retain.
+#[cfg(windows)]
+fn owner_is_gone(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, WAIT_OBJECT_0,
+    };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+    if pid == 0 {
+        return false;
+    }
+    unsafe {
+        let process = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+        if process.is_null() {
+            return GetLastError() == ERROR_INVALID_PARAMETER;
+        }
+        let gone = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
+        CloseHandle(process);
+        gone
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn owner_is_gone(pid: u32) -> bool {
+    pid != 0
+        && matches!(fs::metadata(format!("/proc/{pid}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn owner_is_gone(_pid: u32) -> bool {
+    false
 }
 
 fn copy_verified(
@@ -521,19 +557,41 @@ mod tests {
         let wrong_session = root.join("edit-content-other-session");
         let unmarked = root.join("edit-content-unmarked");
         let unrelated = root.join("unrelated");
-        for path in [&removable, &wrong_session, &unmarked, &unrelated] {
+        let live = root.join("edit-content-live");
+        for path in [&removable, &wrong_session, &unmarked, &unrelated, &live] {
             fs::create_dir(path).unwrap();
             fs::write(path.join("data"), b"keep unless owned").unwrap();
         }
+        let mut owner = if cfg!(windows) {
+            std::process::Command::new("cmd")
+                .args(["/c", "exit", "0"])
+                .spawn()
+                .unwrap()
+        } else {
+            std::process::Command::new("sh")
+                .args(["-c", "exit 0"])
+                .spawn()
+                .unwrap()
+        };
+        let dead_pid = owner.id();
+        owner.wait().unwrap();
         let marker = |session_id: &str| OwnershipMarker {
             schema: WORKSPACE_SCHEMA.into(),
             owner: WORKSPACE_OWNER.into(),
             session_id: session_id.into(),
-            process_id: 1,
+            process_id: dead_pid,
         };
         fs::write(
             removable.join(MARKER_NAME),
             serde_json::to_vec(&marker("session-a")).unwrap(),
+        )
+        .unwrap();
+
+        let mut live_marker = marker("session-a");
+        live_marker.process_id = std::process::id();
+        fs::write(
+            live.join(MARKER_NAME),
+            serde_json::to_vec(&live_marker).unwrap(),
         )
         .unwrap();
         fs::write(
@@ -547,6 +605,7 @@ mod tests {
         assert!(wrong_session.exists());
         assert!(unmarked.exists());
         assert!(unrelated.exists());
+        assert!(live.exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

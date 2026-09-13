@@ -88,7 +88,7 @@ class ContentCommitStore:
     history pruning or close. Unreferenced candidates are never promoted.
     """
 
-    def __init__(self, root: Path, session_id: str, source_hash: str):
+    def __init__(self, root: Path, session_id: str, source_hash: str | None):
         self.root = Path(root).absolute()
         self.session_id = session_id
         self.source_hash = source_hash
@@ -102,6 +102,22 @@ class ContentCommitStore:
         if any(parent.is_symlink() for parent in self.root.parents):
             raise UnknownOutcome("Content store ownership is uncertain")
         self._acquire()
+
+    @classmethod
+    def recover(cls, root: Path, session_id: str) -> ContentCommitStore:
+        """Lock and verify the committed record and every referenced artifact.
+
+        The record is a local integrity checksum, not an authentication token.
+        Recovery never selects a staging file or guesses the newest checkpoint.
+        """
+        store = cls(root, session_id, None)
+        try:
+            state = store.state()
+            store.source_hash = state.source.source_hash
+            return store
+        except BaseException:
+            store.close()
+            raise
 
     def _acquire(self):
         import msvcrt
@@ -252,7 +268,9 @@ class ContentCommitStore:
             if hashlib.sha256(_encoded(payload["state"])).hexdigest() != payload["sha256"]:
                 raise ValueError
             state = _state(payload["state"])
-            if state.session_id != self.session_id or state.source.source_hash != self.source_hash:
+            if state.session_id != self.session_id or (
+                self.source_hash is not None and state.source.source_hash != self.source_hash
+            ):
                 raise ValueError
             self._check_files(state)
             return state

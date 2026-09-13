@@ -107,6 +107,37 @@ beforeEach(() => {
 
 
 describe('Edit Content page', () => {
+  it('keeps progress and cancellation interactive while verification is pending', async () => {
+    let finish!: (reply: Awaited<ReturnType<typeof contentApi.applyContentDraft>>) => void;
+    vi.mocked(contentApi.applyContentDraft).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    vi.mocked(contentApi.cancelContentRequest).mockResolvedValue(undefined);
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    const editor = await screen.findByLabelText('Replacement text');
+    for (const value of ['P', 'Press', 'Press B to continue']) {
+      fireEvent.change(editor, { target: { value } });
+      expect(editor).toHaveValue(value);
+    }
+    expect(contentApi.applyContentDraft).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    expect(await screen.findByText('Source and last accepted checkpoint remain unchanged until commit.')).toBeInTheDocument();
+    expect(editor).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Apply & verify/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(contentApi.cancelContentRequest).toHaveBeenCalledWith('session-1', 'apply-request'));
+    expect(await screen.findByText('Cancellation requested…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    finish({ schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+      status: 'rejected', acceptedRevision: 0, result: { state, clearDraft: false }, error: 'Cancelled safely.' });
+    await screen.findByText('Cancelled safely.');
+    expect(editor).toBeEnabled();
+    expect(editor).toHaveValue('Press B to continue');
+    expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps typing draft-local and retains the draft after a guard rejection', async () => {
     vi.mocked(contentApi.applyContentDraft).mockResolvedValue({
       schemaVersion: 'edit-content-reply/v1',

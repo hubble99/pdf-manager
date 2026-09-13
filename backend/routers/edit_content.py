@@ -14,6 +14,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from config import settings
+from features.edit_content.commit_store import UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError
 from features.edit_content.session_service import (
     ContentSessionRegistry,
@@ -313,7 +314,8 @@ def close(session_id: str, envelope: CommandEnvelope):
     try:
         coordinator = registry.get(session_id)
     except ContentSessionUnavailable as exc:
-        raise HTTPException(status_code=404, detail="Content session was not found.") from exc
+        raise HTTPException(status_code=503 if exc.unknown else 404,
+                            detail="Content recovery could not be verified." if exc.unknown else "Content session was not found.") from exc
     state = coordinator.state(pending_draft=payload.pendingDraft)
     if envelope.expectedAcceptedRevision != state["acceptedRevision"]:
         return {
@@ -340,7 +342,8 @@ def cancel(session_id: str, request_id: str):
     try:
         accepted = get_content_registry().cancel(session_id, request_id)
     except ContentSessionUnavailable as exc:
-        raise HTTPException(status_code=404, detail="Content session was not found.") from exc
+        raise HTTPException(status_code=503 if exc.unknown else 404,
+                            detail="Content recovery could not be verified." if exc.unknown else "Content session was not found.") from exc
     return {"status": "accepted" if accepted else "not-running", "requestId": request_id}
 
 
@@ -349,9 +352,11 @@ def output(session_id: str, output_id: str):
     if _OPAQUE_ID.fullmatch(output_id) is None:
         raise HTTPException(status_code=404, detail="Published output was not found.")
     try:
-        content = get_content_registry().get(session_id).output_bytes(output_id)
+        content = get_content_registry().output_bytes(session_id, output_id)
     except (ContentSessionUnavailable, TransitionRejected, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Published output was not found.") from exc
+    except (UnknownOutcome, OSError) as exc:
+        raise HTTPException(status_code=503, detail="Published output could not be verified.") from exc
     return Response(
         content=content,
         media_type="application/pdf",

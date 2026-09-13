@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shlex
 import sys
 import threading
@@ -11,6 +12,7 @@ from typing import Any, Callable
 import uuid
 
 from config import settings
+from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError, ContentSessionCoordinator
 from features.edit_content.engine_identity import load_engine_identity, validate_runtime_identity
 from features.edit_content.process_adapter import ContentWorkerError, WorkerLaunchConfig
@@ -22,6 +24,10 @@ MAX_ACTIVE_SESSIONS = 2
 
 class ContentSessionUnavailable(RuntimeError):
     """A requested Content session is absent or cannot safely continue."""
+
+    def __init__(self, reason: str, *, unknown: bool = False):
+        super().__init__(reason)
+        self.unknown = unknown
 
 
 def default_worker_config() -> WorkerLaunchConfig:
@@ -73,6 +79,7 @@ class ContentSessionRegistry:
         self._idle = threading.Condition(self._lock)
         self._close_lock = threading.Lock()
         self._closing: set[str] = set()
+        self._closed: set[str] = set()
         self._shutting_down = False
 
     def open(self, source: Path) -> tuple[ContentSessionCoordinator, dict[str, Any]]:
@@ -96,12 +103,43 @@ class ContentSessionRegistry:
 
     def get(self, session_id: str) -> ContentSessionCoordinator:
         with self._lock:
-            if self._shutting_down or session_id in self._closing:
+            if self._shutting_down or session_id in self._closing or session_id in self._closed:
                 raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
             coordinator = self._sessions.get(session_id)
-        if coordinator is None:
+            if coordinator is None:
+                root = self._recovery_root(session_id)
+                if len(self._sessions) >= MAX_ACTIVE_SESSIONS:
+                    raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
+                try:
+                    coordinator = ContentSessionCoordinator.reopen(
+                        self._config_factory(), root, session_id=session_id,
+                    )
+                except (UnknownOutcome, ContentCoordinatorError, ContentWorkerError, OSError, RuntimeError) as exc:
+                    raise ContentSessionUnavailable("Content recovery could not be verified.", unknown=True) from exc
+                self._sessions[session_id] = coordinator
+                self._outcomes[session_id] = {}
+            return coordinator
+
+    def _recovery_root(self, session_id: str) -> Path:
+        # API session IDs are server-generated capabilities, never filesystem paths.
+        if re.fullmatch(r"[0-9a-f]{32}", session_id) is None:
             raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
-        return coordinator
+        root = self._storage_root / session_id
+        if not root.is_dir():
+            raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
+        return root
+
+    def output_bytes(self, session_id: str, output_id: str) -> bytes:
+        """Committed downloads outlive workers, normal close, and backend restart."""
+        with self._lock:
+            coordinator = self._sessions.get(session_id)
+            if coordinator is None:
+                store = ContentCommitStore.recover(self._recovery_root(session_id), session_id)
+                try:
+                    return store.output_bytes(output_id)
+                finally:
+                    store.close()
+        return coordinator.output_bytes(output_id)
 
     def run(
         self,
@@ -117,8 +155,9 @@ class ContentSessionRegistry:
                 coordinator = self.get(session_id)
             except ContentSessionUnavailable as exc:
                 return _reply(
-                    request_id, session_id, "rejected", 0, {},
-                    guard_reason=str(exc), error="Content session was not found.",
+                    request_id, session_id, "unknown" if exc.unknown else "rejected", 0, {},
+                    guard_reason=None if exc.unknown else str(exc),
+                    error="Content recovery could not be verified." if exc.unknown else "Content session was not found.",
                 )
             previous = self._outcomes[session_id].get(request_id)
             if previous is not None:
@@ -200,6 +239,7 @@ class ContentSessionRegistry:
                 self._sessions.pop(session_id, None)
                 self._outcomes.pop(session_id, None)
                 self._closing.discard(session_id)
+                self._closed.add(session_id)
                 self._idle.notify_all()
 
     def close_all(self) -> int:

@@ -30,6 +30,8 @@ pub struct TargetEvidence {
     pub glyph_coverage: Option<serde_json::Value>,
     pub source_scope_kind: String,
     pub render_mode: String,
+    #[serde(default)]
+    pub has_clip_path: bool,
 }
 
 impl Default for TargetEvidence {
@@ -40,6 +42,7 @@ impl Default for TargetEvidence {
             glyph_coverage: None,
             source_scope_kind: "page".into(),
             render_mode: "FilledUnstroked".into(),
+            has_clip_path: false,
         }
     }
 }

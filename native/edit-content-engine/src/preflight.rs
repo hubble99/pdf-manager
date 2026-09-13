@@ -119,6 +119,7 @@ pub fn evaluate_preflight(
     if input.replacement_text.contains(['\n', '\r'])
         || requires_unsupported_shaping(&resulting_text)
         || record.evidence.source_scope_kind != "page"
+        || record.evidence.has_clip_path
         || !supported_render_mode(&record.evidence.render_mode)
     {
         unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
@@ -136,7 +137,7 @@ pub fn evaluate_preflight(
 
     let mut unsupported_code_points = Vec::new();
     if type3.is_empty() {
-        match glyph_coverage(record, &resulting_text) {
+        match glyph_coverage(registry, revision, record, &resulting_text) {
             GlyphVerdict::Covered => {}
             GlyphVerdict::Missing(points) => {
                 unsupported_code_points = points;
@@ -347,8 +348,23 @@ enum GlyphVerdict {
     Unknown,
 }
 
-fn glyph_coverage(record: &TargetRecord, resulting_text: &str) -> GlyphVerdict {
-    let existing: BTreeSet<u32> = record.text.chars().map(u32::from).collect();
+fn glyph_coverage(
+    registry: &ObjectRegistry,
+    revision: u64,
+    record: &TargetRecord,
+    resulting_text: &str,
+) -> GlyphVerdict {
+    let mut existing: BTreeSet<u32> = record.text.chars().map(u32::from).collect();
+    if let Some(identity) = record.evidence.font_resource_object.as_deref() {
+        let Ok(records) = registry.records_on_page(revision, record.page_index) else {
+            return GlyphVerdict::Unknown;
+        };
+        for candidate in records {
+            if candidate.evidence.font_resource_object.as_deref() == Some(identity) {
+                existing.extend(candidate.text.chars().map(u32::from));
+            }
+        }
+    }
     let requested: BTreeSet<u32> = resulting_text
         .chars()
         .filter(|character| !character.is_whitespace())
@@ -572,6 +588,7 @@ mod tests {
             glyph_coverage: Some(json!({"status": "proven", "ranges": [[32, 126]]})),
             source_scope_kind: "page".into(),
             render_mode: "FilledUnstroked".into(),
+            has_clip_path: false,
         }
     }
 
@@ -677,6 +694,14 @@ mod tests {
                 "plain",
                 "REJECTED_UNSUPPORTED_STRUCTURE",
             ),
+            (
+                TargetEvidence {
+                    has_clip_path: true,
+                    ..evidence()
+                },
+                "plain",
+                "REJECTED_UNSUPPORTED_STRUCTURE",
+            ),
         ];
         for (case_evidence, replacement, expected) in cases {
             let mut registry = ObjectRegistry::new("unsupported");
@@ -741,12 +766,48 @@ mod tests {
         let unknown = evaluate(
             &registry,
             &unknown_target,
-            &input("Save", "Save", "Saved"),
+            &input("Save", "Save", "Saveq"),
             &safe_inspection(),
         );
         assert!(unknown
             .guard_reasons
             .contains(&"REJECTED_UNSUPPORTED_STRUCTURE".into()));
+    }
+
+    #[test]
+    fn unknown_cmap_uses_only_characters_proven_by_the_exact_font_resource() {
+        let unknown = TargetEvidence {
+            glyph_coverage: Some(json!({"status": "unknown", "ranges": []})),
+            ..evidence()
+        };
+        let mut registry = ObjectRegistry::new("exact-font-usage");
+        registry.begin_snapshot(0);
+        let target = register(&mut registry, 0, "Save", quad(0.0, 30.0), unknown.clone());
+        register(&mut registry, 1, "draft", quad(40.0, 65.0), unknown.clone());
+        let covered = evaluate(
+            &registry,
+            &target,
+            &input("Save", "Save", "Saved"),
+            &safe_inspection(),
+        );
+        assert!(covered.eligible);
+
+        let mut distinct = unknown;
+        distinct.font_resource_object = Some("12:0".into());
+        let mut registry = ObjectRegistry::new("distinct-font-usage");
+        registry.begin_snapshot(0);
+        let target = register(&mut registry, 0, "Save", quad(0.0, 30.0), distinct);
+        register(&mut registry, 1, "draft", quad(40.0, 65.0), evidence());
+        let unproven = evaluate(
+            &registry,
+            &target,
+            &input("Save", "Save", "Saved"),
+            &safe_inspection(),
+        );
+        assert_eq!(
+            unproven.primary_guard_reason.as_deref(),
+            Some("REJECTED_UNSUPPORTED_STRUCTURE")
+        );
     }
 
     #[test]
