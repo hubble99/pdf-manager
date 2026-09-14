@@ -106,3 +106,38 @@ def resource_fingerprints(resources: Any) -> dict[str, list[str]]:
             continue
         result[str(kind)] = sorted(semantic_hash(item) for item in mapping.values())
     return result
+
+
+def image_resource_bindings(page: Any, resources: Any) -> list[dict[str, str]]:
+    """Bind only distinct named image streams, retaining every mask dependency.
+
+    Encoded bytes identify the resource *within this file*, not across saves.
+    Full semantic hashes (including masks/filters' decoded meaning) are what
+    the native verifier compares across files. Inline images, forms, and
+    duplicate raw streams cannot establish that binding and fail closed.
+    """
+    resolved = resources.get_object() if resources is not None else DictionaryObject()
+    if not isinstance(resolved, DictionaryObject):
+        raise UnprovenPreservation('invalid image resource scope')
+    contents = page.get_contents()
+    if contents is not None and any(op == b'INLINE IMAGE' for _, op in contents.operations):
+        raise UnprovenPreservation('inline image binding is unavailable')
+    mapping = resolved.get('/XObject', DictionaryObject()).get_object()
+    if not isinstance(mapping, DictionaryObject):
+        raise UnprovenPreservation('invalid image resource dictionary')
+    result, seen = [], set()
+    for value in mapping.values():
+        image = value.get_object()
+        if not isinstance(image, StreamObject) or image.get('/Subtype') != '/Image':
+            raise UnprovenPreservation('opaque or nested image resource')
+        # pypdf's decoded get_data() drops the transport identity exposed by
+        # FPDFImageObj_GetImageDataRaw; use the pinned parser's stored bytes.
+        raw = image._data
+        if not isinstance(raw, bytes) or not raw or len(raw) > 64 * 1024 * 1024:
+            raise UnprovenPreservation('unbounded or empty image stream')
+        fingerprint = hashlib.sha256(raw).hexdigest()
+        if fingerprint in seen:
+            raise UnprovenPreservation('ambiguous image stream identity')
+        seen.add(fingerprint)
+        result.append({'rawSha256': fingerprint, 'semanticSha256': semantic_hash(value)})
+    return sorted(result, key=lambda entry: entry['rawSha256'])

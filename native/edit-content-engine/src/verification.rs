@@ -9,10 +9,34 @@ use pdfium_render::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 const INTEGRITY: &str = "REJECTED_COLLATERAL_INTEGRITY";
-pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v2";
+pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v3";
+
+/// A per-file bijection, never a resource-set-only image identity proof.
+fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, String>, &'static str> {
+    let bindings = page["imageResourceBindings"].as_array().ok_or(INTEGRITY)?;
+    let dependencies = page["preservationResources"]["/XObject"].as_array().ok_or(INTEGRITY)?;
+    if count < 2 || bindings.len() != count || dependencies.len() != count {
+        return Err(INTEGRITY);
+    }
+    let hash = |value: &Value| value.as_str().filter(|s| s.len() == 64 &&
+        s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).map(str::to_owned).ok_or(INTEGRITY);
+    let mut result = BTreeMap::new();
+    for binding in bindings {
+        if result.insert(hash(&binding["rawSha256"])?, hash(&binding["semanticSha256"])?).is_some() {
+            return Err(INTEGRITY);
+        }
+    }
+    let mut expected = dependencies.iter().map(hash).collect::<Result<Vec<_>, _>>()?;
+    expected.sort();
+    let mut actual = result.values().cloned().collect::<Vec<_>>();
+    actual.sort();
+    if actual != expected { return Err(INTEGRITY); }
+    Ok(result)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -169,6 +193,10 @@ pub fn capture(
             .pages()
             .get(descriptor.page_index as _)
             .map_err(|_| INTEGRITY)?;
+        let image_count = page.objects().iter().filter(|o| o.as_image_object().is_some()).count();
+        let mut image_bindings = if image_count > 1 {
+            Some(proven_image_bindings(resource_page, image_count)?)
+        } else { None };
         for (index, object) in page.objects().iter().enumerate() {
             if !object.is_active().map_err(|_| INTEGRITY)? {
                 return Err(INTEGRITY);
@@ -266,21 +294,12 @@ pub fn capture(
                     "stroked": path.is_stroked().map_err(|_| INTEGRITY)?, "segments": points}),
                 )
             } else if let Some(image) = object.as_image_object() {
-                // Native raw pixels omit image masks. Until multiple native
-                // images can be bound to exact resource identities, require one
-                // native image and one dependency on this page. Never accept a
-                // resource-set hash as proof of which mask an image actually uses.
+                // Native pixels omit masks. A unique encoded stream binds each
+                // named image to its complete resource identity, including masks.
                 let dependencies = resource_page["preservationResources"]["/XObject"]
                     .as_array()
                     .ok_or(INTEGRITY)?;
-                if dependencies.len() != 1
-                    || page
-                        .objects()
-                        .iter()
-                        .filter(|o| o.as_image_object().is_some())
-                        .count()
-                        != 1
-                {
+                if image_count == 1 && dependencies.len() != 1 {
                     return Err(INTEGRITY);
                 }
                 let width = image.width().map_err(|_| INTEGRITY)?;
@@ -294,6 +313,14 @@ pub fn capture(
                 {
                     return Err(INTEGRITY);
                 }
+                let resource_identity = if let Some(bindings) = image_bindings.as_mut() {
+                    let bytes = image.get_raw_image_data().map_err(|_| INTEGRITY)?;
+                    if bytes.is_empty() || bytes.len() > 64 * 1024 * 1024 { return Err(INTEGRITY); }
+                    let raw_hash = sha256_reader(&mut std::io::Cursor::new(bytes)).map_err(|_| INTEGRITY)?;
+                    // Consume each binding exactly once; duplicate native images
+                    // cannot stand in for a missing resource use.
+                    json!(bindings.remove(&raw_hash).ok_or(INTEGRITY)?)
+                } else { dependencies[0].clone() };
                 let bitmap = image.get_raw_image().map_err(|_| INTEGRITY)?;
                 let fingerprint = sha256_reader(&mut std::io::Cursor::new(bitmap.as_bytes()))
                     .map_err(|_| INTEGRITY)?;
@@ -301,7 +328,7 @@ pub fn capture(
                     "image",
                     None,
                     json!({"width": width, "height": height, "pixels": fingerprint,
-                    "resourceIdentity": dependencies[0],
+                    "resourceIdentity": resource_identity,
                     "colorSpace": format!("{:?}", image.color_space().map_err(|_| INTEGRITY)?),
                     "bitsPerPixel": image.bits_per_pixel().map_err(|_| INTEGRITY)?}),
                 )
@@ -318,6 +345,7 @@ pub fn capture(
                 payload,
             });
         }
+        if image_bindings.is_some_and(|bindings| !bindings.is_empty()) { return Err(INTEGRITY); }
     }
     drop(document);
     if file_hash(path)? != artifact_hash {
@@ -836,6 +864,30 @@ mod tests {
     }
 
     #[test]
+    fn image_binding_requires_complete_unique_raw_to_semantic_bijection() {
+        let a = "a".repeat(64); let b = "b".repeat(64);
+        let c = "c".repeat(64); let d = "d".repeat(64);
+        let page = json!({"preservationResources": {"/XObject": [c, d]},
+            "imageResourceBindings": [{"rawSha256": a, "semanticSha256": c},
+                {"rawSha256": b, "semanticSha256": d}]});
+        let mut valid = proven_image_bindings(&page, 2).unwrap();
+        assert_eq!(valid.remove(&a), Some(c));
+        assert!(valid.remove(&a).is_none());
+        assert_eq!(valid.remove(&b), Some(d));
+        assert!(valid.is_empty());
+        assert!(proven_image_bindings(&page, 3).is_err());
+        for (field, value) in [("rawSha256", json!(a)), ("rawSha256", json!("z".repeat(64))),
+            ("semanticSha256", json!("f".repeat(64))), ("semanticSha256", Value::Null)] {
+            let mut bad = page.clone();
+            bad["imageResourceBindings"][1][field] = value;
+            assert!(proven_image_bindings(&bad, 2).is_err());
+        }
+        let mut missing = page;
+        missing["imageResourceBindings"] = Value::Null;
+        assert!(proven_image_bindings(&missing, 2).is_err());
+    }
+
+    #[test]
     fn supported_path_and_image_fingerprints_are_exact_and_unknown_opaque_rejects() {
         let (mut baseline, edit) = fixture("word", "word", "text");
         baseline.objects.push(ObjectEvidence {
@@ -868,6 +920,21 @@ mod tests {
         let mut changed_image = good.clone();
         changed_image.objects[2].payload["pixels"] = json!("c".repeat(64));
         assert!(compare(&baseline, &changed_image, &edit).is_err());
+
+        // Swapping resource/mask ownership is unsafe even with identical native
+        // pixels and the same complete page resource multiset.
+        let mut two_images = baseline.clone();
+        let mut second = two_images.objects[2].clone();
+        second.index = 3;
+        second.quad = quad(80.0, 90.0);
+        second.style["matrix"] = json!([1, 0, 0, 1, 80, 10]);
+        second.payload["resourceIdentity"] = json!("d".repeat(64));
+        two_images.objects.push(second);
+        let mut swapped = candidate(&two_images, &edit);
+        assert!(compare(&two_images, &swapped, &edit).is_ok());
+        swapped.objects[2].payload["resourceIdentity"] = json!("d".repeat(64));
+        swapped.objects[3].payload["resourceIdentity"] = json!("b".repeat(64));
+        assert!(compare(&two_images, &swapped, &edit).is_err());
 
         let mut opaque = baseline.clone();
         opaque.objects[1].kind = "opaque".into();

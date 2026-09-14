@@ -11,7 +11,7 @@ from typing import Any
 
 from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, StreamObject
-from features.edit_content.preservation import optional_proof, resource_fingerprints, semantic_hash
+from features.edit_content.preservation import image_resource_bindings, optional_proof, resource_fingerprints, semantic_hash
 
 
 SCHEMA_VERSION = "edit-content-resource-inspection/v1"
@@ -73,6 +73,8 @@ class ReadOnlyResourceInspector:
                         "inheritedResourcesFrom": inherited_from,
                         "fonts": fonts,
                         "preservationResources": optional_proof(resource_fingerprints, resources),
+                        "imageResourceBindings": optional_proof(
+                            lambda value: image_resource_bindings(reader.pages[page_index], value), resources),
                         "pagePreservation": optional_proof(semantic_hash, DictionaryObject({
                             key: value for key, value in reader.pages[page_index].items()
                             if key not in {"/Type", "/Parent", "/Contents", "/Resources", "/MediaBox", "/CropBox", "/Rotate"}
