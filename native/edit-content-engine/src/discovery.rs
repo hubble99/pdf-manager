@@ -211,7 +211,15 @@ fn describe_text_object(
     let font = text.font();
     let font_name = font.name();
     let font_family = font.family();
-    let matched_font = matching_font(inspection, page_index, &font_name, &font_family);
+    let proven = inspection["pages"].as_array().and_then(|pages| pages.iter().find(|p|
+        p["pageIndex"].as_u64() == Some(page_index as u64))).and_then(|page| {
+            let object = page["nativeMarkedOwnership"].get(*object_path.first()?)?;
+            if object["kind"] != 1 { return None; }
+            let id = object["fontObject"].as_str()?;
+            crate::resource_inspector::unique_font(page["fonts"].as_array()?.iter().filter(|font|
+                font["scope"] == "page" && font["fontObject"].as_str() == Some(id)))
+        });
+    let matched_font = proven.or_else(|| matching_font(inspection, page_index, &font_name, &font_family));
     let resource_subtype = matched_font
         .and_then(|value| value.get("subtype"))
         .and_then(Value::as_str)

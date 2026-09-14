@@ -12,6 +12,7 @@ from typing import Any
 from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, StreamObject
 from features.edit_content.preservation import image_resource_bindings, optional_proof, resource_fingerprints, semantic_hash
+from features.edit_content.marked_content import marked_content_proof
 
 
 SCHEMA_VERSION = "edit-content-resource-inspection/v1"
@@ -50,7 +51,8 @@ class ReadOnlyResourceInspector:
             path = Path(source)
             if path.is_symlink() or not path.is_file():
                 raise _UnsupportedInspection
-            reader = PdfReader(path, strict=True)
+            source_bytes = path.read_bytes()
+            reader = PdfReader(io.BytesIO(source_bytes), strict=True)
             if reader.is_encrypted:
                 raise _UnsupportedInspection
             page_scopes = _page_resource_scopes(reader)
@@ -72,6 +74,9 @@ class ReadOnlyResourceInspector:
                         "pageIndex": page_index,
                         "inheritedResourcesFrom": inherited_from,
                         "fonts": fonts,
+                        "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
+                        "markedContentProof": optional_proof(
+                            lambda value: marked_content_proof(reader.pages[page_index], value), resources),
                         "preservationResources": optional_proof(resource_fingerprints, resources),
                         "imageResourceBindings": optional_proof(
                             lambda value: image_resource_bindings(reader.pages[page_index], value), resources),

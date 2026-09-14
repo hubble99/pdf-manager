@@ -18,7 +18,9 @@ pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v3";
 /// A per-file bijection, never a resource-set-only image identity proof.
 fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, String>, &'static str> {
     let bindings = page["imageResourceBindings"].as_array().ok_or(INTEGRITY)?;
-    let dependencies = page["preservationResources"]["/XObject"].as_array().ok_or(INTEGRITY)?;
+    let resources = if page["nativeMarkedOwnership"].is_array() { &page["markedContentProof"]["resources"] }
+        else { &page["preservationResources"] };
+    let dependencies = resources["/XObject"].as_array().ok_or(INTEGRITY)?;
     if count < 2 || bindings.len() != count || dependencies.len() != count {
         return Err(INTEGRITY);
     }
@@ -166,7 +168,10 @@ pub fn capture(
             .iter()
             .find(|page| page["pageIndex"].as_u64() == Some(descriptor.page_index as u64))
             .ok_or(INTEGRITY)?;
-        if !resource_page["preservationResources"].is_object()
+        let marked = resource_page["nativeMarkedOwnership"].as_array();
+        let preservation = if marked.is_some() { &resource_page["markedContentProof"]["resources"] }
+            else { &resource_page["preservationResources"] };
+        if !preservation.is_object()
             || resource_page["pagePreservation"]
                 .as_str()
                 .is_none_or(|hash| hash.len() != 64)
@@ -186,13 +191,14 @@ pub fn capture(
         .map(finite)
         .collect::<Result<Vec<_>, _>>()?;
         pages.push(
-            json!({"geometry": geometry, "resources": resource_page["preservationResources"],
+            json!({"geometry": geometry, "resources": preservation,
             "pagePreservation": resource_page["pagePreservation"]}),
         );
         let page = document
             .pages()
             .get(descriptor.page_index as _)
             .map_err(|_| INTEGRITY)?;
+        if marked.is_some_and(|m| m.len() != page.objects().len() as usize) { return Err(INTEGRITY); }
         let image_count = page.objects().iter().filter(|o| o.as_image_object().is_some()).count();
         let mut image_bindings = if image_count > 1 {
             Some(proven_image_bindings(resource_page, image_count)?)
@@ -221,6 +227,13 @@ pub fn capture(
             .map(finite)
             .collect::<Result<Vec<_>, _>>()?;
             let mut style = json!({"matrix": matrix});
+            if let Some(marked) = marked {
+                if marked[index]["kind"].as_i64() != Some(object.object_type() as i64) { return Err(INTEGRITY); }
+                style["graphicsState"] = marked[index]["graphicsState"].clone();
+                // Existing MCIDs are semantic marked-content membership, not
+                // ordinal identity. Duplicate marks still need unique matching.
+                style["markedContentId"] = marked[index]["markedContentId"].clone();
+            }
             style["clipPath"] = simple_clip_path(&object)?;
             if object.as_text_object().is_some() || object.as_path_object().is_some() {
                 style["strokeWidth"] =
@@ -264,7 +277,7 @@ pub fn capture(
                     "weight": descriptor.font.weight, "embedded": descriptor.font.embedded, "identity": fingerprint});
                 ("text", Some(text.text()), Value::Null)
             } else if let Some(path) = object.as_path_object() {
-                if path.has_transparency() {
+                if path.has_transparency() && marked.is_none() {
                     return Err(INTEGRITY);
                 }
                 style["fillColor"] = color(path.fill_color().map_err(|_| INTEGRITY)?);
@@ -296,7 +309,7 @@ pub fn capture(
             } else if let Some(image) = object.as_image_object() {
                 // Native pixels omit masks. A unique encoded stream binds each
                 // named image to its complete resource identity, including masks.
-                let dependencies = resource_page["preservationResources"]["/XObject"]
+                let dependencies = preservation["/XObject"]
                     .as_array()
                     .ok_or(INTEGRITY)?;
                 if image_count == 1 && dependencies.len() != 1 {
@@ -663,6 +676,18 @@ fn intersection(subject: &[[f64; 2]], clip: &[[f64; 2]]) -> Result<f64, &'static
     {
         return Err(INTEGRITY);
     }
+    // Strictly disjoint finite envelopes prove zero intersection even when an
+    // unchanged object's native quad is degenerate. Touching envelopes still
+    // require the existing non-degenerate convex proof below.
+    for axis in 0..2 {
+        let range = |points: &[[f64; 2]]| points.iter().fold(
+            (f64::INFINITY, f64::NEG_INFINITY),
+            |(lo, hi), p| (lo.min(p[axis]), hi.max(p[axis])),
+        );
+        let (a, b) = range(subject);
+        let (c, d) = range(clip);
+        if b < c || d < a { return Ok(0.0); }
+    }
     let orientation = area(clip).signum();
     if area(clip) == 0.0 || area(subject) == 0.0 {
         return Err(INTEGRITY);
@@ -739,6 +764,38 @@ mod tests {
     use crate::identity::TargetEvidence;
     use crate::preflight::PreflightInput;
     use crate::viewport::{Point, Quad};
+
+    #[test]
+    fn disjoint_degenerate_neighbor_has_proven_zero_intersection() {
+        let point = vec![[50.0, 50.0]; 4];
+        assert_eq!(intersection(&quad(10.0, 20.0), &point), Ok(0.0));
+        // Touching/overlapping degenerate bounds and malformed bounds still
+        // cannot supply the convex-area proof. No empty-text exemption.
+        assert!(intersection(&quad(10.0, 20.0), &vec![[15.0, 15.0]; 4]).is_err());
+        assert!(intersection(&quad(10.0, 20.0), &vec![[20.0, 15.0]; 4]).is_err());
+        assert!(intersection(&quad(10.0, 20.0), &vec![[f64::NAN, 50.0]; 4]).is_err());
+    }
+
+    #[test]
+    fn marked_identity_disambiguates_only_distinct_preserved_marks() {
+        let (mut before, edit) = fixture("word", "word", "ward");
+        let mut other = before.objects[0].clone();
+        other.index = 1;
+        other.text = Some("kept".into());
+        other.quad = quad(50.0, 60.0);
+        other.style["markedContentId"] = json!(8);
+        before.objects.push(other.clone());
+        other.index = 2;
+        other.style["markedContentId"] = json!(9);
+        before.objects.push(other);
+        let mut after = candidate(&before, &edit);
+        after.objects.swap(1, 2);
+        assert!(compare(&before, &after, &edit).is_ok());
+        after.objects[1].style["markedContentId"] = json!(8);
+        assert!(compare(&before, &after, &edit).is_err());
+        before.objects[2].style["markedContentId"] = json!(8);
+        assert!(compare(&before, &after, &edit).is_err());
+    }
 
     fn quad(left: f64, right: f64) -> Vec<[f64; 2]> {
         vec![[left, 10.0], [right, 10.0], [right, 20.0], [left, 20.0]]
@@ -861,6 +918,27 @@ mod tests {
         let mut corrupted_font = good;
         corrupted_font.objects[0].style["font"] = json!({"identity": "b".repeat(64)});
         assert!(test_only_bypass_preflight(&baseline, &corrupted_font, &edit).is_err());
+    }
+
+    #[test]
+    fn exact_graphics_state_rejects_sub_color_precision_alpha_changes() {
+        let (mut baseline, edit) = fixture("word", "word", "text");
+        let mut other = baseline.objects[0].clone();
+        other.index = 1;
+        other.text = Some("other".into());
+        other.quad = quad(80.0, 90.0);
+        other.style["matrix"][4] = json!(80);
+        baseline.objects.push(other);
+        for object in &mut baseline.objects {
+            object.style["graphicsState"] = json!([0.78431, 1.0, "/Normal"]);
+        }
+        let good = candidate(&baseline, &edit);
+        assert!(compare(&baseline, &good, &edit).is_ok());
+        for state in [json!([0.784311, 1.0, "/Normal"]), json!([0.78431, 1.0, "/Multiply"]), Value::Null] {
+            let mut bad = good.clone();
+            bad.objects[1].style["graphicsState"] = state;
+            assert!(compare(&baseline, &bad, &edit).is_err());
+        }
     }
 
     #[test]
