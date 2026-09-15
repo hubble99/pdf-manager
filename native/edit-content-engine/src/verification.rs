@@ -15,6 +15,39 @@ use std::path::Path;
 const INTEGRITY: &str = "REJECTED_COLLATERAL_INTEGRITY";
 pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v3";
 
+/// Optional exact serialized/native text-slot bijection. Incomplete, duplicated
+/// or transformed slots confer no empty-paint proof; existing guards still run.
+fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> {
+    let slots = page["textPaintSlots"].as_array()?;
+    let marked = page["nativeMarkedOwnership"].as_array()?;
+    if slots.len() != objects.iter().filter(|o| o.kind == "text").count() { return None; }
+    let mut used = vec![false; slots.len()];
+    let mut proven = Vec::new();
+    for (oi, obj) in objects.iter().enumerate().filter(|(_, o)| o.kind == "text") {
+        let binding = marked.get(obj.index)?;
+        let matrix = obj.style["matrix"].as_array()?.iter().map(|v|
+            v.as_f64().filter(|v| v.is_finite()).map(|v| (v as f32).to_bits())
+        ).collect::<Option<Vec<_>>>()?;
+        let size = (obj.style["fontSize"].as_f64()? as f32).to_bits();
+        let matches = slots.iter().enumerate().filter(|(_, slot)|
+            slot["mcid"] == binding["markedContentId"] &&
+            slot["fontObject"] == binding["fontObject"] &&
+            slot["matrixBits"] == json!(matrix) &&
+            slot["fontSizeBits"] == json!(size)
+        ).collect::<Vec<_>>();
+        if matches.len() != 1 || used[matches[0].0] { return None; }
+        used[matches[0].0] = true;
+        if matches[0].1["emptyPaint"] == true && obj.text.as_deref() == Some("") &&
+            obj.style["font"]["embedded"] == true && obj.style["renderMode"] == "FilledUnstroked" &&
+            obj.quad.len() == 4 && obj.quad.iter().all(|p| *p == obj.quad[0]) {
+            proven.push(oi);
+        }
+    }
+    if used.iter().any(|v| !v) { return None; }
+    for index in proven { objects[index].style["emptyGlyphPaint"] = json!("winansi-loca/v1"); }
+    Some(())
+}
+
 /// A per-file bijection, never a resource-set-only image identity proof.
 fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, String>, &'static str> {
     let bindings = page["imageResourceBindings"].as_array().ok_or(INTEGRITY)?;
@@ -164,6 +197,7 @@ pub fn capture(
         return Err(INTEGRITY);
     }
     for descriptor in &native.pages {
+        let page_objects_start = objects.len();
         let resource_page = resource_pages
             .iter()
             .find(|page| page["pageIndex"].as_u64() == Some(descriptor.page_index as u64))
@@ -358,6 +392,8 @@ pub fn capture(
                 payload,
             });
         }
+        // Only same-byte native bindings may authorize this optional proof.
+        bind_empty_paint(resource_page, &mut objects[page_objects_start..]);
         if image_bindings.is_some_and(|bindings| !bindings.is_empty()) { return Err(INTEGRITY); }
     }
     drop(document);
@@ -749,6 +785,10 @@ fn check_layout(
         .iter()
         .filter(|o| o.page == original.page && o.index != original.index)
     {
+        // Empty glyph storage, exact font ownership and unique serialized/native
+        // slot binding prove an empty paint set. Its point quad alone proves
+        // nothing. Collateral correspondence also requires this proof unchanged.
+        if neighbor.style["emptyGlyphPaint"] == "winansi-loca/v1" { continue; }
         if intersection(&changed.quad, &neighbor.quad)?
             > intersection(&original.quad, &neighbor.quad)?
         {
@@ -764,6 +804,37 @@ mod tests {
     use crate::identity::TargetEvidence;
     use crate::preflight::PreflightInput;
     use crate::viewport::{Point, Quad};
+
+    #[test]
+    fn empty_paint_requires_complete_unique_exact_native_slots() {
+        let (mut before, _) = fixture("word", "word", "ward");
+        let object = &mut before.objects[0];
+        object.text = Some("".into());
+        object.quad = vec![[10.0, 10.0]; 4];
+        object.style["font"] = json!({"embedded": true});
+        object.style["renderMode"] = json!("FilledUnstroked");
+        let slot = json!({"mcid":5,"fontObject":"8:0","emptyPaint":true,
+            "fontSizeBits":12_f32.to_bits(),"matrixBits":[1_f32.to_bits(),0,0,1_f32.to_bits(),10_f32.to_bits(),10_f32.to_bits()]});
+        let page = json!({"nativeMarkedOwnership":[{"markedContentId":5,"fontObject":"8:0"}],"textPaintSlots":[slot]});
+        let mut objects = before.objects.clone();
+        assert!(bind_empty_paint(&page, &mut objects).is_some());
+        assert_eq!(objects[0].style["emptyGlyphPaint"], "winansi-loca/v1");
+        for (key, value) in [("matrixBits",json!([0,0,0,0,0,0])), ("fontObject",json!("9:0")),
+            ("mcid",json!(6)), ("fontSizeBits",json!(13_f32.to_bits()))] {
+            let mut bad = page.clone(); bad["textPaintSlots"][0][key] = value;
+            let mut objects = before.objects.clone();
+            assert!(bind_empty_paint(&bad,&mut objects).is_none());
+            assert!(objects[0].style["emptyGlyphPaint"].is_null());
+        }
+        let mut duplicate = page.clone();
+        let duplicate_slot = duplicate["textPaintSlots"][0].clone();
+        duplicate["textPaintSlots"].as_array_mut().unwrap().push(duplicate_slot);
+        let mut objects = before.objects.clone();
+        let mut second = objects[0].clone(); second.index = 1; objects.push(second);
+        duplicate["nativeMarkedOwnership"].as_array_mut().unwrap().push(json!({"markedContentId":5,"fontObject":"8:0"}));
+        assert!(bind_empty_paint(&duplicate,&mut objects).is_none());
+        for obj in objects { assert!(obj.style["emptyGlyphPaint"].is_null()); }
+    }
 
     #[test]
     fn disjoint_degenerate_neighbor_has_proven_zero_intersection() {

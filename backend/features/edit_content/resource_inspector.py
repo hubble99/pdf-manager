@@ -13,6 +13,7 @@ from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject, StreamObject
 from features.edit_content.preservation import image_resource_bindings, optional_proof, resource_fingerprints, semantic_hash
 from features.edit_content.marked_content import marked_content_proof
+from features.edit_content.empty_paint import text_paint_slots
 
 
 SCHEMA_VERSION = "edit-content-resource-inspection/v1"
@@ -75,6 +76,8 @@ class ReadOnlyResourceInspector:
                         "inheritedResourcesFrom": inherited_from,
                         "fonts": fonts,
                         "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
+                        "textPaintSlots": optional_proof(
+                            lambda value: text_paint_slots(reader.pages[page_index], value), resources),
                         "markedContentProof": optional_proof(
                             lambda value: marked_content_proof(reader.pages[page_index], value), resources),
                         "preservationResources": optional_proof(resource_fingerprints, resources),
