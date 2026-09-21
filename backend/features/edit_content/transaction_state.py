@@ -17,7 +17,7 @@ from features.edit_content.engine_identity import load_engine_identity
 MAX_CHECKPOINT_BYTES = 16 * 1024 * 1024
 MAX_HISTORY_BYTES = 128 * 1024 * 1024
 MAX_HISTORY_ENTRIES = 8
-VERIFIER_POLICY = "edit-content-acceptance/v3"
+VERIFIER_POLICY = "edit-content-acceptance/v4"
 REQUIRED_CHECKS = frozenset({
     "target", "occurrences", "unique-correspondence", "font-identity",
     "geometry-style", "census", "resources", "layout",

@@ -9,6 +9,7 @@ import struct
 from fontTools.ttLib import TTFont
 from pypdf.generic import ByteStringObject, TextStringObject
 from features.edit_content.marked_content import require, MAX_OPERATIONS
+from features.edit_content.preservation import optional_proof
 
 
 def empty_winansi_space(font):
@@ -27,8 +28,8 @@ def empty_winansi_space(font):
     data = desc['/FontFile2'].get_data()
     if not 0 < len(data) <= 16 * 1024 * 1024:
         return False
-    with TTFont(io.BytesIO(data), lazy=False) as face:
-        if any(t in face for t in ('CFF ', 'CFF2', 'fvar', 'gvar', 'COLR', 'CPAL', 'SVG ',
+    with TTFont(io.BytesIO(data), lazy=True) as face:
+        if any(t in face for t in ('CFF ', 'CFF2', 'COLR', 'CPAL', 'SVG ',
                 'CBDT', 'CBLC', 'EBDT', 'EBLC', 'EBSC', 'bdat', 'bloc', 'sbix')):
             return False
         maps = [c for c in face['cmap'].tables if (c.platformID, c.platEncID) == (3, 1)]
@@ -40,8 +41,21 @@ def empty_winansi_space(font):
                 for c in face['cmap'].tables):
             return False
         offsets = face['loca'].locations
-        return (0 < gid < len(offsets) - 1 and
-            0 <= offsets[gid] == offsets[gid + 1] <= face.reader.tables['glyf'].length)
+        if not (0 < gid < len(offsets) - 1 and
+                0 <= offsets[gid] == offsets[gid + 1] <= face.reader.tables['glyf'].length):
+            return False
+        if 'fvar' in face or 'gvar' in face:
+            # A zero-length glyf has no outline points. Accept only a bounded
+            # gvar record consisting of the four metric phantom points: these
+            # cannot create contours. No variable outline is exempted.
+            if 'fvar' not in face or 'gvar' not in face or not 0 < len(face['fvar'].axes) <= 16:
+                return False
+            variations = face['gvar'].variations[maps[0].cmap[32]]
+            if len(variations) > 64 or any(len(v.coordinates) != 4 or any(
+                    p is not None and (len(p) != 2 or any(not isinstance(x, int) for x in p))
+                    for p in v.coordinates) for v in variations):
+                return False
+        return True
 
 
 def text_paint_slots(page, resources):
@@ -70,7 +84,9 @@ def text_paint_slots(page, resources):
             raw = resources['/Font'].raw_get(args[0])
             state.update(font=f'{raw.idnum}:{raw.generation}', size=f32(args[1]))
             if state['font'] not in empty_fonts:
-                empty_fonts[state['font']] = empty_winansi_space(raw)
+                # An unprovable glyph in another font supplies no exception;
+                # it must not erase the complete slot census for proven fonts.
+                empty_fonts[state['font']] = optional_proof(empty_winansi_space, raw) is True
         elif op in (b'Tr', b'Ts', b'Tz'):
             state[{b'Tr': 'mode', b'Ts': 'rise', b'Tz': 'scale'}[op]] = float(args[0])
         elif op == b'BT':
@@ -102,6 +118,8 @@ def text_paint_slots(page, resources):
             require(0 < len(code_bytes) <= 65536)
             slots.append(dict(mcid=next((m for m in marks if m is not None), -1),
                 fontObject=state['font'], matrixBits=[bits(v) for v in matrix], fontSizeBits=bits(state['size']),
+                asciiCodes=list(code_bytes) if empty_fonts[state['font']] and len(code_bytes) <= 1024
+                    and all(32 <= v <= 126 for v in code_bytes) else None,
                 emptyPaint=state['mode'] == 0 and code_bytes == b' ' and empty_fonts[state['font']]))
             painted = True
     return slots

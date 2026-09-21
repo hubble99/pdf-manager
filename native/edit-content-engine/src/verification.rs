@@ -13,7 +13,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 const INTEGRITY: &str = "REJECTED_COLLATERAL_INTEGRITY";
-pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v3";
+pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v4";
+#[path = "backdrop.rs"]
+mod backdrop;
 
 /// Optional exact serialized/native text-slot bijection. Incomplete, duplicated
 /// or transformed slots confer no empty-paint proof; existing guards still run.
@@ -23,6 +25,7 @@ fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> 
     if slots.len() != objects.iter().filter(|o| o.kind == "text").count() { return None; }
     let mut used = vec![false; slots.len()];
     let mut proven = Vec::new();
+    let mut support = Vec::new();
     for (oi, obj) in objects.iter().enumerate().filter(|(_, o)| o.kind == "text") {
         let binding = marked.get(obj.index)?;
         let matrix = obj.style["matrix"].as_array()?.iter().map(|v|
@@ -37,6 +40,13 @@ fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> 
         ).collect::<Vec<_>>();
         if matches.len() != 1 || used[matches[0].0] { return None; }
         used[matches[0].0] = true;
+        if obj.style["renderMode"] == "FilledUnstroked" && obj.style["clipPath"] == json!([])
+            && obj.style["matrix"].as_array().is_some_and(|m| m.len() == 6 &&
+                m[..4].iter().zip([1.0,0.0,0.0,1.0]).all(|(v,n)|v.as_f64()==Some(n))) {
+            if let Some(bounds) = character_paint_support(matches[0].1, &page["nativeTextCharacters"][obj.index]) {
+                support.push((oi,bounds));
+            }
+        }
         if matches[0].1["emptyPaint"] == true && obj.text.as_deref() == Some("") &&
             obj.style["font"]["embedded"] == true && obj.style["renderMode"] == "FilledUnstroked" &&
             obj.quad.len() == 4 && obj.quad.iter().all(|p| *p == obj.quad[0]) {
@@ -45,7 +55,55 @@ fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> 
     }
     if used.iter().any(|v| !v) { return None; }
     for index in proven { objects[index].style["emptyGlyphPaint"] = json!("winansi-loca/v1"); }
+    for (index,bounds) in support { objects[index].paint_support = bounds; }
     Some(())
+}
+
+/// ASCII is only a code mapping here. Space is omitted ONLY because this exact
+/// font's cmap/loca (and bounded metric-only gvar) has proven no stored outline.
+fn character_paint_support(slot: &Value, chars: &Value) -> Option<Value> {
+    let codes = slot["asciiCodes"].as_array()?;
+    let chars = chars.as_array()?;
+    if codes.is_empty() || codes.len() > 1024 || codes.len() != chars.len() { return None; }
+    let mut bounds=[f64::INFINITY,f64::INFINITY,f64::NEG_INFINITY,f64::NEG_INFINITY];
+    for (i,(code,ch)) in codes.iter().zip(chars).enumerate() {
+        let code=code.as_u64()?;
+        if !(32..=126).contains(&code) || ch["code"].as_u64()!=Some(code) || ch["generated"]!=0 { return None; }
+        if code==32 {
+            if i+1!=codes.len() { return None; }
+            continue;
+        }
+        let r=ch["bounds"].as_array()?;
+        if r.len()!=4 { return None; }
+        let r=r.iter().map(Value::as_f64).collect::<Option<Vec<_>>>()?;
+        if r.iter().any(|v|!v.is_finite()) || r[0]>=r[2] || r[1]>=r[3] { return None; }
+        bounds[0]=bounds[0].min(r[0]);bounds[1]=bounds[1].min(r[1]);
+        bounds[2]=bounds[2].max(r[2]);bounds[3]=bounds[3].max(r[3]);
+    }
+    if bounds.iter().any(|v|!v.is_finite()) { return None; }
+    Some(json!({"schema":"bound-empty-advance/v1","bounds":bounds,"trailingEmpty":codes.last()==Some(&json!(32))}))
+}
+
+fn without_empty_advance(original: &ObjectEvidence, changed: &ObjectEvidence) -> Option<Vec<[f64;2]>> {
+    if changed.paint_support["trailingEmpty"]!=true || original.style!=changed.style
+        || original.style["graphicsState"]!=json!([1.0,1.0,"/Normal"])
+        || original.style["fillColor"][3]!=255 || original.style["clipPath"]!=json!([])
+        || original.style["renderMode"]!="FilledUnstroked" { return None; }
+    let points=&original.quad;
+    if points.len()!=4 || points.iter().flatten().any(|v|!v.is_finite()) { return None; }
+    let [left,bottom,right,top]=[points[0][0],points[0][1],points[2][0],points[2][1]];
+    if left>=right || bottom>=top || points!=&vec![[left,bottom],[right,bottom],[right,top],[left,top]] { return None; }
+    let mut result=None;
+    for object in [original,changed] {
+        if object.paint_support["schema"]!="bound-empty-advance/v1" { return None; }
+        let r=object.paint_support["bounds"].as_array()?;
+        if r.len()!=4 { return None; }
+        let r=r.iter().map(Value::as_f64).collect::<Option<Vec<_>>>()?;
+        if r.iter().any(|v|!v.is_finite()) || r[0]<left || r[1]<bottom || r[2]>right || r[3]>top
+            || r[0]>=r[2] || r[1]>=r[3] { return None; }
+        result=Some(vec![[r[0],r[1]],[r[2],r[1]],[r[2],r[3]],[r[0],r[3]]]);
+    }
+    result
 }
 
 /// A per-file bijection, never a resource-set-only image identity proof.
@@ -92,6 +150,8 @@ pub struct ObjectEvidence {
     pub quad: Vec<[f64; 2]>,
     pub style: Value,
     pub payload: Value,
+    #[serde(default)]
+    pub paint_support: Value,
 }
 
 fn finite(value: f32) -> Result<f64, &'static str> {
@@ -226,6 +286,7 @@ pub fn capture(
         .collect::<Result<Vec<_>, _>>()?;
         pages.push(
             json!({"geometry": geometry, "resources": preservation,
+            "backdropContext": if marked.is_some() { resource_page["backdropContext"].clone() } else { Value::Null },
             "pagePreservation": resource_page["pagePreservation"]}),
         );
         let page = document
@@ -390,6 +451,7 @@ pub fn capture(
                 quad,
                 style,
                 payload,
+                paint_support: Value::Null,
             });
         }
         // Only same-byte native bindings may authorize this optional proof.
@@ -623,6 +685,9 @@ pub fn compare(
             baseline,
             &baseline.objects[target],
             &candidate.objects[*mapped],
+            &backdrop::certified(baseline, candidate, &correspondence, target).unwrap_or_default(),
+            backdrop::preserved_order(baseline,candidate,&correspondence,baseline.objects[target].page)
+                && backdrop::passive_context(baseline,candidate,&baseline.objects[target]),
         )?;
     }
     let object_census = (0..candidate.pages.len())
@@ -766,7 +831,13 @@ fn check_layout(
     baseline: &Snapshot,
     original: &ObjectEvidence,
     changed: &ObjectEvidence,
+    uniform_backdrop: &std::collections::BTreeSet<usize>,
+    empty_advance_context: bool,
 ) -> Result<(), &'static str> {
+    // Tighten only a fully bound single trailing empty advance; this is not a
+    // background exception. Every ordinary intersection/page guard still runs.
+    let supported_quad=empty_advance_context.then(||without_empty_advance(original, changed)).flatten();
+    let changed_quad=supported_quad.as_deref().unwrap_or(&changed.quad);
     let geometry = baseline.pages[original.page as usize]["geometry"]
         .as_array()
         .ok_or(INTEGRITY)?;
@@ -777,7 +848,7 @@ fn check_layout(
     let escaped = |quad: &[[f64; 2]]| -> Result<f64, &'static str> {
         Ok(area(quad).abs() - intersection(quad, &page)?)
     };
-    if escaped(&changed.quad)? > escaped(&original.quad)? {
+    if escaped(changed_quad)? > escaped(&original.quad)? {
         return Err("REJECTED_LAYOUT");
     }
     for neighbor in baseline
@@ -789,7 +860,8 @@ fn check_layout(
         // slot binding prove an empty paint set. Its point quad alone proves
         // nothing. Collateral correspondence also requires this proof unchanged.
         if neighbor.style["emptyGlyphPaint"] == "winansi-loca/v1" { continue; }
-        if intersection(&changed.quad, &neighbor.quad)?
+        if uniform_backdrop.contains(&neighbor.index) { continue; }
+        if intersection(changed_quad, &neighbor.quad)?
             > intersection(&original.quad, &neighbor.quad)?
         {
             return Err("REJECTED_LAYOUT");
@@ -804,6 +876,33 @@ mod tests {
     use crate::identity::TargetEvidence;
     use crate::preflight::PreflightInput;
     use crate::viewport::{Point, Quad};
+
+    #[test]
+    fn empty_advance_requires_complete_real_native_characters_and_containment() {
+        let slot=json!({"asciiCodes":[65,32]});
+        let chars=json!([{"code":65,"generated":0,"bounds":[10.0,10.0,20.0,20.0]},
+            {"code":32,"generated":0,"bounds":[22.0,10.0,25.0,10.001]}]);
+        let support=character_paint_support(&slot,&chars).unwrap();
+        assert_eq!(support["bounds"],json!([10.0,10.0,20.0,20.0]));
+        for (field,value) in [("code",json!(66)),("generated",json!(1)),("generated",json!(-1)),
+            ("bounds",json!([10.0,10.0,10.0,10.0]))] {
+            let mut bad=chars.clone();bad[0][field]=value;
+            assert!(character_paint_support(&slot,&bad).is_none());
+        }
+        assert!(character_paint_support(&json!({"asciiCodes":[65,32,32]}),&chars).is_none());
+        assert!(character_paint_support(&Value::Null,&chars).is_none());
+        let (mut before,_)=fixture("A","A","A ");
+        let original=&mut before.objects[0];
+        original.style=json!({"renderMode":"FilledUnstroked","clipPath":[],"fillColor":[0,0,0,255],"graphicsState":[1.0,1.0,"/Normal"]});
+        original.paint_support=json!({"schema":"bound-empty-advance/v1","bounds":[10.0,10.0,20.0,20.0],"trailingEmpty":false});
+        let mut changed=original.clone();changed.paint_support=support;
+        assert!(without_empty_advance(original,&changed).is_some());
+        changed.paint_support["bounds"][2]=json!(20.000001);
+        assert!(without_empty_advance(original,&changed).is_none());
+        changed.paint_support["bounds"][2]=json!(20.0);
+        changed.paint_support["trailingEmpty"]=json!(false);
+        assert!(without_empty_advance(original,&changed).is_none());
+    }
 
     #[test]
     fn empty_paint_requires_complete_unique_exact_native_slots() {
@@ -902,6 +1001,7 @@ mod tests {
             style: json!({"font": "exact-program", "fontSize": 12.0,
                 "fillColor": [0, 0, 0, 255], "matrix": [1, 0, 0, 1, 10, 10]}),
             payload: Value::Null,
+            paint_support: Value::Null,
         };
         (
             Snapshot {
@@ -1048,6 +1148,7 @@ mod tests {
             style: json!({"matrix": [1, 0, 0, 1, 0, 0], "fillColor": [0, 0, 0, 255]}),
             payload: json!({"fill": "Winding", "stroked": true,
                 "segments": [{"kind": "LineTo", "close": false, "point": [30.0, 10.0]}]}),
+            paint_support: Value::Null,
         });
         baseline.objects.push(ObjectEvidence {
             page: 0,
@@ -1059,6 +1160,7 @@ mod tests {
             payload: json!({"width": 10, "height": 10, "pixels": "a".repeat(64),
                 "resourceIdentity": "b".repeat(64), "colorSpace": "DeviceRGB",
                 "bitsPerPixel": 24}),
+            paint_support: Value::Null,
         });
         let good = candidate(&baseline, &edit);
         assert!(compare(&baseline, &good, &edit).is_ok());

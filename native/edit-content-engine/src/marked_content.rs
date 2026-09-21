@@ -191,11 +191,13 @@ impl NativeBoundInspector {
                         return None;
                     }
                     let mut objects = Vec::new();
+                    let mut owners = BTreeMap::new();
                     for i in 0..count {
                         let obj = unsafe { b.FPDFPage_GetObject(page, i) };
                         if obj.is_null() {
                             return None;
                         }
+                        if owners.insert(obj as usize, i as usize).is_some() { return None; }
                         let kind = unsafe { b.FPDFPageObj_GetType(obj) };
                         let font = if kind == 1 {
                             let value = unsafe { b.FPDFTextObj_GetFont(obj) };
@@ -211,6 +213,29 @@ impl NativeBoundInspector {
                             font,
                             mcid: unsafe { b.FPDFPageObj_GetMarkedContentID(obj) },
                         });
+                    }
+                    // Read-only per-character native ownership. A complete
+                    // serialized ASCII slot census must bind it before use.
+                    let tp = unsafe { b.FPDFText_LoadPage(page) };
+                    if !tp.is_null() {
+                        let chars = (|| {
+                            let n = unsafe { b.FPDFText_CountChars(tp) };
+                            if !(0..=100_000).contains(&n) { return None; }
+                            let mut result = vec![Vec::new(); count as usize];
+                            for i in 0..n {
+                                let owner = unsafe { b.FPDFText_GetTextObject(tp, i) };
+                                let Some(index) = owners.get(&(owner as usize)) else { continue; };
+                                let (mut left,mut right,mut bottom,mut top) = (0.0,0.0,0.0,0.0);
+                                let ok = unsafe { b.FPDFText_GetCharBox(tp,i,&mut left,&mut right,&mut bottom,&mut top) };
+                                if ok == 0 || [left,right,bottom,top].iter().any(|v| !v.is_finite()) { return None; }
+                                result[*index].push(json!({"code":unsafe {b.FPDFText_GetUnicode(tp,i)},
+                                    "generated":unsafe {b.FPDFText_IsGenerated(tp,i)},
+                                    "bounds":[left,bottom,right,top]}));
+                            }
+                            Some(json!(result))
+                        })();
+                        unsafe { b.FPDFText_ClosePage(tp) };
+                        if let Some(chars) = chars { proof["nativeTextCharacters"] = chars; }
                     }
                     Some(objects)
                 })();
@@ -238,6 +263,7 @@ impl ResourceInspector for NativeBoundInspector {
             for page in pages {
                 page.as_object_mut()
                     .map(|p| p.remove("nativeMarkedOwnership"));
+                page.as_object_mut().map(|p| p.remove("nativeTextCharacters"));
             }
         }
         let mut candidate = value.clone();
