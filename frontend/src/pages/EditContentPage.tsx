@@ -291,7 +291,11 @@ export function EditContentPage() {
         session.sessionId, session.acceptedRevision, selected.targetId, edit, requestId,
       );
       if (reply.status !== 'accepted') {
-        setError(replyError(reply));
+        const reason = replyError(reply);
+        const refreshed = await refreshAcceptedCheckpoint(session);
+        setError(refreshed
+          ? `${reason} The selection and draft were cleared because the target identity expired. Select the text again before retrying.`
+          : `${reason} The selection and draft were cleared. Refresh the page, then select the text again before retrying.`);
         return false;
       }
       setSession(reply.result.state);

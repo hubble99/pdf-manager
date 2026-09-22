@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1 — 2026-09-22
+
+- Cleared expired Edit Content target bindings after guarded Apply rejection, refreshed native discovery, and required explicit reselection before retrying.
+- Added frontend and packaged regression coverage for rejection, target rotation, unchanged committed state, and successful retry with a fresh target.
+
 ## 1.2.0 — 2026-08-28
 
 - Froze the UAT-approved canvas-only Edit Canvas baseline and removed the unstable selectable-text editing prototype from the runtime contract.

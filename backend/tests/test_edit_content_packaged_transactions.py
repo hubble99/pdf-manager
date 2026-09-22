@@ -207,6 +207,45 @@ def test_packaged_verified_transaction_reopen_and_shutdown_download(packaged, jo
     packaged.canvas_healthy(source)
 
 
+def test_packaged_guard_rejection_rotates_target_without_committing(packaged):
+    source = synthetic_pdf()
+    opened = packaged.open(source)
+    session = opened["sessionId"]
+    target = opened["result"]["discovery"]["textObjects"][0]
+    original_target = target["targetId"]
+
+    unsupported = {
+        "expectedText": "word", "expectedOldText": "word", "replacementText": "Rőtated",
+        "utf16Start": 0, "utf16End": 4,
+    }
+    rejected = packaged.command(
+        session, "apply", 0, {"edit": unsupported}, original_target, request_id="guard-rejected",
+    )
+    assert rejected["status"] == "rejected"
+    assert rejected["guardReason"] == "REJECTED_UNSUPPORTED_GLYPH"
+
+    record = json.loads(packaged.record(session).read_bytes())["state"]
+    assert record["revision"] == 0
+    assert record["outcomes"] == []
+    assert record["publications"] == []
+    assert len(record["checkpoints"]) == 1
+    assert record["source"]["source_hash"] == digest(source)
+
+    stale = packaged.command(
+        session, "apply", 0, {"edit": EDIT}, original_target, request_id="stale-retry",
+    )
+    assert stale["status"] == "rejected"
+    assert stale["guardReason"] == "REJECTED_STALE_REVISION"
+
+    fresh_target = target_for(packaged, session)
+    assert fresh_target["targetId"] != original_target
+    accepted = packaged.command(
+        session, "apply", 0, {"edit": EDIT}, fresh_target["targetId"], request_id="fresh-retry",
+    )
+    assert accepted["status"] == "accepted"
+    assert accepted["acceptedRevision"] == 1
+
+
 @contextmanager
 def deny_record_rename(path):
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)

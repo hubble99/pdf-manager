@@ -132,14 +132,26 @@ describe('Edit Content page', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     finish({ schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
       status: 'rejected', acceptedRevision: 0, result: { state, clearDraft: false }, error: 'Cancelled safely.' });
-    await screen.findByText('Cancelled safely.');
-    expect(editor).toBeEnabled();
-    expect(editor).toHaveValue('Press B to continue');
+    await screen.findByText(/Cancelled safely\..*selection and draft were cleared/i);
+    expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
     expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps typing draft-local and retains the draft after a guard rejection', async () => {
-    vi.mocked(contentApi.applyContentDraft).mockResolvedValue({
+  it('invalidates a rejected target and requires fresh selection before a valid retry', async () => {
+    const refreshedDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], targetId: 'target-1', nativeObjectIdentity: 'native-1' }],
+    };
+    const committedDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], targetId: 'target-2', nativeObjectIdentity: 'native-2', text: 'Press B to continue' }],
+    };
+    const nextState = { ...state, acceptedRevision: 1, dirty: true, canUndo: true };
+    vi.mocked(contentApi.inspectContentObjects)
+      .mockResolvedValueOnce(accepted('inspect-rejected', { discovery: refreshedDiscovery }))
+      .mockResolvedValueOnce(accepted('inspect-accepted', { discovery: committedDiscovery }, 1));
+    vi.mocked(contentApi.applyContentDraft)
+      .mockResolvedValueOnce({
       schemaVersion: 'edit-content-reply/v1',
       requestId: 'apply-request',
       sessionId: 'session-1',
@@ -148,7 +160,8 @@ describe('Edit Content page', () => {
       guardReason: 'REJECTED_UNSUPPORTED_GLYPH',
       error: 'The existing PDF font cannot represent the replacement text.',
       result: { state, clearDraft: false },
-    });
+      })
+      .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
     const { container } = renderPage();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(['%PDF-1.4'], 'source.pdf', { type: 'application/pdf' });
@@ -162,10 +175,24 @@ describe('Edit Content page', () => {
     expect(contentApi.applyContentDraft).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
-    await screen.findByText('The existing PDF font cannot represent the replacement text.');
-    expect(editor).toHaveValue('Press É to continue');
+    await screen.findByText(/The existing PDF font cannot represent the replacement text\..*selection and draft were cleared.*select the text again/i);
+    expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Revision 0/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Undo/i })).toBeDisabled();
+    expect(contentApi.inspectContentObjects).toHaveBeenCalledWith('session-1', 0);
     expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: /Redo/i })).toBeDisabled();
+
+    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-1' } });
+    const freshEditor = await screen.findByLabelText('Replacement text');
+    fireEvent.change(freshEditor, { target: { value: 'Press B to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+
+    await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.');
+    expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(contentApi.applyContentDraft).mock.calls[0][2]).toBe('target-0');
+    expect(vi.mocked(contentApi.applyContentDraft).mock.calls[1][2]).toBe('target-1');
+    expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
   });
 
   it('offers apply, discard, and cancel before page deselection', async () => {
