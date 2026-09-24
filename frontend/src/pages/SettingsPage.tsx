@@ -240,7 +240,7 @@ export function SettingsPage() {
               <div style={{ color: 'var(--on-surface-variant)' }}>App Name</div>
               <div style={{ fontWeight: 500 }}>PDF Manager V2</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Version</div>
-              <div style={{ fontWeight: 500 }}>1.2.2 (Stable)</div>
+              <div style={{ fontWeight: 500 }}>1.2.3 (Stable)</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Tech Stack</div>
               <div style={{ fontWeight: 500 }}>Tauri 2.11, React 19, Vite 8, FastAPI, PyMuPDF</div>
               <div style={{ color: 'var(--on-surface-variant)' }}>Features</div>

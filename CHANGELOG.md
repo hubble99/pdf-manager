@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.3 — 2026-09-24
+
+- Wrapped long selected native text inside the Edit Content object picker instead of clipping it on one line.
+
 ## 1.2.2 — 2026-09-24
 
 - Kept Edit Content selection unavailable during accepted-checkpoint refresh and cleared queued selections, preventing expired targets and drafts from being restored after a guarded rejection.
