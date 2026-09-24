@@ -94,7 +94,7 @@ export function EditContentPage() {
   );
   const draftDirty = Boolean(selected && draft !== selected.text);
   const unsaved = draftDirty || Boolean(session?.dirty);
-  const busy = phase !== 'idle' && phase !== 'rendering';
+  const busy = phase !== 'idle';
 
   const selectTarget = useCallback((target: NativeTextObjectDescriptor | null) => {
     setSelected(target);
@@ -111,6 +111,7 @@ export function EditContentPage() {
     setSelected(null);
     setDraft('');
     setAmbiguous([]);
+    setPending(null);
     try {
       const reply = await inspectContentObjects(next.sessionId, next.acceptedRevision);
       if (sequence !== inspectSequence.current || reply.status !== 'accepted'

@@ -195,6 +195,87 @@ describe('Edit Content page', () => {
     expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
   });
 
+  it('does not restore an expired selection from the old discovery while rejection refreshes', async () => {
+    let finishInspection!: (reply: Awaited<ReturnType<typeof contentApi.inspectContentObjects>>) => void;
+    const refreshedDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], targetId: 'target-1', nativeObjectIdentity: 'native-1' }],
+    };
+    const committedDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], targetId: 'target-2', nativeObjectIdentity: 'native-2', text: 'Press B to continue' }],
+    };
+    const nextState = { ...state, acceptedRevision: 1, dirty: true, canUndo: true };
+    vi.mocked(contentApi.inspectContentObjects)
+      .mockImplementationOnce(() => new Promise((resolve) => { finishInspection = resolve; }))
+      .mockResolvedValueOnce(accepted('inspect-accepted', { discovery: committedDiscovery }, 1));
+    vi.mocked(contentApi.applyContentDraft)
+      .mockResolvedValueOnce({
+        schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+        status: 'rejected', acceptedRevision: 0,
+        error: 'The regenerated PDF did not preserve untouched content exactly enough.',
+        result: { state, clearDraft: false },
+      })
+      .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
+
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    const picker = await screen.findByLabelText('Native text object');
+    fireEvent.change(picker, { target: { value: 'target-0' } });
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    await waitFor(() => expect(contentApi.inspectContentObjects).toHaveBeenCalledWith('session-1', 0));
+
+    // The old discovery is still rendered until inspection returns. A user action
+    // during that window must not recreate the expired selection or draft.
+    if (!(picker as HTMLSelectElement).disabled) {
+      fireEvent.change(picker, { target: { value: 'target-0' } });
+      fireEvent.change(screen.getByLabelText('Replacement text'), { target: { value: 'Press C to continue' } });
+    }
+    finishInspection(accepted('inspect-rejected', { discovery: refreshedDiscovery }));
+
+    expect(await screen.findByText(/The regenerated PDF did not preserve untouched content exactly enough\..*Select the text again before retrying\./i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Select text on the page' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Selected native text' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Native text object')).toHaveValue('');
+    expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText('Native text object'), { target: { value: 'target-1' } });
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    expect(await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.')).toBeInTheDocument();
+    expect(vi.mocked(contentApi.applyContentDraft).mock.calls.map((call) => call[2])).toEqual(['target-0', 'target-1']);
+    expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
+  });
+
+  it('drops a pending selection when a guarded Apply rejects', async () => {
+    vi.mocked(contentApi.applyContentDraft).mockResolvedValue({
+      schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+      status: 'rejected', acceptedRevision: 0,
+      error: 'The regenerated PDF did not preserve untouched content exactly enough.',
+      result: { state, clearDraft: false },
+    });
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    fireEvent.click(await screen.findByTestId('edit-content-page'));
+    expect(await screen.findByText('Keep the current draft?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply & continue' }));
+
+    expect(await screen.findByText(/The regenerated PDF did not preserve untouched content exactly enough\..*Select the text again before retrying\./i)).toBeInTheDocument();
+    expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Native text object')).toHaveValue('');
+  });
+
   it('offers apply, discard, and cancel before page deselection', async () => {
     const { container } = renderPage();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;

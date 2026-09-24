@@ -354,7 +354,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.2.1"
+    assert body["data"]["version"] == "1.2.2"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

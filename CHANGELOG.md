@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2 — 2026-09-24
+
+- Kept Edit Content selection unavailable during accepted-checkpoint refresh and cleared queued selections, preventing expired targets and drafts from being restored after a guarded rejection.
+- Added a frontend regression for rejection, refresh, explicit fresh selection, and successful Apply.
+
 ## 1.2.1 — 2026-09-22
 
 - Finalized Edit Content V1 for release: it edits existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements that need no reflow), verifies every accepted change before publishing, and rejects unsupported or uncertain content safely.
