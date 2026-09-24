@@ -1361,8 +1361,76 @@ select.input {
   gap: var(--space-2);
 }
 
-.edit-content-object-picker select {
-  width: 100%;
+.edit-content-object-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.edit-content-object-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-content-object-trigger svg {
+  flex: none;
+  color: var(--on-surface-variant);
+}
+
+.edit-content-object-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.edit-content-object-menu {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.edit-content-object-menu select.input {
+  min-height: 0;
+  padding: var(--space-1);
+  background-image: none;
+  cursor: default;
+}
+
+.edit-content-object-menu option {
+  padding: var(--space-2);
+}
+
+.edit-content-object-menu p {
+  margin: 0;
+}
+
+.edit-content-limits {
+  padding: var(--space-3);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--surface-container);
+  color: var(--on-surface-variant);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.edit-content-limits strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--on-surface);
+}
+
+.edit-content-limits p + p {
+  margin-top: var(--space-2);
+}
+
+.edit-content-editor-section .edit-content-limits {
+  padding: 0 0 var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--outline-variant);
+  border-radius: 0;
+  background: transparent;
 }
 
 .edit-content-textarea {

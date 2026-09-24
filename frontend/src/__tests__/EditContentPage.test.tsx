@@ -87,6 +87,13 @@ function renderPage() {
   );
 }
 
+async function chooseNativeText(targetId: string) {
+  fireEvent.click(await screen.findByRole('button', { name: 'Native text object' }));
+  fireEvent.change(screen.getByRole('listbox', { name: 'Native text options' }), {
+    target: { value: targetId },
+  });
+}
+
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -107,6 +114,32 @@ beforeEach(() => {
 
 
 describe('Edit Content page', () => {
+  it('opens text choices below the picker and shows V1 limits before editing', async () => {
+    const { container } = renderPage();
+    expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await screen.findByRole('heading', { name: 'Select text on the page' });
+    expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
+    const trigger = screen.getByRole('button', { name: 'Native text object' });
+    fireEvent.click(trigger);
+    const choices = screen.getByRole('listbox', { name: 'Native text options' });
+    expect(choices).toHaveAttribute('size', '6');
+    expect(trigger.compareDocumentPosition(choices) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter native text objects' }), {
+      target: { value: 'missing' },
+    });
+    expect(screen.getByText('No matching text on this page.')).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Filter native text objects' }), { key: 'Escape' });
+    expect(screen.queryByRole('listbox', { name: 'Native text options' })).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('option', { name: 'Press A to continue' })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('listbox', { name: 'Native text options' }), { target: { value: 'target-0' } });
+    expect(screen.queryByRole('listbox', { name: 'Native text options' })).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
+  });
+
   it('keeps the native trailing separator when replacing a word without typing its space', async () => {
     const spacedDiscovery = {
       ...discovery,
@@ -123,7 +156,7 @@ describe('Edit Content page', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Nomoo' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
 
@@ -143,7 +176,7 @@ describe('Edit Content page', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    await chooseNativeText('target-0');
     const editor = await screen.findByLabelText('Replacement text');
     for (const value of ['P', 'Press', 'Press B to continue']) {
       fireEvent.change(editor, { target: { value } });
@@ -211,7 +244,7 @@ describe('Edit Content page', () => {
     expect(contentApi.inspectContentObjects).toHaveBeenCalledWith('session-1', 0);
     expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-1' } });
+    await chooseNativeText('target-1');
     const freshEditor = await screen.findByLabelText('Replacement text');
     fireEvent.change(freshEditor, { target: { value: 'Press B to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
@@ -250,8 +283,8 @@ describe('Edit Content page', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
     });
-    const picker = await screen.findByLabelText('Native text object');
-    fireEvent.change(picker, { target: { value: 'target-0' } });
+    const picker = await screen.findByRole('button', { name: 'Native text object' });
+    await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
     await waitFor(() => expect(contentApi.inspectContentObjects).toHaveBeenCalledWith('session-1', 0));
@@ -259,7 +292,8 @@ describe('Edit Content page', () => {
     // The old discovery is still rendered until inspection returns. A user action
     // during that window must not recreate the expired selection or draft.
     if (!(picker as HTMLSelectElement).disabled) {
-      fireEvent.change(picker, { target: { value: 'target-0' } });
+      fireEvent.click(picker);
+      fireEvent.change(screen.getByRole('listbox', { name: 'Native text options' }), { target: { value: 'target-0' } });
       fireEvent.change(screen.getByLabelText('Replacement text'), { target: { value: 'Press C to continue' } });
     }
     finishInspection(accepted('inspect-rejected', { discovery: refreshedDiscovery }));
@@ -269,10 +303,10 @@ describe('Edit Content page', () => {
     expect(screen.queryByRole('heading', { name: 'Selected native text' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Native text object')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Native text object' })).toHaveTextContent('Choose supported text…');
     expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText('Native text object'), { target: { value: 'target-1' } });
+    await chooseNativeText('target-1');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
     expect(await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.')).toBeInTheDocument();
@@ -291,7 +325,7 @@ describe('Edit Content page', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(await screen.findByTestId('edit-content-page'));
     expect(await screen.findByText('Keep the current draft?')).toBeInTheDocument();
@@ -301,7 +335,7 @@ describe('Edit Content page', () => {
     expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Native text object')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Native text object' })).toHaveTextContent('Choose supported text…');
   });
 
   it('offers apply, discard, and cancel before page deselection', async () => {
@@ -338,13 +372,12 @@ describe('Edit Content page', () => {
     expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
   });
 
-  it('provides keyboard-accessible exact-object selection', async () => {
+  it('opens the editor after choosing an exact text object', async () => {
     const { container } = renderPage();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] } });
 
-    const picker = await screen.findByLabelText('Native text object');
-    fireEvent.change(picker, { target: { value: 'target-0' } });
+    await chooseNativeText('target-0');
 
     expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
   });

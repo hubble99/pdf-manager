@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -61,12 +62,24 @@ function replyError(reply: ContentReply): string {
   return reply.error || explainGuard(reply.guardReason);
 }
 
+function EditContentLimits() {
+  return (
+    <aside className="edit-content-limits" aria-label="Edit Content V1 limits">
+      <strong>Edit Content V1 limits</strong>
+      <p>Replace or delete existing selectable text in one supported text object. Longer replacements work only when they fit without reflow.</p>
+      <p>Scans, outlined text, insert-only edits, new lines, font changes, and text split across objects are not supported. Uncertain PDFs may still be rejected during verification.</p>
+    </aside>
+  );
+}
+
 
 export function EditContentPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const pickerSearchRef = useRef<HTMLInputElement>(null);
+  const pickerTriggerRef = useRef<HTMLButtonElement>(null);
   const renderSequence = useRef(0);
   const inspectSequence = useRef(0);
 
@@ -86,17 +99,25 @@ export function EditContentPage() {
   const [ambiguous, setAmbiguous] = useState<NativeTextObjectDescriptor[]>([]);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState('');
 
   const currentPage = discovery?.pages.find((page) => page.pageIndex === pageIndex);
   const pageObjects = useMemo(
     () => discovery?.textObjects.filter((object) => object.pageIndex === pageIndex) ?? [],
     [discovery, pageIndex],
   );
+  const filteredPageObjects = useMemo(() => {
+    const query = pickerQuery.trim().toLocaleLowerCase();
+    return query ? pageObjects.filter((object) => object.text.toLocaleLowerCase().includes(query)) : pageObjects;
+  }, [pageObjects, pickerQuery]);
   const draftDirty = Boolean(selected && draft !== selected.text);
   const unsaved = draftDirty || Boolean(session?.dirty);
   const busy = phase !== 'idle';
 
   const selectTarget = useCallback((target: NativeTextObjectDescriptor | null) => {
+    setPickerOpen(false);
+    setPickerQuery('');
     setSelected(target);
     setDraft(target?.text ?? '');
     setAmbiguous([]);
@@ -112,6 +133,8 @@ export function EditContentPage() {
     setDraft('');
     setAmbiguous([]);
     setPending(null);
+    setPickerOpen(false);
+    setPickerQuery('');
     try {
       const reply = await inspectContentObjects(next.sessionId, next.acceptedRevision);
       if (sequence !== inspectSequence.current || reply.status !== 'accepted'
@@ -505,6 +528,7 @@ export function EditContentPage() {
                 <p>Every supported edit is regenerated privately, reopened, and checked before it enters history or becomes downloadable.</p>
               </div>
             </div>
+            <EditContentLimits />
             {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} />{error}</div>}
           </div>
         ) : (
@@ -568,26 +592,65 @@ export function EditContentPage() {
                   </div>
                   {selected && <span className="badge badge-info">Exact object</span>}
                 </div>
+                <EditContentLimits />
                 {pageObjects.length > 0 && (
                   <div className="edit-content-object-picker">
-                    <label className="input-label" htmlFor="edit-content-object">Native text object</label>
-                    <select
-                      id="edit-content-object"
-                      className="input"
-                      value={selected?.targetId ?? ''}
-                      onChange={(event) => {
-                        const target = pageObjects.find((object) => object.targetId === event.target.value);
-                        requestAction(target ? { kind: 'select', target } : { kind: 'deselect' });
+                    <span className="input-label">Native text object</span>
+                    <button
+                      ref={pickerTriggerRef}
+                      type="button"
+                      className="input edit-content-object-trigger"
+                      aria-label="Native text object"
+                      aria-expanded={pickerOpen && !busy}
+                      aria-controls={pickerOpen && !busy ? 'edit-content-object-options' : undefined}
+                      onClick={() => {
+                        setPickerOpen((open) => !open);
+                        setPickerQuery('');
+                        if (!pickerOpen) window.setTimeout(() => pickerSearchRef.current?.focus(), 0);
                       }}
                       disabled={busy}
                     >
-                      <option value="">Choose supported text…</option>
-                      {pageObjects.map((object) => (
-                        <option key={object.targetId} value={object.targetId}>
-                          {object.text || 'Empty text object'}
-                        </option>
-                      ))}
-                    </select>
+                      <span>{selected?.text.trim() || 'Choose supported text…'}</span>
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </button>
+                    {pickerOpen && !busy && (
+                      <div className="edit-content-object-menu" id="edit-content-object-options" onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setPickerOpen(false);
+                          pickerTriggerRef.current?.focus();
+                        }
+                      }}>
+                        <input
+                          ref={pickerSearchRef}
+                          className="input"
+                          type="search"
+                          aria-label="Filter native text objects"
+                          placeholder={`Find text on this page (${pageObjects.length})`}
+                          value={pickerQuery}
+                          onChange={(event) => setPickerQuery(event.target.value)}
+                        />
+                        <select
+                          className="input edit-content-object-listbox"
+                          aria-label="Native text options"
+                          size={6}
+                          value={selected?.targetId ?? ''}
+                          onChange={(event) => {
+                            const target = pageObjects.find((object) => object.targetId === event.target.value);
+                            setPickerOpen(false);
+                            setPickerQuery('');
+                            if (target) requestAction({ kind: 'select', target });
+                          }}
+                        >
+                          <option value="">Choose supported text…</option>
+                          {filteredPageObjects.map((object) => (
+                            <option key={object.targetId} value={object.targetId}>
+                              {object.text.trim() || 'Empty text object'}
+                            </option>
+                          ))}
+                        </select>
+                        {filteredPageObjects.length === 0 && <p>No matching text on this page.</p>}
+                      </div>
+                    )}
                   </div>
                 )}
                 {selected ? (
