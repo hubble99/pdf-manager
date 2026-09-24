@@ -35,10 +35,55 @@
 | 📌 **Insert Content** | Insert PDF pages or images into an existing PDF document |
 | 🗂️ **Organize Pages** | Rearrange, delete, or rotate PDF pages |
 | ✏️ **Edit Canvas** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
+| 🖊️ **Edit Content** | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
 | 🏷️ **Edit Metadata** | Edit title, author, subject, and other PDF properties |
 | 🔒 **Protect/Unlock PDF** | Protect PDFs with a password or remove existing passwords |
 
 > **All processing runs 100% offline on your machine. Your files are never sent to the internet. Temporary files are automatically cleaned up.**
+
+### Edit Content V1 — what it can and cannot safely do
+
+Edit Content edits the **existing native text** of a supported PDF. A change is
+published only after it has been regenerated privately, reopened, and verified;
+the original file is never overwritten. Edit Content is intentionally
+conservative — a rejection means the edit could not be proven safe, not that the
+application failed.
+
+**Supported**
+
+- Editing existing native/selectable PDF text.
+- Replacing an existing text range inside one supported text object: typo
+  corrections, word replacement, and shorter replacements.
+- Deleting a supported existing range inside a text object.
+- Genuine longer replacements that replace an existing range and need no reflow;
+  the object's own bounds may expand while surrounding content keeps its
+  position.
+- Saving only after integrity and safety verification succeeds.
+- Undo/redo across accepted checkpoints.
+- Safe fail-closed rejection when preservation cannot be proven.
+
+**Current V1 limitations**
+
+- It is not a general-purpose PDF word processor.
+- It edits native/selectable text only. Scanned or image-only text and outlined
+  text stay view-only; there is no OCR.
+- The supported model is replacement of a **non-empty existing range** inside one
+  text object. Pure insertion-style edits are not supported by the current draft
+  model — for example `Gedung → Gedungs` is interpreted as an insertion and is
+  rejected, with a message asking you to replace or remove existing text instead.
+- Automatic text reflow, paragraph layout, wrapping, new lines, and object
+  movement are outside V1.
+- Replacement characters must be safely representable by the exact embedded
+  font and resources the document already uses. A missing glyph rejects the edit,
+  and V1 never substitutes another font to make unsupported characters available.
+- Some PDFs with unsupported or ambiguous font/resource structures are
+  intentionally rejected (for example Type 3 text, words split across text
+  objects, or colliding font resources).
+- Some formatting or layout changes are rejected when preservation cannot be
+  proven.
+- Rejections leave the document, the accepted revision, and the publication state
+  unchanged and produce no download. After certain guarded rejections the
+  selection is cleared and you must select the text again before retrying.
 
 ---
 

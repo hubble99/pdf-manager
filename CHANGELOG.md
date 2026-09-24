@@ -2,6 +2,8 @@
 
 ## 1.2.1 — 2026-09-22
 
+- Finalized Edit Content V1 for release: it edits existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements that need no reflow), verifies every accepted change before publishing, and rejects unsupported or uncertain content safely.
+- Documented the supported scope and the intentional V1 limitations (native/selectable text only, no OCR, no automatic reflow or font substitution, replacement of a non-empty existing range only, fail-closed rejections) in the README.
 - Cleared expired Edit Content target bindings after guarded Apply rejection, refreshed native discovery, and required explicit reselection before retrying.
 - Added frontend and packaged regression coverage for rejection, target rotation, unchanged committed state, and successful retry with a fresh target.
 
