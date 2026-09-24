@@ -8,6 +8,15 @@ import type {
 
 export function buildEditCommand(original: string, draft: string): EditCommand | null {
   if (original === draft) return null;
+  const sourceSpaces = original.match(/ +$/)?.[0] ?? '';
+  const draftSpaces = draft.match(/ +$/)?.[0] ?? '';
+  // A native object's trailing spaces separate it from its next object. Keep
+  // those spaces when the user edits the visible word without retyping them.
+  if (sourceSpaces && draft.trimEnd() !== original.trimEnd()
+      && draft && (!/\s$/.test(draft) || draftSpaces.length > 0)
+      && draftSpaces.length < sourceSpaces.length) {
+    draft += sourceSpaces.slice(draftSpaces.length);
+  }
   const before = Array.from(original);
   const after = Array.from(draft);
   let prefix = 0;

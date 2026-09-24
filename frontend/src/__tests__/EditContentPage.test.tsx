@@ -107,6 +107,34 @@ beforeEach(() => {
 
 
 describe('Edit Content page', () => {
+  it('keeps the native trailing separator when replacing a word without typing its space', async () => {
+    const spacedDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], text: 'Nomor ', unicodeScalarLength: 6 }],
+    };
+    const nextState = { ...state, acceptedRevision: 1, dirty: true, canUndo: true };
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
+      state, discovery: spacedDiscovery,
+    }));
+    vi.mocked(contentApi.applyContentDraft).mockResolvedValue(accepted(
+      'apply-request', { state: nextState, clearDraft: true }, 1,
+    ));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.change(await screen.findByLabelText('Native text object'), { target: { value: 'target-0' } });
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Nomoo' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+
+    await waitFor(() => expect(contentApi.applyContentDraft).toHaveBeenCalledWith(
+      'session-1', 0, 'target-0', {
+        expectedText: 'Nomor ', expectedOldText: 'r', replacementText: 'o', utf16Start: 4, utf16End: 5,
+      }, 'apply-request',
+    ));
+    expect(await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.')).toBeInTheDocument();
+  });
+
   it('keeps progress and cancellation interactive while verification is pending', async () => {
     let finish!: (reply: Awaited<ReturnType<typeof contentApi.applyContentDraft>>) => void;
     vi.mocked(contentApi.applyContentDraft).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));

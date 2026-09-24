@@ -4,6 +4,7 @@
 
 - Kept Edit Content selection unavailable during accepted-checkpoint refresh and cleared queued selections, preventing expired targets and drafts from being restored after a guarded rejection.
 - Added a frontend regression for rejection, refresh, explicit fresh selection, and successful Apply.
+- Preserved native trailing spaces when editing a word, so typing a replacement without invisible spacing does not remove the separator and trigger a guarded rejection.
 
 ## 1.2.1 — 2026-09-22
 
