@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Barcode,
   Download,
@@ -80,7 +80,12 @@ export function QrBarcodePage() {
   // Output filename
   const [outputFilename, setOutputFilename] = useState('');
 
-  // Cleanup object URLs (all previewData.url are blob URLs now — both PNG and SVG)
+  // Sequence of the newest generation request. Only that request may commit
+  // preview/loading state; superseded or aborted requests are ignored.
+  const requestIdRef = useRef(0);
+
+  // Sole owner of preview object URLs: revokes the previous URL when
+  // previewData changes and on unmount (PNG and SVG are both blob URLs).
   useEffect(() => {
     return () => {
       if (previewData) {
@@ -95,23 +100,28 @@ export function QrBarcodePage() {
   const generatePreview = useCallback(async (isUserAction = false, signal?: AbortSignal) => {
     const isQr = activeTab === 'qr';
     const content = isQr ? debouncedQrContent : debouncedBarcodeContent;
-    
+
+    const requestId = ++requestIdRef.current;
+
     if (!content.trim()) {
+      setIsLoading(false);
       setPreviewData(null);
       return;
     }
-    
+
     // Validation for Barcode
     if (!isQr) {
       if (barcodeType === 'ean13') {
         if (!/^\d{12,13}$/.test(content)) {
           if (isUserAction) showToast({ type: 'error', title: 'Invalid Content', message: 'EAN-13 requires 12-13 digits.' });
+          setIsLoading(false);
           setPreviewData(null);
           return;
         }
       } else if (barcodeType === 'ean8') {
         if (!/^\d{7,8}$/.test(content)) {
           if (isUserAction) showToast({ type: 'error', title: 'Invalid Content', message: 'EAN-8 requires 7-8 digits.' });
+          setIsLoading(false);
           setPreviewData(null);
           return;
         }
@@ -147,8 +157,8 @@ export function QrBarcodePage() {
         signal,
       });
 
-      if (previewData && !previewData.isSvgText) {
-        URL.revokeObjectURL(previewData.url);
+      if (requestId !== requestIdRef.current) {
+        return;
       }
 
       if (format === 'svg') {
@@ -171,13 +181,18 @@ export function QrBarcodePage() {
       if (axios.isCancel(err) || (err instanceof Error && err.name === 'AbortError')) {
         return;
       }
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
       if (isUserAction) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         showToast({ type: 'error', title: 'Generation failed', message: msg });
       }
       setPreviewData(null);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [
     activeTab, 
@@ -187,7 +202,6 @@ export function QrBarcodePage() {
     qrErrorCorrection, 
     barcodeType, 
     format, 
-    previewData,
     showToast
   ]);
 
@@ -209,21 +223,27 @@ export function QrBarcodePage() {
 
     const a = document.createElement('a');
     a.download = filename;
+    a.href = previewData.url;
 
+    // The preview URL stays owned by previewData. SVG keeps its raw text, so
+    // download a throwaway blob URL and revoke it after the browser started
+    // the download (revoking synchronously can cancel it).
+    let tempUrl: string | null = null;
     if (previewData.isSvgText && previewData.svgText) {
-      // For SVG download: create a fresh blob from the raw SVG text
       const blob = new Blob([previewData.svgText], { type: 'image/svg+xml' });
-      a.href = URL.createObjectURL(blob);
-    } else {
-      a.href = previewData.url;
+      tempUrl = URL.createObjectURL(blob);
+      a.href = tempUrl;
     }
 
+    document.body.appendChild(a);
     a.click();
-    showToast({ type: 'success', title: 'Download started', message: `Saving ${filename}` });
+    document.body.removeChild(a);
 
-    if (previewData.isSvgText && previewData.svgText) {
-      URL.revokeObjectURL(a.href);
+    if (tempUrl) {
+      window.setTimeout(() => URL.revokeObjectURL(tempUrl as string), 5000);
     }
+
+    showToast({ type: 'success', title: 'Download started', message: `Saving ${filename}` });
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
