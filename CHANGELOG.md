@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.4 — 2026-09-30
+
+- Fixed the QR & Barcode preview regenerating in an endless loop while typing content, which flickered the preview, revoked the image being displayed, and intermittently disabled the Download button.
+- Let the preview state own blob URL lifetime, ignored superseded generation requests, and released the temporary SVG download URL only after the browser started saving.
+- Added a frontend regression test for the single-request preview and blob URL replacement.
+
 ## 1.2.3 — 2026-09-24
 
 - Wrapped long selected native text inside the Edit Content object picker instead of clipping it on one line.
