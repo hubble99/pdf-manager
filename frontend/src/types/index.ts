@@ -6,7 +6,6 @@ export type NavItemId =
   | 'compress'
   | 'converter'
   | 'qr-barcode'
-  | 'insert'
   | 'edit-canvas'
   | 'edit-content'
   | 'organize'

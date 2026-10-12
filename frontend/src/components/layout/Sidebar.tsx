@@ -6,7 +6,6 @@ import {
   Minimize2,
   FileImage,
   QrCode,
-  FilePlus,
   Settings,
   FileText,
   Layers,
@@ -37,7 +36,6 @@ const NAV_ITEMS: NavItemDef[] = [
   { id: 'compress',      label: 'Compress PDF',    icon: Minimize2,  path: '/compress' },
   { id: 'converter',     label: 'PDF & Image',     icon: FileImage,  path: '/converter' },
   { id: 'qr-barcode',    label: 'QR & Barcode',    icon: QrCode,     path: '/qr-barcode' },
-  { id: 'insert',        label: 'Insert Content',  icon: FilePlus,   path: '/insert', badge: 'ADV' },
   { id: 'edit-canvas',   label: 'Edit Canvas',     icon: PenLine,    path: '/edit-canvas' },
   { id: 'edit-content',  label: 'Edit Content',    icon: FilePenLine, path: '/edit-content' },
 ];
@@ -73,7 +71,7 @@ export function Sidebar() {
           {!collapsed && (
             <div>
               <div className="sidebar-logo-text">PDF Manager</div>
-              <div className="sidebar-logo-sub">v1.3.0</div>
+              <div className="sidebar-logo-sub">v1.4.0</div>
             </div>
           )}
         </div>
@@ -146,7 +144,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="sidebar-footer">
           <p className="text-mono text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
-            PDF Manager v1.3.0<br />
+            PDF Manager v1.4.0<br />
             <span style={{ opacity: 0.6 }}>Offline · Local Processing</span>
           </p>
         </div>

@@ -23,6 +23,10 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
     ("POST", "/api/v1/organize/"),
+    ("POST", "/api/v1/organize/documents/"),
+    ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
+    ("DELETE", "/api/v1/organize/documents/{document_id}"),
+    ("POST", "/api/v1/organize/assemble/"),
     ("POST", "/api/v1/metadata/"),
     ("POST", "/api/v1/protect/"),
     ("POST", "/api/v1/protect/remove"),
@@ -99,6 +103,16 @@ REQUEST_BODY_CONTRACTS = {
             "rotations": "[]",
             "flips": "[]",
         },
+    },
+    ("POST", "/api/v1/organize/documents/"): {
+        "media_type": "multipart/form-data",
+        "required": {"file"},
+        "defaults": {},
+    },
+    ("POST", "/api/v1/organize/assemble/"): {
+        "media_type": "application/json",
+        "required": {"pages"},
+        "defaults": {"output_filename": "organized.pdf"},
     },
     ("POST", "/api/v1/qr-barcode/qr"): {
         "media_type": "application/json",
@@ -195,6 +209,8 @@ for edit_content_path in (
     }
 
 NO_BODY_ROUTES = {
+    ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
+    ("DELETE", "/api/v1/organize/documents/{document_id}"),
     ("GET", "/api/v1/compress/download/{download_id}"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
@@ -354,7 +370,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.3.0"
+    assert body["data"]["version"] == "1.4.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

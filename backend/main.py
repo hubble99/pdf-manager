@@ -83,6 +83,12 @@ async def lifespan(app: FastAPI):
         edit_content.get_content_registry().close_all()
     except Exception:
         logger.exception("Edit Content workers did not all close cleanly")
+    try:
+        from features.organize.documents import registry as organize_documents_registry
+
+        organize_documents_registry.release_all()
+    except Exception:
+        logger.exception("Organize documents were not all released cleanly")
     _clean_directory(settings.TEMP_DIR, "temp")
     _clean_directory(settings.OUTPUT_DIR, "output")
     logger.info("Shutdown cleanup complete.")

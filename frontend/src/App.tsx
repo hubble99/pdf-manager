@@ -8,7 +8,6 @@ import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
 import { ConverterPage } from './pages/ConverterPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
-import { InsertPage } from './pages/InsertPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OrganizePage } from './pages/OrganizePage';
 import { MetadataPage } from './pages/MetadataPage';
@@ -149,7 +148,6 @@ export default function App() {
                 <Route path="/metadata"      element={<MetadataPage />} />
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />
-                <Route path="/insert"        element={<InsertPage />} />
                 <Route
                   path="/edit-canvas"
                   element={(

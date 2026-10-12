@@ -1,6 +1,18 @@
 # Changelog
 
+## 1.4.0 — 2026-10-12
+
+- Turned **Organize PDF** into a visual page-management workspace. The grid is now the working document itself: reorder by dragging, and rotate, mirror, duplicate, or delete any page or selection, so typed page numbers are no longer needed to keep positions correct.
+- Added **Insert PDF** and **Insert Image**. Pages from other PDFs are picked by range or in full, images keep their original size, and insertion position is resolved against the selected pages (or the document ends when nothing is selected). Pick order is preserved and duplicates are allowed.
+- Added bulk **Delete pages** by current grid position with a live count and highlighted cells, plus a **Sources** panel that lists every added file and can remove one together with its pages.
+- Added **Undo**, **Redo**, and **Reset**. One action is one undo step, and reset returns to the starting document.
+- Added eager, low-resolution page thumbnails rendered in the backend in bounded batches, cached per file, so large documents stay responsive and no page is left unloaded when scrolling. Rotation and mirroring reuse the cached thumbnail instead of re-rendering.
+- Editing now happens entirely in memory and reaches the backend only on **Save**, which assembles the final page list into one PDF. Page mirroring preserves selectable text rather than rasterizing pages.
+- Folded the separate **Insert Content** feature into the workspace. Its HTTP endpoint and tests remain available; its sidebar entry and page are removed.
+- The existing `POST /api/v1/organize/` and `POST /api/v1/insert/` endpoints keep their routes and request fields.
+
 ## 1.3.0 — 2026-10-12
+
 
 - Consolidated **PDF to Image** and **Image to PDF** into one **PDF & Image** feature. The conversion direction is detected from one uploaded PDF or an image batch, so the direction no longer has to be chosen manually. The previous `/pdf-to-image` and `/image-to-pdf` routes still open the consolidated workspace.
 - Added explicit PDF page selection with **All pages** and **Selected pages** modes. Selected pages accept a single page, ranges, and comma-separated combinations, stay synchronized with thumbnail checkboxes and the selected-page count, and disable conversion instead of silently falling back to all pages when the selection is empty or invalid.

@@ -18,8 +18,7 @@ describe('Sidebar Component', () => {
       'nav-extract',
       'nav-compress',
       'nav-converter',
-      'nav-qr-barcode',
-      'nav-insert'
+      'nav-qr-barcode'
     ];
     navItems.forEach(id => {
       const element = container.querySelector(`#${id}`);
@@ -32,6 +31,12 @@ describe('Sidebar Component', () => {
     expect(container.querySelector('#nav-pdf-to-image')).not.toBeInTheDocument();
     expect(container.querySelector('#nav-image-to-pdf')).not.toBeInTheDocument();
     expect(container.querySelector('#nav-converter')).toHaveTextContent('PDF & Image');
+  });
+
+  it('no longer offers a separate Insert Content feature', () => {
+    const { container } = renderSidebar();
+    expect(container.querySelector('#nav-insert')).not.toBeInTheDocument();
+    expect(container.querySelector('#nav-organize')).toHaveTextContent('Organize Pages');
   });
 
   it('renders Settings item', () => {
