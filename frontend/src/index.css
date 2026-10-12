@@ -2490,11 +2490,13 @@ select.input {
   padding: var(--space-1);
 }
 
-@media (min-width: 1024px) {
+/* Thresholds are set from the measured grid area, which is roughly 368 px
+   narrower than the window, so a cell stays at least ~180 px wide. */
+@media (min-width: 1150px) {
   .organize-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-@media (min-width: 1500px) {
+@media (min-width: 1400px) {
   .organize-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 

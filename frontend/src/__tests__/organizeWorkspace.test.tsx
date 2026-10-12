@@ -334,6 +334,19 @@ describe('organize workspace', () => {
     expect(badges[2]).toBe('B');
   });
 
+  it('keeps a typed reference page when the active side is chosen again', async () => {
+    await openDocument(6);
+    await insertFrom('single.pdf', 'PDF');
+    fireEvent.change(screen.getByLabelText('Reference page'), { target: { value: '2' } });
+    // After is already active, so this must not re-derive the reference.
+    fireEvent.click(screen.getByRole('radio', { name: 'After' }));
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('2');
+
+    // Switching to the other side does re-derive it from the selection.
+    fireEvent.click(screen.getByRole('radio', { name: 'Before' }));
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('6');
+  });
+
   it('clicking a cell while the panel is open moves the reference page', async () => {
     await openDocument(8);
     await insertFrom('other.pdf', 'PDF');

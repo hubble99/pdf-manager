@@ -310,11 +310,13 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   }, [selection, state.pages.length, state.sources]);
 
   const setInsertPosition = useCallback((position: InsertPosition) => {
+    // Re-derive only when the side really changes: choosing the side that is
+    // already active must not discard a reference page the user typed.
+    if (position === insertPosition) return;
     setInsertPositionState(position);
-    // "After" measures from the last selected page and "before" from the first,
-    // so the reference is re-derived when the side changes.
+    // "After" measures from the last selected page and "before" from the first.
     setInsertReferenceState(defaultReferencePage(selection, state.pages.length, position));
-  }, [selection, state.pages.length]);
+  }, [insertPosition, selection, state.pages.length]);
 
   const setInsertReference = useCallback((reference: number) => {
     setInsertReferenceState(reference);
