@@ -8,6 +8,10 @@
 - Added **Undo**, **Redo**, and **Reset**. One action is one undo step, and reset returns to the starting document.
 - Added eager, low-resolution page thumbnails rendered in the backend in bounded batches, cached per file, so large documents stay responsive and no page is left unloaded when scrolling. Rotation and mirroring reuse the cached thumbnail instead of re-rendering.
 - Editing now happens entirely in memory and reaches the backend only on **Save**, which assembles the final page list into one PDF. Page mirroring preserves selectable text rather than rasterizing pages.
+- Made the insertion position explicit: the insert panel now has a **Reference page** that always refers to a page in the current grid, with a live summary and a marker showing where the pages will land. The reference starts at the selected page (or the last page when nothing is selected), can be typed, and can be set by clicking a page while the panel is open. Insertion is no longer defined relative to the start or end of the original document, and Before no longer jumps to the beginning when nothing is selected.
+- Kept the page grid to a fixed three, four, or five columns depending on window width, so a wide window no longer produces a wall of narrow cells. Cell controls now sit inside the cell: the selection checkbox has its own zone instead of covering the page image, and the action buttons are centred in the cell without overflowing or being clipped.
+- Filtered the insert file dialogs by type and re-checked the chosen file by extension and content, so a file picked through "All files" that does not match the action is refused with a clear message instead of being uploaded.
+- Tidied the insert panel: pages and position sit side by side to keep the grid visible, the page expression field appears only when picking, and a single-page source no longer offers a page choice at all.
 - Folded the separate **Insert Content** feature into the workspace. Its HTTP endpoint and tests remain available; its sidebar entry and page are removed.
 - The existing `POST /api/v1/organize/` and `POST /api/v1/insert/` endpoints keep their routes and request fields.
 

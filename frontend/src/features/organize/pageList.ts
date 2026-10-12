@@ -6,7 +6,7 @@
  * orientation. Keeping these functions pure makes the rules testable without a
  * browser and keeps React state updates trivial.
  */
-import type { PageRef, QuarterTurn } from './types';
+import type { InsertPosition, PageRef, QuarterTurn } from './types';
 
 let sequence = 0;
 
@@ -128,15 +128,31 @@ export function positionsOfSource(list: PageRef[], sourceId: string): number[] {
 }
 
 /**
- * Insertion position for "after"/"before" relative to the current selection.
- * With no selection, "after" means the end and "before" means the start.
+ * The reference page the insert panel starts on: the selected cell, or the last
+ * page when nothing is selected. Positions are one-based and always refer to the
+ * CURRENT grid, never to the starting document.
+ *
+ * With several pages selected, "after" uses the last of them and "before" the
+ * first, so the choice matches where the pages will land.
  */
-export function insertionIndex(
+export function defaultReferencePage(
   selection: Set<number>,
   length: number,
-  position: 'after' | 'before',
+  position: InsertPosition,
 ): number {
-  if (selection.size === 0) return position === 'after' ? length : 0;
+  if (length < 1) return 1;
+  if (selection.size === 0) return length;
   const positions = [...selection];
-  return position === 'after' ? Math.max(...positions) + 1 : Math.min(...positions);
+  return position === 'after' ? Math.max(...positions) + 1 : Math.min(...positions) + 1;
+}
+
+/** Keep a reference page inside 1..length. */
+export function clampReference(page: number, length: number): number {
+  if (!Number.isFinite(page)) return Math.max(1, length);
+  return Math.max(1, Math.min(Math.max(1, length), Math.trunc(page)));
+}
+
+/** Zero-based list index for inserting relative to a reference page. */
+export function insertionIndex(reference: number, position: InsertPosition): number {
+  return position === 'after' ? reference : reference - 1;
 }

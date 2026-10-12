@@ -8,19 +8,21 @@ import {
 } from './api';
 import { parsePageExpression } from './pageExpression';
 import {
-  createPageRef, duplicatePage, flipPositions, insertionIndex, insertPages, movePage,
-  positionsOfSource, pruneSelection, removePositions, rotatePositions, selectOnly, selectRange,
-  toggleSelection,
+  clampReference, createPageRef, defaultReferencePage, duplicatePage, flipPositions,
+  insertionIndex, insertPages, movePage, positionsOfSource, pruneSelection, removePositions,
+  rotatePositions, selectOnly, selectRange, toggleSelection,
 } from './pageList';
-import type { OrganizeSnapshot, PageRef, SourceHandle } from './types';
+import type {
+  InsertMode, InsertPosition, OrganizeSnapshot, PageRef, SourceHandle,
+} from './types';
+
+export type { InsertMode, InsertPosition } from './types';
 
 export const THUMBNAIL_BATCH = 24;
 export const THUMBNAIL_WIDTH = 150;
 const HISTORY_LIMIT = 50;
 
 export type WorkspacePanel = 'none' | 'insert' | 'delete' | 'sources';
-export type InsertMode = 'all' | 'pick';
-export type InsertPosition = 'after' | 'before';
 
 interface WorkspaceState {
   pages: PageRef[];
@@ -59,8 +61,15 @@ export interface OrganizeWorkspace {
     mode: InsertMode;
     pagesInput: string;
     position: InsertPosition;
+    reference: number;
   };
-  insertPreview: { pages: number[]; error: string | null };
+  insertPreview: {
+    pages: number[];
+    error: string | null;
+    reference: number;
+    referenceError: string | null;
+    targetIndex: number;
+  };
   deleteInput: string;
   deletePreview: { positions: number[]; error: string | null };
 
@@ -70,6 +79,7 @@ export interface OrganizeWorkspace {
   setInsertMode: (mode: InsertMode) => void;
   setInsertPagesInput: (value: string) => void;
   setInsertPosition: (position: InsertPosition) => void;
+  setInsertReference: (reference: number) => void;
   confirmInsert: () => void;
 
   setDeleteInput: (value: string) => void;
@@ -114,7 +124,8 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   const [insertPendingSource, setInsertPendingSource] = useState<SourceHandle | null>(null);
   const [insertMode, setInsertMode] = useState<InsertMode>('all');
   const [insertPagesInput, setInsertPagesInput] = useState('');
-  const [insertPosition, setInsertPosition] = useState<InsertPosition>('after');
+  const [insertPosition, setInsertPositionState] = useState<InsertPosition>('after');
+  const [insertReference, setInsertReferenceState] = useState(1);
   const [deleteInput, setDeleteInput] = useState('');
 
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
@@ -272,7 +283,8 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       setInsertSource(source);
       setInsertMode('all');
       setInsertPagesInput('');
-      setInsertPosition('after');
+      setInsertPositionState('after');
+      setInsertReferenceState(defaultReferencePage(selection, state.pages.length, 'after'));
       setPanel('insert');
     } catch (err) {
       if (!mountedRef.current) return;
@@ -283,7 +295,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }
-  }, [showToast, state.pages.length]);
+  }, [selection, showToast, state.pages.length]);
 
   const beginInsertFromSource = useCallback((sourceId: string) => {
     const source = state.sources.find((entry) => entry.id === sourceId);
@@ -292,9 +304,21 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     setInsertSource(source);
     setInsertMode('all');
     setInsertPagesInput('');
-    setInsertPosition('after');
+    setInsertPositionState('after');
+    setInsertReferenceState(defaultReferencePage(selection, state.pages.length, 'after'));
     setPanel('insert');
-  }, [state.sources]);
+  }, [selection, state.pages.length, state.sources]);
+
+  const setInsertPosition = useCallback((position: InsertPosition) => {
+    setInsertPositionState(position);
+    // "After" measures from the last selected page and "before" from the first,
+    // so the reference is re-derived when the side changes.
+    setInsertReferenceState(defaultReferencePage(selection, state.pages.length, position));
+  }, [selection, state.pages.length]);
+
+  const setInsertReference = useCallback((reference: number) => {
+    setInsertReferenceState(reference);
+  }, []);
 
   const closePanel = useCallback(() => {
     // A file uploaded for an insert that was never confirmed is released again.
@@ -308,12 +332,31 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   }, [insertPendingSource]);
 
   const insertPreview = useMemo(() => {
-    if (!insertSource || insertMode === 'all') {
-      return { pages: insertSource ? Array.from({ length: insertSource.pageCount }, (_, i) => i + 1) : [], error: null };
-    }
-    const parsed = parsePageExpression(insertPagesInput, insertSource.pageCount);
-    return { pages: parsed.pages, error: parsed.error };
-  }, [insertSource, insertMode, insertPagesInput]);
+    const total = state.pages.length;
+    const pages = !insertSource
+      ? []
+      : insertSource.pageCount === 1 || insertMode === 'all'
+        ? Array.from({ length: insertSource.pageCount }, (_, index) => index + 1)
+        : parsePageExpression(insertPagesInput, insertSource.pageCount).pages;
+    const error = insertSource && insertSource.pageCount > 1 && insertMode === 'pick'
+      ? parsePageExpression(insertPagesInput, insertSource.pageCount).error
+      : null;
+
+    const reference = clampReference(insertReference, total);
+    const referenceError = !Number.isFinite(insertReference)
+      ? 'Enter the page the insertion is measured from.'
+      : insertReference < 1 || insertReference > total
+        ? `Reference page must be between 1 and ${total}.`
+        : null;
+
+    return {
+      pages,
+      error,
+      reference,
+      referenceError,
+      targetIndex: insertionIndex(reference, insertPosition),
+    };
+  }, [insertMode, insertPagesInput, insertPosition, insertReference, insertSource, state.pages.length]);
 
   const confirmInsert = useCallback(() => {
     if (!insertSource) return;
@@ -322,10 +365,11 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       : parsePageExpression(insertPagesInput, insertSource.pageCount).pages;
     if (pages.length === 0) return;
 
+    if (insertPreview.referenceError) return;
     const source = insertPendingSource ?? insertSource;
     const incoming = pages.map((page) => createPageRef(source.id, page));
     commit((snapshot) => {
-      const at = insertionIndex(selection, snapshot.pages.length, insertPosition);
+      const at = insertionIndex(insertPreview.reference, insertPosition);
       const sources = snapshot.sources.some((entry) => entry.id === source.id)
         ? snapshot.sources
         : [...snapshot.sources, source];
@@ -334,7 +378,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     setInsertPendingSource(null);
     setInsertSource(null);
     setPanel('none');
-  }, [commit, insertMode, insertPagesInput, insertPendingSource, insertPosition, insertSource, selection]);
+  }, [commit, insertMode, insertPagesInput, insertPendingSource, insertPosition, insertPreview, insertSource]);
 
   // ── bulk delete ───────────────────────────────────────────────────────────
   const deletePreview = useMemo(() => {
@@ -387,6 +431,9 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
 
   // ── selection ─────────────────────────────────────────────────────────────
   const selectAt = useCallback((index: number, modifiers: { toggle: boolean; range: boolean }) => {
+    // While the insert panel is open, the clicked page also becomes the
+    // reference the insertion is measured from.
+    if (panel === 'insert') setInsertReferenceState(index + 1);
     if (modifiers.range && anchor !== null) {
       setSelection(selectRange(anchor, index));
       return;
@@ -398,7 +445,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     }
     setSelection(selectOnly(index));
     setAnchor(index);
-  }, [anchor]);
+  }, [anchor, panel]);
 
   const clearSelection = useCallback(() => {
     setSelection(new Set());
@@ -550,6 +597,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       mode: insertMode,
       pagesInput: insertPagesInput,
       position: insertPosition,
+      reference: insertReference,
     },
     insertPreview,
     deleteInput,
@@ -561,6 +609,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     setInsertMode,
     setInsertPagesInput,
     setInsertPosition,
+    setInsertReference,
     confirmInsert,
 
     setDeleteInput,

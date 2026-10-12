@@ -1,36 +1,44 @@
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
 import { sourceLetter } from './pageList';
-import type { InsertMode, InsertPosition } from './useOrganizeWorkspace';
-import type { SourceHandle } from './types';
+import type { InsertMode, InsertPosition, SourceHandle } from './types';
 
 interface InsertPanelProps {
   source: SourceHandle | null;
   mode: InsertMode;
   pagesInput: string;
   position: InsertPosition;
-  preview: { pages: number[]; error: string | null };
-  selectionCount: number;
+  reference: number;
+  total: number;
+  preview: {
+    pages: number[];
+    error: string | null;
+    reference: number;
+    referenceError: string | null;
+    targetIndex: number;
+  };
   disabled: boolean;
   onModeChange: (mode: InsertMode) => void;
   onPagesInputChange: (value: string) => void;
   onPositionChange: (position: InsertPosition) => void;
+  onReferenceChange: (reference: number) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export function InsertPanel({
-  source, mode, pagesInput, position, preview, selectionCount, disabled,
-  onModeChange, onPagesInputChange, onPositionChange, onConfirm, onCancel,
+  source, mode, pagesInput, position, reference, total, preview, disabled,
+  onModeChange, onPagesInputChange, onPositionChange, onReferenceChange, onConfirm, onCancel,
 }: InsertPanelProps) {
   if (!source) return null;
-  const isImage = source.kind === 'image';
-  const invalid = Boolean(preview.error);
-  const canInsert = !disabled && !invalid && preview.pages.length > 0;
 
-  const relative = selectionCount === 0
-    ? (position === 'after' ? 'the end of the document' : 'the start of the document')
-    : `${selectionCount} selected page${selectionCount === 1 ? '' : 's'}`;
+  // A single-page source has nothing to choose, so the Pages control is dropped
+  // entirely and the panel stays compact.
+  const showPages = source.pageCount > 1;
+  const pagesInvalid = Boolean(preview.error);
+  const referenceInvalid = Boolean(preview.referenceError);
+  const canInsert = !disabled && !pagesInvalid && !referenceInvalid
+    && preview.pages.length > 0 && total > 0;
 
   return (
     <section className="card organize-panel" aria-label="Insert pages">
@@ -48,77 +56,114 @@ export function InsertPanel({
         </button>
       </div>
 
-      {!isImage && (
+      <div className="organize-panel-grid">
+        {showPages && (
+          <div className="organize-field">
+            <span className="organize-field-label" id="insert-pages-label">Pages</span>
+            <div role="radiogroup" aria-labelledby="insert-pages-label" className="organize-choices">
+              <label className="organize-choice">
+                <input
+                  type="radio"
+                  name="insert-pages-mode"
+                  checked={mode === 'all'}
+                  onChange={() => onModeChange('all')}
+                  disabled={disabled}
+                />
+                <span>All</span>
+              </label>
+              <label className="organize-choice">
+                <input
+                  type="radio"
+                  name="insert-pages-mode"
+                  checked={mode === 'pick'}
+                  onChange={() => onModeChange('pick')}
+                  disabled={disabled}
+                />
+                <span>Pick</span>
+              </label>
+            </div>
+            {mode === 'pick' && (
+              <>
+                <input
+                  className="input"
+                  type="text"
+                  value={pagesInput}
+                  onChange={(event) => onPagesInputChange(event.target.value)}
+                  placeholder="e.g. 1-5, 8, 10-12"
+                  disabled={disabled}
+                  aria-label="Pages to insert from the source file"
+                  aria-invalid={pagesInvalid || undefined}
+                  aria-describedby="insert-pages-help"
+                  autoComplete="off"
+                />
+                <p
+                  id="insert-pages-help"
+                  className={`organize-help${pagesInvalid ? ' organize-help--error' : ''}`}
+                  role={pagesInvalid ? 'alert' : undefined}
+                >
+                  {pagesInvalid
+                    ? preview.error
+                    : `${preview.pages.length} page${preview.pages.length === 1 ? '' : 's'} from the source file, in the order typed.`}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="organize-field">
-          <span className="organize-field-label" id="insert-pages-label">Pages</span>
-          <div role="radiogroup" aria-labelledby="insert-pages-label" className="organize-choices">
+          <span className="organize-field-label" id="insert-position-label">Position</span>
+          <div role="radiogroup" aria-labelledby="insert-position-label" className="organize-choices">
             <label className="organize-choice">
               <input
                 type="radio"
-                name="insert-pages-mode"
-                checked={mode === 'all'}
-                onChange={() => onModeChange('all')}
+                name="insert-position"
+                checked={position === 'after'}
+                onChange={() => onPositionChange('after')}
                 disabled={disabled}
               />
-              <span>All</span>
+              <span>After</span>
             </label>
             <label className="organize-choice">
               <input
                 type="radio"
-                name="insert-pages-mode"
-                checked={mode === 'pick'}
-                onChange={() => onModeChange('pick')}
+                name="insert-position"
+                checked={position === 'before'}
+                onChange={() => onPositionChange('before')}
                 disabled={disabled}
               />
-              <span>Pick</span>
+              <span>Before</span>
             </label>
           </div>
-          <input
-            className="input"
-            type="text"
-            value={pagesInput}
-            onChange={(event) => onPagesInputChange(event.target.value)}
-            placeholder="e.g. 1-5, 8, 10-12"
-            disabled={disabled || mode === 'all'}
-            aria-label="Pages to insert from the source file"
-            aria-invalid={invalid || undefined}
-            aria-describedby="insert-pages-help"
-            autoComplete="off"
-          />
-          <p id="insert-pages-help" className={`organize-help${invalid ? ' organize-help--error' : ''}`} role={invalid ? 'alert' : undefined}>
-            {invalid
-              ? preview.error
-              : `Numbers refer to pages of the source file. ${preview.pages.length} page${preview.pages.length === 1 ? '' : 's'} will be inserted, in the order typed.`}
-          </p>
-        </div>
-      )}
-
-      <div className="organize-field">
-        <span className="organize-field-label" id="insert-position-label">Position</span>
-        <div role="radiogroup" aria-labelledby="insert-position-label" className="organize-choices">
-          <label className="organize-choice">
+          <div className="organize-reference">
+            <label className="organize-help" htmlFor="organize-insert-reference">Reference page</label>
             <input
-              type="radio"
-              name="insert-position"
-              checked={position === 'after'}
-              onChange={() => onPositionChange('after')}
-              disabled={disabled}
+              id="organize-insert-reference"
+              className="input organize-reference-input"
+              type="number"
+              min={1}
+              max={Math.max(1, total)}
+              value={Number.isFinite(reference) ? reference : ''}
+              onChange={(event) => onReferenceChange(
+                event.target.value === '' ? Number.NaN : Number(event.target.value),
+              )}
+              disabled={disabled || total === 0}
+              aria-invalid={referenceInvalid || undefined}
+              aria-describedby="organize-reference-help"
             />
-            <span>After</span>
-          </label>
-          <label className="organize-choice">
-            <input
-              type="radio"
-              name="insert-position"
-              checked={position === 'before'}
-              onChange={() => onPositionChange('before')}
-              disabled={disabled}
-            />
-            <span>Before</span>
-          </label>
+            <span className="organize-help">of {total}</span>
+          </div>
         </div>
-        <p className="organize-help">Relative to {relative}.</p>
       </div>
+
+      <p
+        id="organize-reference-help"
+        className={`organize-help${referenceInvalid ? ' organize-help--error' : ''}`}
+        role={referenceInvalid ? 'alert' : undefined}
+      >
+        {referenceInvalid
+          ? preview.referenceError
+          : `Will be inserted ${position} page ${preview.reference} (of ${total}).`}
+      </p>
 
       <div className="organize-panel-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={disabled}>

@@ -27,3 +27,10 @@ export interface OrganizeSnapshot {
   pages: PageRef[];
   sources: SourceHandle[];
 }
+
+export type InsertMode = 'all' | 'pick';
+export type InsertPosition = 'after' | 'before';
+/** Accepted image extensions, matching the backend's supported set. */
+export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'] as const;
+export const IMAGE_ACCEPT = IMAGE_EXTENSIONS.join(',');
+export const PDF_ACCEPT = '.pdf';

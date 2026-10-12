@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { formatPageNumbers, parsePageExpression } from '../features/organize/pageExpression';
 import {
-  createPageRef, duplicatePage, flipPositions, insertionIndex, insertPages, movePage,
-  positionsOfSource, pruneSelection, removePositions, rotatePositions, selectRange,
-  selectOnly, toggleSelection,
+  clampReference, createPageRef, defaultReferencePage, duplicatePage, flipPositions,
+  insertionIndex, insertPages, movePage, positionsOfSource, pruneSelection, removePositions,
+  rotatePositions, selectRange, selectOnly, toggleSelection,
 } from '../features/organize/pageList';
 import type { PageRef } from '../features/organize/types';
 
@@ -135,15 +135,32 @@ describe('grid-derived positions', () => {
     expect(positionsOfSource(mixed, 'absent')).toEqual([]);
   });
 
-  it('resolves after/before against the selection or the document ends', () => {
-    expect(insertionIndex(new Set([4]), 10, 'after')).toBe(5);
-    expect(insertionIndex(new Set([4]), 10, 'before')).toBe(4);
-    // Multiple selected pages: after the last, before the first.
-    expect(insertionIndex(new Set([2, 5, 8]), 10, 'after')).toBe(9);
-    expect(insertionIndex(new Set([2, 5, 8]), 10, 'before')).toBe(2);
-    // No selection: end of document, or start.
-    expect(insertionIndex(new Set(), 10, 'after')).toBe(10);
-    expect(insertionIndex(new Set(), 10, 'before')).toBe(0);
+  it('derives the starting reference page from the selection', () => {
+    expect(defaultReferencePage(new Set([4]), 10, 'after')).toBe(5);
+    expect(defaultReferencePage(new Set([4]), 10, 'before')).toBe(5);
+    // Several selected pages: after the last, before the first.
+    expect(defaultReferencePage(new Set([2, 5, 8]), 10, 'after')).toBe(9);
+    expect(defaultReferencePage(new Set([2, 5, 8]), 10, 'before')).toBe(3);
+    // No selection always points at the last page of the CURRENT grid.
+    expect(defaultReferencePage(new Set(), 10, 'after')).toBe(10);
+    expect(defaultReferencePage(new Set(), 10, 'before')).toBe(10);
+    // An empty grid still reports a usable one-based page.
+    expect(defaultReferencePage(new Set(), 0, 'after')).toBe(1);
+  });
+
+  it('keeps a reference page inside the current grid', () => {
+    expect(clampReference(0, 10)).toBe(1);
+    expect(clampReference(-4, 10)).toBe(1);
+    expect(clampReference(99, 10)).toBe(10);
+    expect(clampReference(4.7, 10)).toBe(4);
+    expect(clampReference(Number.NaN, 10)).toBe(10);
+  });
+
+  it('measures the insertion index from the reference page, never the document', () => {
+    expect(insertionIndex(5, 'after')).toBe(5);
+    expect(insertionIndex(5, 'before')).toBe(4);
+    expect(insertionIndex(10, 'after')).toBe(10);
+    expect(insertionIndex(1, 'before')).toBe(0);
   });
 });
 
@@ -154,7 +171,7 @@ describe('worked example from the specification', () => {
     expect(pages.map((entry) => entry.page)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 
     // Insert an image after the page at position 5 (index 4).
-    pages = insertPages(pages, insertionIndex(new Set([4]), pages.length, 'after'), [
+    pages = insertPages(pages, insertionIndex(defaultReferencePage(new Set([4]), pages.length, 'after'), 'after'), [
       createPageRef('img', 1, 'img-1'),
     ]);
     expect(pages.map((entry) => entry.source === 'img' ? 'IMG' : entry.page))
@@ -163,7 +180,7 @@ describe('worked example from the specification', () => {
     // The page that was `7` now sits at position 7 (index 6). Insert PDF pages
     // 2-3 after it; the target is the selected cell, not a typed number.
     const targetIndex = 6;
-    pages = insertPages(pages, insertionIndex(new Set([targetIndex]), pages.length, 'after'), [
+    pages = insertPages(pages, insertionIndex(defaultReferencePage(new Set([targetIndex]), pages.length, 'after'), 'after'), [
       createPageRef('other', 2, 'p2'), createPageRef('other', 3, 'p3'),
     ]);
     expect(pages.map((entry) => (

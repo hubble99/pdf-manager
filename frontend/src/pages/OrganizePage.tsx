@@ -8,18 +8,34 @@ import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
 import { DeletePagesPanel, InsertPanel, SourcesPanel } from '../features/organize/panels';
 import { useOrganizeWorkspace } from '../features/organize/useOrganizeWorkspace';
+import { checkFileKind } from '../features/organize/fileKind';
+import { IMAGE_ACCEPT, PDF_ACCEPT } from '../features/organize/types';
+import { useToast } from '../hooks/useToast';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 export function OrganizePage() {
   const workspace = useOrganizeWorkspace();
+  const { showToast } = useToast();
   const mainInputRef = useRef<HTMLInputElement>(null);
   const insertInputRef = useRef<HTMLInputElement>(null);
-  const insertAcceptRef = useRef('.pdf');
   const outputNameRef = useRef<HTMLInputElement>(null);
 
+  // The dialog is filtered per action, and the file is checked again afterwards
+  // because the picker can be switched to "All files".
   const openInsertPicker = (accept: string) => {
-    insertAcceptRef.current = accept;
-    insertInputRef.current?.click();
+    const input = insertInputRef.current;
+    if (!input) return;
+    input.accept = accept;
+    input.click();
+  };
+
+  const insertFile = async (file: File, expected: 'pdf' | 'image') => {
+    const verdict = await checkFileKind(file, expected);
+    if (!verdict.ok) {
+      showToast({ type: 'error', title: 'File not added', message: verdict.error ?? 'Unsupported file.' });
+      return;
+    }
+    await workspace.beginInsertFile(file);
   };
 
   const progress = workspace.thumbnailsTotal > 0 && workspace.thumbnailsLoaded < workspace.thumbnailsTotal;
@@ -59,8 +75,9 @@ export function OrganizePage() {
           aria-hidden="true"
           onChange={(event) => {
             const file = event.target.files?.[0];
+            const accept = event.target.accept;
             event.target.value = '';
-            if (file) void workspace.beginInsertFile(file);
+            if (file) void insertFile(file, accept === PDF_ACCEPT ? 'pdf' : 'image');
           }}
         />
 
@@ -110,10 +127,10 @@ export function OrganizePage() {
           <div className="organize-workspace">
             <div className="organize-toolbar" role="toolbar" aria-label="Document actions">
               <div className="organize-toolbar-group">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => openInsertPicker('.pdf')} disabled={workspace.isBusy}>
+                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-pdf" onClick={() => openInsertPicker(PDF_ACCEPT)} disabled={workspace.isBusy}>
                   <FilePlus2 size={14} aria-hidden="true" /> Insert PDF
                 </button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => openInsertPicker('.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff')} disabled={workspace.isBusy}>
+                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-image" onClick={() => openInsertPicker(IMAGE_ACCEPT)} disabled={workspace.isBusy}>
                   <FileImage size={14} aria-hidden="true" /> Insert Image
                 </button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => workspace.openPanel('delete')} disabled={workspace.isBusy}>
@@ -197,12 +214,14 @@ export function OrganizePage() {
                 mode={workspace.insertDraft.mode}
                 pagesInput={workspace.insertDraft.pagesInput}
                 position={workspace.insertDraft.position}
+                reference={workspace.insertDraft.reference}
+                total={workspace.pages.length}
                 preview={workspace.insertPreview}
-                selectionCount={workspace.selection.size}
                 disabled={workspace.isBusy}
                 onModeChange={workspace.setInsertMode}
                 onPagesInputChange={workspace.setInsertPagesInput}
                 onPositionChange={workspace.setInsertPosition}
+                onReferenceChange={workspace.setInsertReference}
                 onConfirm={workspace.confirmInsert}
                 onCancel={workspace.closePanel}
               />
@@ -276,6 +295,10 @@ export function OrganizePage() {
                 thumbnails={workspace.thumbnails}
                 selection={workspace.selection}
                 highlighted={highlighted}
+                markerIndex={workspace.panel === 'insert' && !workspace.insertPreview.referenceError
+                  ? workspace.insertPreview.reference - 1
+                  : null}
+                markerSide={workspace.insertDraft.position}
                 disabled={workspace.isBusy}
                 onSelect={workspace.selectAt}
                 onRotate={workspace.rotateAt}

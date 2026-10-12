@@ -7,9 +7,9 @@ import {
   SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { FlipHorizontal2, RotateCw, Trash2 } from 'lucide-react';
+import { Copy, FlipHorizontal2, RotateCw, Trash2 } from 'lucide-react';
 import { sourceLetter } from './pageList';
-import type { PageRef, SourceHandle } from './types';
+import type { InsertPosition, PageRef, SourceHandle } from './types';
 
 export interface PageGridProps {
   pages: PageRef[];
@@ -17,6 +17,9 @@ export interface PageGridProps {
   thumbnails: Record<string, string>;
   selection: Set<number>;
   highlighted: Set<number>;
+  /** Zero-based cell showing where an insertion will land, and on which side. */
+  markerIndex: number | null;
+  markerSide: InsertPosition;
   disabled: boolean;
   onSelect: (index: number, modifiers: { toggle: boolean; range: boolean }) => void;
   onRotate: (index: number) => void;
@@ -35,8 +38,8 @@ function sourceLabel(sources: SourceHandle[], sourceId: string): string | null {
 }
 
 function PageCell({
-  page, position, label, thumbnail, selected, highlighted, disabled, onSelect,
-  onRotate, onFlip, onDuplicate, onRemove,
+  page, position, label, thumbnail, selected, highlighted, marker, disabled,
+  onSelect, onRotate, onFlip, onDuplicate, onRemove,
 }: {
   page: PageRef;
   position: number;
@@ -44,6 +47,7 @@ function PageCell({
   thumbnail: string | undefined;
   selected: boolean;
   highlighted: boolean;
+  marker: InsertPosition | null;
   disabled: boolean;
   onSelect: PageGridProps['onSelect'];
   onRotate: (index: number) => void;
@@ -63,24 +67,29 @@ function PageCell({
         'organize-cell',
         selected ? 'organize-cell--selected' : '',
         highlighted ? 'organize-cell--highlighted' : '',
+        marker ? `organize-cell--marker-${marker}` : '',
         isDragging ? 'organize-cell--dragging' : '',
       ].filter(Boolean).join(' ')}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-position={position + 1}
       data-page-key={page.key}
     >
-      <label className="organize-cell-select" title={`Select page at position ${position + 1}`}>
-        <input
-          type="checkbox"
-          checked={selected}
-          disabled={disabled}
-          onChange={(event) => onSelect(position, {
-            toggle: true,
-            range: (event.nativeEvent as MouseEvent).shiftKey === true,
-          })}
-          aria-label={`Select page at position ${position + 1}`}
-        />
-      </label>
+      <div className="organize-cell-head">
+        <label className="organize-cell-select" title={`Select page at position ${position + 1}`}>
+          <input
+            type="checkbox"
+            checked={selected}
+            disabled={disabled}
+            onChange={(event) => onSelect(position, {
+              toggle: true,
+              range: (event.nativeEvent as MouseEvent).shiftKey === true,
+            })}
+            aria-label={`Select page at position ${position + 1}`}
+          />
+        </label>
+        <span className="organize-cell-position">{position + 1}</span>
+        {label && <span className="organize-cell-source">{label}</span>}
+      </div>
 
       <button
         type="button"
@@ -106,11 +115,6 @@ function PageCell({
           <span className="organize-cell-placeholder" aria-hidden="true" />
         )}
       </button>
-
-      <div className="organize-cell-footer">
-        <span className="organize-cell-position">{position + 1}</span>
-        {label && <span className="organize-cell-source">{label}</span>}
-      </div>
 
       <div className="organize-cell-actions">
         <button
@@ -141,7 +145,7 @@ function PageCell({
           aria-label={`Duplicate page at position ${position + 1}`}
           title="Duplicate"
         >
-          <span aria-hidden="true" style={{ fontSize: 12, fontWeight: 700 }}>+</span>
+          <Copy size={13} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -159,7 +163,7 @@ function PageCell({
 }
 
 export function PageGrid({
-  pages, sources, thumbnails, selection, highlighted, disabled,
+  pages, sources, thumbnails, selection, highlighted, markerIndex, markerSide, disabled,
   onSelect, onRotate, onFlip, onDuplicate, onRemove, onReorder,
 }: PageGridProps) {
   const sensors = useSensors(
@@ -178,11 +182,7 @@ export function PageGrid({
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={keys} strategy={rectSortingStrategy}>
         <div className="organize-grid" role="list">
           {pages.map((page, index) => (
@@ -194,6 +194,7 @@ export function PageGrid({
               thumbnail={thumbnails[`${page.source}:${page.page}`]}
               selected={selection.has(index)}
               highlighted={highlighted.has(index)}
+              marker={index === markerIndex ? markerSide : null}
               disabled={disabled}
               onSelect={onSelect}
               onRotate={onRotate}

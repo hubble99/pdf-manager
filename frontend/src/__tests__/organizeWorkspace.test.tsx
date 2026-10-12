@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../context/ToastContext';
+import { ToastContainer } from '../components/ToastContainer';
 import { OrganizePage } from '../pages/OrganizePage';
 
 const { uploadMock, thumbsMock, assembleMock, releaseMock, downloadMock } = vi.hoisted(() => ({
@@ -47,6 +48,7 @@ function stubUploads(mainPageCount: number) {
   uploadMock.mockImplementation(async (file: File) => {
     if (file.name === 'doc.pdf') return uploaded('doc-main', 'doc.pdf', mainPageCount);
     if (file.name === 'other.pdf') return uploaded('doc-2', 'other.pdf', 12);
+    if (file.name === 'single.pdf') return uploaded('doc-4', 'single.pdf', 1);
     if (file.name === 'photo.png') return uploaded('doc-3', 'photo.png', 1, 'image');
     return uploaded(`doc-${file.name}`, file.name, 1);
   });
@@ -59,6 +61,7 @@ async function openDocument(pageCount = 5) {
     <MemoryRouter>
       <ToastProvider>
         <OrganizePage />
+        <ToastContainer />
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -87,10 +90,16 @@ function selectCell(index: number, modifiers: Partial<MouseEventInit> = {}) {
 }
 
 /** Click a header insert button and hand it the given file. */
+const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n%...');
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+/** Click a header insert button and hand it a file of the right content. */
 async function insertFrom(fileName: string, buttonLabel: 'PDF' | 'Image') {
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`Insert ${buttonLabel}$`, 'i') }));
   const input = document.getElementById('organize-insert-input') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [new File(['x'], fileName)] } });
+  const bytes = buttonLabel === 'PDF' ? PDF_BYTES : PNG_BYTES;
+  const type = buttonLabel === 'PDF' ? 'application/pdf' : 'image/png';
+  fireEvent.change(input, { target: { files: [new File([bytes], fileName, { type })] } });
   await waitFor(() => expect(screen.getByLabelText('Insert pages')).toBeInTheDocument());
 }
 
@@ -268,13 +277,101 @@ describe('organize workspace', () => {
     expect(cells()[0].querySelector('.organize-cell-source')).toBeNull();
   });
 
-  it('inserts at the document ends when nothing is selected', async () => {
+  it('inserts an image at the end when nothing is selected', async () => {
     await openDocument(3);
     await insertFrom('photo.png', 'Image');
     // An image always contributes one page and offers no page picking.
     expect(screen.queryByText('Pick')).not.toBeInTheDocument();
+    // With no selection the reference defaults to the last page of the grid.
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('3');
     fireEvent.click(document.getElementById('organize-insert-confirm') as HTMLButtonElement);
     expect(positions()).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('hides the Pages option for a single-page source', async () => {
+    await openDocument(3);
+    await insertFrom('single.pdf', 'PDF');
+    expect(screen.queryByText('All')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pick')).not.toBeInTheDocument();
+    // The panel still offers positioning for the one page it can add.
+    expect(screen.getByLabelText('Reference page')).toBeInTheDocument();
+  });
+
+  it('states where the pages will land using the current grid', async () => {
+    await openDocument(7);
+    selectCell(4);
+    await insertFrom('other.pdf', 'PDF');
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('5');
+    expect(screen.getByText('Will be inserted after page 5 (of 7).')).toBeInTheDocument();
+    expect(screen.queryByText(/end of the document/i)).not.toBeInTheDocument();
+  });
+
+  it('inserts at the typed reference page rather than at the document end', async () => {
+    await openDocument(6);
+    selectCell(5);
+    await insertFrom('single.pdf', 'PDF');
+    fireEvent.change(screen.getByLabelText('Reference page'), { target: { value: '2' } });
+    expect(screen.getByText('Will be inserted after page 2 (of 6).')).toBeInTheDocument();
+    fireEvent.click(document.getElementById('organize-insert-confirm') as HTMLButtonElement);
+
+    // The source page lands between grid pages 2 and 3, not at the end.
+    expect(positions()).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+    const badges = cells().map((cell) => cell.querySelector('.organize-cell-source')?.textContent ?? '');
+    expect(badges[2]).toBe('B');
+  });
+
+  it('inserts before the reference page when Before is chosen', async () => {
+    await openDocument(5);
+    selectCell(2);
+    await insertFrom('single.pdf', 'PDF');
+    fireEvent.click(screen.getByRole('radio', { name: 'Before' }));
+    // "Before" re-derives the reference from the first selected page.
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('3');
+    expect(screen.getByText('Will be inserted before page 3 (of 5).')).toBeInTheDocument();
+    fireEvent.click(document.getElementById('organize-insert-confirm') as HTMLButtonElement);
+
+    const badges = cells().map((cell) => cell.querySelector('.organize-cell-source')?.textContent ?? '');
+    expect(badges[2]).toBe('B');
+  });
+
+  it('clicking a cell while the panel is open moves the reference page', async () => {
+    await openDocument(8);
+    await insertFrom('other.pdf', 'PDF');
+    selectCell(6);
+    expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('7');
+    expect(screen.getByText('Will be inserted after page 7 (of 8).')).toBeInTheDocument();
+  });
+
+  it('marks where the insertion will land in the grid', async () => {
+    await openDocument(5);
+    selectCell(1);
+    await insertFrom('other.pdf', 'PDF');
+    const marked = cells().filter((cell) => cell.className.includes('organize-cell--marker-'));
+    expect(marked).toHaveLength(1);
+    expect(marked[0].className).toContain('organize-cell--marker-after');
+    expect(marked[0].getAttribute('data-position')).toBe('2');
+  });
+
+  it('blocks insertion with an inline error when the reference page is out of range', async () => {
+    await openDocument(4);
+    await insertFrom('other.pdf', 'PDF');
+    fireEvent.change(screen.getByLabelText('Reference page'), { target: { value: '9' } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Reference page must be between 1 and 4');
+    expect(document.getElementById('organize-insert-confirm')).toBeDisabled();
+  });
+
+  it('refuses a file whose content does not match the chosen action', async () => {
+    await openDocument(3);
+    const uploadsBefore = uploadMock.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: /Insert PDF$/i }));
+    const input = document.getElementById('organize-insert-input') as HTMLInputElement;
+    // An image handed to "Insert PDF" because the dialog was switched to All files.
+    fireEvent.change(input, { target: { files: [new File([PNG_BYTES], 'photo.png', { type: 'image/png' })] } });
+
+    expect(await screen.findByText(/is not a PDF file/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Insert pages')).not.toBeInTheDocument();
+    expect(uploadMock.mock.calls.length).toBe(uploadsBefore);
   });
 
   it('reports an invalid insert pick inline and disables Insert', async () => {
@@ -306,8 +403,9 @@ describe('organize workspace', () => {
 
     expect(positions()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
     const badges = cells().map((cell) => cell.querySelector('.organize-cell-source')?.textContent ?? '');
-    expect(badges[5]).toBe('B');   // image inserted after position 5
-    expect(badges[8]).toBe('C');   // source PDF pages inserted after the page now at 7
+    expect(badges[5], JSON.stringify(badges)).toBe('B');   // image inserted after position 5
+    expect(badges[7], JSON.stringify(badges)).toBe('C');   // then PDF pages after the page now at 7
+    expect(badges[8], JSON.stringify(badges)).toBe('C');
   });
 
   it('lists inserted sources and removes a source together with its pages', async () => {
@@ -383,7 +481,10 @@ describe('organize workspace', () => {
     assembleMock.mockRejectedValue(new Error('Assembly failed'));
     fireEvent.click(document.getElementById('organize-save') as HTMLButtonElement);
 
-    expect(await screen.findByText('Assembly failed')).toBeInTheDocument();
+    // The message appears inline and as a toast; the inline one is what keeps
+    // the list recoverable, so assert on that container specifically.
+    await waitFor(() => expect(document.querySelector('.converter-message--error'))
+      .toHaveTextContent('Assembly failed'));
     expect(positions()).toEqual(['1', '2', '3']);
     expect(document.getElementById('organize-save')).toBeEnabled();
   });
