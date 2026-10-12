@@ -11,14 +11,13 @@ describe('Sidebar Component', () => {
     );
   };
 
-  it('renders all 7 nav items', () => {
+  it('renders the consolidated converter nav item', () => {
     const { container } = renderSidebar();
     const navItems = [
       'nav-merge',
       'nav-extract',
       'nav-compress',
-      'nav-pdf-to-image',
-      'nav-image-to-pdf',
+      'nav-converter',
       'nav-qr-barcode',
       'nav-insert'
     ];
@@ -26,6 +25,13 @@ describe('Sidebar Component', () => {
       const element = container.querySelector(`#${id}`);
       expect(element).toBeInTheDocument();
     });
+  });
+
+  it('does not keep separate PDF and image converter entries', () => {
+    const { container } = renderSidebar();
+    expect(container.querySelector('#nav-pdf-to-image')).not.toBeInTheDocument();
+    expect(container.querySelector('#nav-image-to-pdf')).not.toBeInTheDocument();
+    expect(container.querySelector('#nav-converter')).toHaveTextContent('PDF & Image');
   });
 
   it('renders Settings item', () => {

@@ -23,8 +23,12 @@ class ImageToPdfError(Exception):
 PAGE_SIZES = {
     "a4": (595.0, 842.0),
     "a3": (842.0, 1191.0),
+    "a5": (148 * 72 / 25.4, 210 * 72 / 25.4),
     "letter": (612.0, 792.0),
     "legal": (612.0, 1008.0),
+    # F4 is a regional size with several conventions; this preset is explicitly
+    # the 210 x 330 mm variant, not Legal.
+    "f4": (210 * 72 / 25.4, 330 * 72 / 25.4),
 }
 
 
@@ -40,7 +44,7 @@ def images_to_pdf(
 
     Args:
         image_paths: List of paths to the source images.
-        page_size: One of 'a4', 'a3', 'letter', 'legal', or 'match_image'.
+        page_size: One of 'a4', 'a3', 'a5', 'letter', 'legal', 'f4', or 'match_image'.
         output_filename: Name of the output PDF.
 
     Returns:

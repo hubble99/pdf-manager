@@ -6,8 +6,7 @@ import { MainContent } from './components/layout/MainContent';
 import { MergePage } from './pages/MergePage';
 import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
-import { PdfToImagePage } from './pages/PdfToImagePage';
-import { ImageToPdfPage } from './pages/ImageToPdfPage';
+import { ConverterPage } from './pages/ConverterPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { InsertPage } from './pages/InsertPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -143,8 +142,9 @@ export default function App() {
                 <Route path="/merge"         element={<MergePage />} />
                 <Route path="/extract"       element={<ExtractPage />} />
                 <Route path="/compress"      element={<CompressPage />} />
-                <Route path="/pdf-to-image"  element={<PdfToImagePage />} />
-                <Route path="/image-to-pdf"  element={<ImageToPdfPage />} />
+                <Route path="/converter"     element={<ConverterPage />} />
+                <Route path="/pdf-to-image"  element={<Navigate to="/converter" replace />} />
+                <Route path="/image-to-pdf"  element={<Navigate to="/converter" replace />} />
                 <Route path="/organize"      element={<OrganizePage />} />
                 <Route path="/metadata"      element={<MetadataPage />} />
                 <Route path="/protect"       element={<ProtectPage />} />

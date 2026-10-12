@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — 2026-10-12
+
+- Consolidated **PDF to Image** and **Image to PDF** into one **PDF & Image** feature. The conversion direction is detected from one uploaded PDF or an image batch, so the direction no longer has to be chosen manually. The previous `/pdf-to-image` and `/image-to-pdf` routes still open the consolidated workspace.
+- Added explicit PDF page selection with **All pages** and **Selected pages** modes. Selected pages accept a single page, ranges, and comma-separated combinations, stay synchronized with thumbnail checkboxes and the selected-page count, and disable conversion instead of silently falling back to all pages when the selection is empty or invalid.
+- Rejected mixed PDF/image batches, multiple PDFs, and unsupported files atomically, preserving the existing batch, its order, its adjustments, and its settings.
+- Added **A5** and **F4 (210 × 330 mm)** output page sizes for image-to-PDF, with the existing A4, A3, Letter, Legal, and original-image-size options retained. One page-size choice still applies to the whole batch, and per-image rotation and horizontal mirroring continue to apply per image.
+- Kept retained image source files usable when returning to the converter, discarded late responses from replaced or cleared input, and prevented duplicate or stale conversions from publishing results.
+
 ## 1.2.4 — 2026-09-30
 
 - Fixed the QR & Barcode preview regenerating in an endless loop while typing content, which flickered the preview, revoked the image being displayed, and intermittently disabled the Download button.

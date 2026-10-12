@@ -27,7 +27,7 @@ async def image_to_pdf_endpoint(
     Convert images to a PDF file.
     
     - **files**: List of images (JPG, PNG, WEBP, BMP, TIFF)
-    - **page_size**: 'a4', 'a3', 'letter', 'legal', or 'match_image'
+    - **page_size**: 'a4', 'a3', 'a5', 'letter', 'legal', 'f4', or 'match_image'
     - **output_filename**: Desired output PDF name
     
     Returns the created PDF file.
