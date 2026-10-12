@@ -2669,3 +2669,242 @@ select.input {
   width: 84px;
   min-height: var(--control-height-sm);
 }
+
+/* ── Merge folder mode (F4) ─────────────────────────────────────────────────── */
+.merge-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--container-padding) 0;
+}
+
+/* Quick mode stays mounted so its state survives switching; the attribute hides
+   it without the component unmounting. */
+.page-body[hidden] {
+  display: none;
+}
+
+.merge-folder-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr);
+  gap: var(--gutter);
+  align-items: start;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1024px) {
+  .merge-folder-layout {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+}
+
+.merge-sources,
+.merge-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.merge-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.merge-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.merge-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.merge-root-path {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.merge-notice {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.merge-tree,
+.merge-tree-children,
+.merge-queue-list,
+.merge-preflight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.merge-tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.merge-tree-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.merge-tree-toggle:focus-visible,
+.merge-tree-file:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.merge-tree-name {
+  overflow-wrap: anywhere;
+}
+
+.merge-tree-count,
+.merge-queue-index {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+}
+
+.merge-tree-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.merge-tree-file:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.merge-tree-file--queued {
+  color: var(--on-surface-variant);
+  cursor: default;
+  opacity: 0.7;
+}
+
+.merge-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.merge-queue-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--surface-container);
+}
+
+.merge-queue-handle {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: grab;
+  touch-action: none;
+}
+
+.merge-queue-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.merge-queue-name {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.merge-queue-folder {
+  font-size: 11px;
+  color: var(--on-surface-variant);
+  min-height: 14px;
+}
+
+.merge-queue-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.merge-preflight {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-low);
+}
+
+.merge-preflight-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.merge-preflight-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 12px;
+}
+
+.merge-problem-reason {
+  color: var(--error);
+  margin-left: var(--space-2);
+}
+
+.merge-result {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+.merge-queue-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--outline-variant);
+}

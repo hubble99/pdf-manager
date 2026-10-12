@@ -8,6 +8,11 @@ from main import app
 
 EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/merge/"),
+    ("POST", "/api/v1/merge/folder/roots/"),
+    ("POST", "/api/v1/merge/folder/roots/{root_id}/list/"),
+    ("POST", "/api/v1/merge/folder/inspect/"),
+    ("POST", "/api/v1/merge/folder/merge/"),
+    ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/extract/"),
     ("POST", "/api/v1/compress/"),
     ("POST", "/api/v1/compress/stream"),
@@ -114,6 +119,21 @@ REQUEST_BODY_CONTRACTS = {
         "required": {"pages"},
         "defaults": {"output_filename": "organized.pdf"},
     },
+    ("POST", "/api/v1/merge/folder/roots/"): {
+        "media_type": "application/json",
+        "required": {"path"},
+        "defaults": {},
+    },
+    ("POST", "/api/v1/merge/folder/inspect/"): {
+        "media_type": "application/json",
+        "required": {"root_id", "files"},
+        "defaults": {},
+    },
+    ("POST", "/api/v1/merge/folder/merge/"): {
+        "media_type": "application/json",
+        "required": {"root_id", "files"},
+        "defaults": {"output_filename": "merged_output.pdf", "skip_invalid": True},
+    },
     ("POST", "/api/v1/qr-barcode/qr"): {
         "media_type": "application/json",
         "required": {"content"},
@@ -209,6 +229,8 @@ for edit_content_path in (
     }
 
 NO_BODY_ROUTES = {
+    ("POST", "/api/v1/merge/folder/roots/{root_id}/list/"),
+    ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
     ("DELETE", "/api/v1/organize/documents/{document_id}"),
     ("GET", "/api/v1/compress/download/{download_id}"),
@@ -370,7 +392,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.4.0"
+    assert body["data"]["version"] == "1.5.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

@@ -1,6 +1,16 @@
 # Changelog
 
+## 1.5.0 — 2026-10-12
+
+- Added **Folder mode** to Merge PDF. Point it at a folder and browse its PDFs in a collapsible tree, then build an explicit ordered merge queue from what you choose. Folder mode never uploads anything: the desktop app passes the folder path and the backend reads the files directly.
+- Choosing a folder never fills the queue, and a queue never mixes uploaded files with folder files. Quick mode is unchanged and keeps failing the whole merge on a bad file.
+- Ordered the tree naturally (case-insensitive, digit runs compared as numbers, folders before files) and used that same order for the files added from a folder.
+- Added a check before merging that reports files which are missing, unreadable, damaged, or encrypted, so you can skip exactly those and merge the rest instead of losing the whole merge to one unusable document. The result reports how many files were merged and how many were skipped.
+- Read paths only inside the folder you chose, resolving them fully so parent references and links cannot escape it, and refused anything that is not a PDF.
+- Made Folder mode desktop-only, with the toggle disabled and explained when the desktop shell is not present.
+
 ## 1.4.0 — 2026-10-12
+
 
 - Turned **Organize PDF** into a visual page-management workspace. The grid is now the working document itself: reorder by dragging, and rotate, mirror, duplicate, or delete any page or selection, so typed page numbers are no longer needed to keep positions correct.
 - Added **Insert PDF** and **Insert Image**. Pages from other PDFs are picked by range or in full, images keep their original size, and insertion position is resolved against the selected pages (or the document ends when nothing is selected). Pick order is preserved and duplicates are allowed.

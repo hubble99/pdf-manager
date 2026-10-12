@@ -18,6 +18,8 @@ import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { FolderWorkspace } from '../features/merge/FolderWorkspace';
+import { isTauri } from '../utils/tauriDialog';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
 
@@ -65,6 +67,9 @@ export function MergePage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<MergeResult | null>(null);
+  // Quick and Folder keep their own state; toggling never clears either side.
+  const [mode, setMode] = useState<'quick' | 'folder'>('quick');
+  const folderModeAvailable = isTauri();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -194,8 +199,38 @@ export function MergePage() {
         description="Combine multiple PDF files into one document"
       />
 
+      <div className="merge-mode-toggle" role="tablist" aria-label="Merge mode">
+        <button
+          type="button"
+          role="tab"
+          id="merge-mode-quick"
+          aria-selected={mode === 'quick'}
+          className={`btn btn-sm ${mode === 'quick' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setMode('quick')}
+        >
+          Quick
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="merge-mode-folder"
+          aria-selected={mode === 'folder'}
+          className={`btn btn-sm ${mode === 'folder' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => setMode('folder')}
+          disabled={!folderModeAvailable}
+          title={folderModeAvailable ? undefined : 'Folder mode requires the desktop app'}
+        >
+          Folder
+        </button>
+        {!folderModeAvailable && (
+          <span className="organize-help">Folder mode requires the desktop app</span>
+        )}
+      </div>
+
+      {mode === 'folder' && <FolderWorkspace />}
+
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="page-body">
+      <div className="page-body" hidden={mode === 'folder'}>
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* Drop zone */}

@@ -34,6 +34,31 @@ export const openFilePicker = async (options?: {
   }
 };
 
+/**
+ * Open a native folder-picker dialog.
+ * Returns the chosen folder path, or null when not in Tauri or cancelled.
+ *
+ * Folder mode in Merge needs a path rather than a file list, because the backend
+ * reads the folder directly instead of receiving uploads.
+ */
+export const chooseFolderDialog = async (options?: { title?: string }): Promise<string | null> => {
+  if (!isTauri()) return null;
+
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const result = await open({
+      directory: true,
+      multiple: false,
+      title: options?.title,
+    });
+    if (!result) return null;
+    return Array.isArray(result) ? result[0] ?? null : result;
+  } catch (err) {
+    console.warn('[tauriDialog] chooseFolderDialog failed:', err);
+    return null;
+  }
+};
+
 import apiClient from '../api/client';
 
 /**

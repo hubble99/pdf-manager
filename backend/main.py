@@ -89,6 +89,12 @@ async def lifespan(app: FastAPI):
         organize_documents_registry.release_all()
     except Exception:
         logger.exception("Organize documents were not all released cleanly")
+    try:
+        from features.merge.folders import registry as merge_folders_registry
+
+        merge_folders_registry.release_all()
+    except Exception:
+        logger.exception("Merge folder registrations were not all released cleanly")
     _clean_directory(settings.TEMP_DIR, "temp")
     _clean_directory(settings.OUTPUT_DIR, "output")
     logger.info("Shutdown cleanup complete.")
