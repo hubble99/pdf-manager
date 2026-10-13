@@ -60,6 +60,13 @@ frontend-lint.json
 backend/test*.pdf
 backend/test*.png
 
+# ── Local test documents and transient build inputs ───────────────────────────────
+# document_testing/ berisi dokumen asli milik pengguna untuk verifikasi manual dan
+# UI; bersifat data pribadi dan tidak pernah di-commit.
+# tmp/ berisi input build release candidate (override config, skrip verifikasi).
+document_testing/
+tmp/
+
 # ── Assets ───────────────────────────────────────────────────────────────────────
 ui_images/
 
@@ -70,6 +77,7 @@ ui_images/
 .agents/
 .codex/
 .pi/
+.impeccable/
 openspec/
 
 # -- Internal documentation (private, not for public repo) ------------------------
