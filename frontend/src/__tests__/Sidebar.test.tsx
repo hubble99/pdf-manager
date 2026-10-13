@@ -33,10 +33,29 @@ describe('Sidebar Component', () => {
     expect(container.querySelector('#nav-converter')).toHaveTextContent('PDF & Image');
   });
 
+  it('is driven by the feature registry, Home first and Donation above Settings', () => {
+    const { container } = renderSidebar();
+    const ids = [...container.querySelectorAll('[id^="nav-"]')].map((node) => node.id);
+    expect(ids[0]).toBe('nav-home');
+    expect(ids).toContain('nav-donation');
+    expect(ids.indexOf('nav-donation')).toBeLessThan(ids.indexOf('nav-settings'));
+
+    // Group headings come from the registry and appear on the surface.
+    const labels = [...container.querySelectorAll('.sidebar-section-label')].map((n) => n.textContent);
+    expect(labels).toEqual(['Organize', 'Convert', 'Edit', 'Optimize', 'Protect', 'Create', 'App']);
+  });
+
+  it('shows the grouped feature names from the registry', () => {
+    const { container } = renderSidebar();
+    expect(container.querySelector('#nav-organize')).toHaveTextContent('Organize PDF');
+    expect(container.querySelector('#nav-converter')).toHaveTextContent('PDF & Image');
+    expect(container.querySelector('#nav-merge')).toHaveTextContent('Merge PDF');
+  });
+
   it('no longer offers a separate Insert Content feature', () => {
     const { container } = renderSidebar();
     expect(container.querySelector('#nav-insert')).not.toBeInTheDocument();
-    expect(container.querySelector('#nav-organize')).toHaveTextContent('Organize Pages');
+    expect(container.querySelector('#nav-organize')).toHaveTextContent('Organize PDF');
   });
 
   it('renders Settings item', () => {

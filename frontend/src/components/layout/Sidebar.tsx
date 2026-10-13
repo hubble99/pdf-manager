@@ -1,48 +1,49 @@
-import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import {
-  Merge,
-  Scissors,
-  Minimize2,
-  FileImage,
-  QrCode,
-  Settings,
-  FileText,
-  Layers,
-  Tag,
-  Shield,
-  ChevronLeft,
-  ChevronRight,
-  PenLine,
-  FilePenLine,
-} from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import { ChevronLeft, ChevronRight, FileText, Heart, Home, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { APP_NAME } from '../../config/app';
+import { DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
 import type { NavItemId } from '../../types';
 
-interface NavItemDef {
+interface NavEntryProps {
   id: NavItemId;
   label: string;
   icon: LucideIcon;
   path: string;
-  badge?: string;
+  collapsed: boolean;
+  /** The donation entry carries its own accent colour. */
+  accent?: boolean;
+  /** Home must match the root path exactly. */
+  end?: boolean;
 }
 
-const NAV_ITEMS: NavItemDef[] = [
-  { id: 'merge',         label: 'Merge PDF',       icon: Merge,      path: '/merge' },
-  { id: 'extract',       label: 'Split PDF',       icon: Scissors,   path: '/extract' },
-  { id: 'organize',      label: 'Organize Pages',  icon: Layers,     path: '/organize' },
-  { id: 'metadata',      label: 'Edit Metadata',   icon: Tag,        path: '/metadata' },
-  { id: 'protect',       label: 'Protect PDF',     icon: Shield,     path: '/protect' },
-  { id: 'compress',      label: 'Compress PDF',    icon: Minimize2,  path: '/compress' },
-  { id: 'converter',     label: 'PDF & Image',     icon: FileImage,  path: '/converter' },
-  { id: 'qr-barcode',    label: 'QR & Barcode',    icon: QrCode,     path: '/qr-barcode' },
-  { id: 'edit-canvas',   label: 'Edit Canvas',     icon: PenLine,    path: '/edit-canvas' },
-  { id: 'edit-content',  label: 'Edit Content',    icon: FilePenLine, path: '/edit-content' },
-];
+/**
+ * One navigation row. Both the grouped feature list and the entries below it use
+ * this, so the row markup exists once. `NavLink` marks the current item and sets
+ * `aria-current` on its own.
+ */
+function NavEntry({ id, label, icon: Icon, path, collapsed, accent = false, end = false }: NavEntryProps) {
+  return (
+    <NavLink
+      to={path}
+      end={end}
+      className={({ isActive }) => [
+        'nav-item',
+        isActive ? 'active' : '',
+        collapsed ? 'nav-item-collapsed' : '',
+        accent ? 'nav-item--accent' : '',
+      ].filter(Boolean).join(' ')}
+      id={`nav-${id}`}
+      title={collapsed ? label : undefined}
+    >
+      <Icon className="nav-item-icon" size={20} strokeWidth={1.75} aria-hidden="true" />
+      {!collapsed && <span className="nav-item-label">{label}</span>}
+    </NavLink>
+  );
+}
 
 export function Sidebar() {
-  const location = useLocation();
-
   // Persist collapse state to localStorage
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
@@ -70,8 +71,8 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <div>
-              <div className="sidebar-logo-text">PDF Manager</div>
-              <div className="sidebar-logo-sub">v1.5.0</div>
+              <div className="sidebar-logo-text">{APP_NAME}</div>
+              <div className="sidebar-logo-sub">v1.6.0</div>
             </div>
           )}
         </div>
@@ -79,54 +80,50 @@ export function Sidebar() {
 
       {/* ── Navigation ── */}
       <nav className="sidebar-nav">
-        {!collapsed && <div className="sidebar-section-label">Tools</div>}
+        <NavEntry
+          id={HOME_ENTRY.id}
+          label={HOME_ENTRY.name}
+          icon={Home}
+          path={HOME_ENTRY.route}
+          collapsed={collapsed}
+          end
+        />
 
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path ||
-            (item.path !== '/' && location.pathname.startsWith(item.path));
-
-          return (
-            <NavLink
-              key={item.id}
-              to={item.path}
-              className={`nav-item ${isActive ? 'active' : ''} ${collapsed ? 'nav-item-collapsed' : ''}`}
-              id={`nav-${item.id}`}
-              aria-current={isActive ? 'page' : undefined}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon
-                className="nav-item-icon"
-                size={20}
-                strokeWidth={1.75}
-                aria-hidden="true"
+        {featuresByGroup().map((group) => (
+          <Fragment key={group.id}>
+            {!collapsed && <div className="sidebar-section-label">{group.label}</div>}
+            {group.features.map((feature) => (
+              <NavEntry
+                key={feature.id}
+                id={feature.id}
+                label={feature.name}
+                icon={feature.icon}
+                path={feature.route}
+                collapsed={collapsed}
               />
-              {!collapsed && (
-                <>
-                  <span className="nav-item-label">{item.label}</span>
-                  {item.badge && (
-                    <span className="nav-item-badge" aria-label={`${item.badge} feature`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </>
-              )}
-            </NavLink>
-          );
-        })}
+            ))}
+          </Fragment>
+        ))}
 
         <div className="divider" style={{ margin: '12px 16px' }} />
         {!collapsed && <div className="sidebar-section-label">App</div>}
 
-        <NavLink
-          to="/settings"
-          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''} ${collapsed ? 'nav-item-collapsed' : ''}`}
-          id="nav-settings"
-          title={collapsed ? 'Settings' : undefined}
-        >
-          <Settings className="nav-item-icon" size={20} strokeWidth={1.75} aria-hidden="true" />
-          {!collapsed && <span className="nav-item-label">Settings</span>}
-        </NavLink>
+        {/* Pinned below the features so it stays reachable however long they get. */}
+        <NavEntry
+          id={DONATION_ENTRY.id}
+          label={DONATION_ENTRY.name}
+          icon={Heart}
+          path={DONATION_ENTRY.route}
+          collapsed={collapsed}
+          accent
+        />
+        <NavEntry
+          id="settings"
+          label="Settings"
+          icon={Settings}
+          path="/settings"
+          collapsed={collapsed}
+        />
       </nav>
 
       {/* ── Collapse Toggle ── */}
@@ -144,7 +141,7 @@ export function Sidebar() {
       {!collapsed && (
         <div className="sidebar-footer">
           <p className="text-mono text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
-            PDF Manager v1.5.0<br />
+            {APP_NAME} v1.6.0<br />
             <span style={{ opacity: 0.6 }}>Offline · Local Processing</span>
           </p>
         </div>

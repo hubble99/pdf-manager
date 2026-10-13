@@ -1,6 +1,8 @@
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 export type NavItemId =
+  | 'home'
+  | 'donation'
   | 'merge'
   | 'extract'
   | 'compress'
@@ -10,7 +12,8 @@ export type NavItemId =
   | 'edit-content'
   | 'organize'
   | 'metadata'
-  | 'protect';
+  | 'protect'
+  | 'settings';
 
 // ── Feature-specific result types (Sprint 2) ─────────────────────────────────
 

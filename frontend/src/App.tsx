@@ -7,6 +7,8 @@ import { MergePage } from './pages/MergePage';
 import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
 import { ConverterPage } from './pages/ConverterPage';
+import { HomePage } from './pages/HomePage';
+import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OrganizePage } from './pages/OrganizePage';
@@ -137,7 +139,8 @@ export default function App() {
             <Sidebar />
             <MainContent>
               <Routes>
-                <Route path="/" element={<Navigate to="/merge" replace />} />
+                <Route path="/" element={<HomePage />} />
+                <Route path="/donation" element={<DonationPage />} />
                 <Route path="/merge"         element={<MergePage />} />
                 <Route path="/extract"       element={<ExtractPage />} />
                 <Route path="/compress"      element={<CompressPage />} />

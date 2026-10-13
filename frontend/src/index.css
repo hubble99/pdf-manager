@@ -2908,3 +2908,186 @@ select.input {
   padding-top: var(--space-3);
   border-top: 1px solid var(--outline-variant);
 }
+
+/* The donation entry is distinguishable by colour, not by size. */
+.nav-item--accent .nav-item-icon,
+.nav-item--accent .nav-item-label {
+  color: var(--accent);
+}
+
+/* ── Home and Donation (F5) ─────────────────────────────────────────────────── */
+.home-page {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.home-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 320px);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .home-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.home-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.home-hero-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--on-surface);
+}
+
+.home-hero-tagline {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.home-hero-description {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--on-surface-variant);
+  max-width: 70ch;
+}
+
+.home-donation-teaser {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.home-donation-icon {
+  color: var(--accent);
+}
+
+.home-donation-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.home-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.home-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+}
+
+.home-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  text-decoration: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.home-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.home-card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.home-card-icon {
+  color: var(--accent);
+}
+
+.home-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.home-card-description {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+}
+
+.donation-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.donation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.donation-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.donation-qris {
+  width: 100%;
+  max-width: 300px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--outline-variant);
+  align-self: center;
+}
+
+.donation-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--on-surface-variant);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-md);
+}
+
+.donation-value {
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  overflow-wrap: anywhere;
+}
+
+.donation-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.donation-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}

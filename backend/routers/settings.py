@@ -51,3 +51,44 @@ async def open_downloads():
     except Exception as e:
         logger.exception("Error opening downloads")
         raise HTTPException(status_code=500, detail="Could not open the downloads folder") from e
+
+# ── Donation ──────────────────────────────────────────────────────────────────
+
+def _donation_state() -> dict:
+    """The configured donation value and what may be done with it."""
+    value = (settings.DONATION_PAYPAL_VALUE or "").strip()
+    placeholder = (settings.DONATION_PAYPAL_PLACEHOLDER or "").strip()
+    is_placeholder = not value or (bool(placeholder) and value == placeholder)
+    # Only a real https link can be opened; an email address can still be copied.
+    can_open = (not is_placeholder) and value.startswith("https://") and len(value) > len("https://")
+    return {"value": "" if is_placeholder else value, "is_placeholder": is_placeholder, "can_open": can_open}
+
+
+@router.get("/donation")
+async def donation_configuration():
+    """Read-only: the page and the open action read the same configured value."""
+    return SuccessResponse(data=_donation_state(), message="Donation configuration.")
+
+
+@router.post("/open-donation")
+async def open_donation():
+    """Open the configured donation link in the system browser.
+
+    Takes no destination from the caller: only the configured value is ever
+    opened, and only when it is an https link, so this cannot be used to open an
+    arbitrary address or a local path.
+    """
+    state = _donation_state()
+    if not state["can_open"]:
+        raise HTTPException(status_code=422, detail="No donation link is configured yet.")
+    try:
+        import webbrowser
+
+        opened = webbrowser.open(state["value"], new=2)
+    except Exception as e:
+        logger.error(f"open donation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="The link could not be opened.")
+    if not opened:
+        raise HTTPException(status_code=500, detail="The link could not be opened.")
+    return SuccessResponse(data={"opened": True}, message="Opened the donation link.")
+

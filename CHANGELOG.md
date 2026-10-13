@@ -1,6 +1,17 @@
 # Changelog
 
+## 1.6.0 — 2026-10-12
+
+- Added **Home** as the entry point. Opening the app now shows what it is and what it can do, instead of dropping you into one tool.
+- Grouped the features by the task you are performing — **Organize** (Merge PDF, Split PDF, Organize PDF), **Convert** (PDF & Image), **Edit** (Edit Canvas, Edit Content, Edit Metadata), **Optimize** (Compress PDF), **Protect** (Protect PDF), and **Create** (QR & Barcode). The same groups appear on Home and in the sidebar, so the layout survives new tools that are not about PDFs.
+- Drove both the sidebar and the Home cards from **one feature registry**, so a feature is described once and adding one later means adding a single entry.
+- Renamed "Organize Pages" to **Organize PDF** so a feature no longer repeats its group's name.
+- Moved the application name and tagline into one place, and wrote the Home description about the product's job rather than about PDF alone.
+- Added a **Donation** page, reachable from the sidebar and from a small teaser on Home. It shows a QRIS code and a configurable international value, works entirely offline, and stores nothing. Both entry points are unobtrusive: no popups, banners, or reminders.
+- Applied the donation restrictions: the value may be an email address or a link, copying works either way, and opening is only possible for a valid `https` link, which the **backend holds** — it opens only that configured destination and refuses anything a caller supplies.
+
 ## 1.5.0 — 2026-10-12
+
 
 - Added **Folder mode** to Merge PDF. Point it at a folder and browse its PDFs in a collapsible tree, then build an explicit ordered merge queue from what you choose. Folder mode never uploads anything: the desktop app passes the folder path and the backend reads the files directly.
 - Choosing a folder never fills the queue, and a queue never mixes uploaded files with folder files. Quick mode is unchanged and keeps failing the whole merge on a bad file.

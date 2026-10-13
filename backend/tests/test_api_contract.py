@@ -26,6 +26,8 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/insert/"),
     ("POST", "/api/v1/pdf-info/"),
     ("POST", "/api/v1/settings/clear-temp"),
+    ("GET", "/api/v1/settings/donation"),
+    ("POST", "/api/v1/settings/open-donation"),
     ("POST", "/api/v1/settings/open-downloads"),
     ("POST", "/api/v1/organize/"),
     ("POST", "/api/v1/organize/documents/"),
@@ -236,6 +238,8 @@ NO_BODY_ROUTES = {
     ("GET", "/api/v1/compress/download/{download_id}"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
+    ("GET", "/api/v1/settings/donation"),
+    ("POST", "/api/v1/settings/open-donation"),
     ("POST", "/api/v1/edit-content/shutdown"),
     ("GET", "/api/v1/fonts"),
     ("DELETE", "/api/v1/fonts/{font_id}"),
@@ -392,7 +396,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.5.0"
+    assert body["data"]["version"] == "1.6.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

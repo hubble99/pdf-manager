@@ -1,6 +1,6 @@
 # PDF Manager
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.6.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Release](https://img.shields.io/github/downloads/hubble99/pdf-manager/total)
@@ -15,7 +15,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/Version-1.5.0-green?style=flat-square" />
+  <img src="https://img.shields.io/badge/Version-1.6.0-green?style=flat-square" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" />
   <img src="https://img.shields.io/badge/Offline-100%25-purple?style=flat-square" />
 </p>

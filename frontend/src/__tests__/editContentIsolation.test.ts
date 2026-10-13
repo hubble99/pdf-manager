@@ -16,13 +16,14 @@ describe('Edit Content feature isolation', () => {
   });
 
   it('keeps Canvas and Content as independent destinations', () => {
-    const [app, sidebar] = [
+    const [app, registry] = [
       '../App.tsx',
-      '../components/layout/Sidebar.tsx',
+      '../config/features.ts',
     ].map((relativePath) => readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), 'utf8'));
     expect(app).toContain('path="/edit-canvas"');
     expect(app).toContain('path="/edit-content"');
-    expect(sidebar).toContain("path: '/edit-canvas'");
-    expect(sidebar).toContain("path: '/edit-content'");
+    // Navigation now comes from the registry, so that is where the destinations live.
+    expect(registry).toContain("route: '/edit-canvas'");
+    expect(registry).toContain("route: '/edit-content'");
   });
 });
