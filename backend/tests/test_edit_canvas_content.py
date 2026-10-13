@@ -3,6 +3,7 @@
 import json
 
 import fitz
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from main import app
@@ -17,6 +18,7 @@ def _make_source_pdf() -> bytes:
     return pdf_bytes
 
 
+@pytest.mark.asyncio
 async def test_text_structure_endpoint_is_not_exposed_in_stable_editor():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
@@ -27,6 +29,7 @@ async def test_text_structure_endpoint_is_not_exposed_in_stable_editor():
     assert response.status_code == 404
 
 
+@pytest.mark.asyncio
 async def test_save_rejects_legacy_content_edit_payload():
     annotations = [{
         "canvas_width": 200,

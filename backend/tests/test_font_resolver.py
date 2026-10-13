@@ -345,6 +345,7 @@ from httpx import AsyncClient
 from main import app
 
 
+@pytest.mark.asyncio
 async def test_fonts_crud_endpoints(font_env):
     source = _find_system_ttf()
     if source is None:
