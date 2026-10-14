@@ -85,6 +85,9 @@ class FakeVerifiedWorker:
     def open(self):
         return {"status": "accepted", "acceptedRevision": self.revision}
 
+    def discard_inspection_cache(self):
+        pass
+
     def terminate(self):
         self.is_running = False
 
@@ -312,6 +315,9 @@ class FlakyOpenAdapter:
 
     def restart(self, source, *, accepted_revision=None):
         return {"status": "accepted", "acceptedRevision": accepted_revision}
+
+    def discard_inspection_cache(self):
+        pass
 
     def terminate(self):
         self.terminated = True

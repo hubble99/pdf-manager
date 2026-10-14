@@ -14,9 +14,15 @@ from typing import Any, Callable
 import uuid
 
 from config import settings
+from version import APP_VERSION
 from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError, ContentSessionCoordinator
 from features.edit_content.engine_identity import load_engine_identity, validate_runtime_identity
+from features.edit_content.inspector_service_manager import (
+    InspectorServiceManager,
+    service_command,
+    service_enabled,
+)
 from features.edit_content.process_adapter import ContentWorkerError, WorkerLaunchConfig
 from features.edit_content.transaction_state import Outcome, TransitionRejected
 
@@ -30,6 +36,39 @@ class ContentSessionUnavailable(RuntimeError):
     def __init__(self, reason: str, *, unknown: bool = False):
         super().__init__(reason)
         self.unknown = unknown
+
+
+_inspector_service: InspectorServiceManager | None = None
+_inspector_service_lock = threading.Lock()
+
+
+def get_inspector_service() -> InspectorServiceManager | None:
+    """Shared long-lived inspector, or None when turned off."""
+    global _inspector_service
+    if not service_enabled():
+        return None
+    with _inspector_service_lock:
+        if _inspector_service is None:
+            _inspector_service = InspectorServiceManager(
+                service_command(bool(getattr(sys, "frozen", False)), sys.executable)
+            )
+        return _inspector_service
+
+
+def prewarm_inspector_service() -> None:
+    """Start the inspector early when a real Edit Content engine is configured."""
+    if os.environ.get("PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR") or os.environ.get("PDF_MANAGER_EDIT_CONTENT_WORKER"):
+        service = get_inspector_service()
+        if service is not None:
+            service.start_async()
+
+
+def stop_inspector_service() -> None:
+    global _inspector_service
+    with _inspector_service_lock:
+        service, _inspector_service = _inspector_service, None
+    if service is not None:
+        service.stop()
 
 
 def default_worker_config() -> WorkerLaunchConfig:
@@ -60,6 +99,8 @@ def default_worker_config() -> WorkerLaunchConfig:
             else (sys.executable, "-m", "features.edit_content.resource_inspector_cli")
         ),
         parent_process_id=os.getpid() if resource_dir else None,
+        inspector_service=service.endpoint if (service := get_inspector_service()) else None,
+        inspection_cache_id=f"{APP_VERSION}/{identity.library_sha256}",
     )
 
 logger = logging.getLogger("pdf_manager.edit_content")

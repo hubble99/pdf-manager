@@ -81,3 +81,31 @@ def test_frozen_backend_uses_its_embedded_pin(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     monkeypatch.setenv("PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR", str(tmp_path / "missing-runtime"))
     assert load_engine_identity() == expected
+
+
+def test_target_name_never_uses_platform_module_which_spawns_ver_on_windows(monkeypatch):
+    import platform
+    from features.edit_content import engine_identity
+
+    def forbidden(*_a, **_k):
+        raise AssertionError("platform.* must not be called")
+
+    for name in ("system", "machine", "uname", "platform", "win32_ver"):
+        monkeypatch.setattr(platform, name, forbidden)
+    monkeypatch.setattr(engine_identity.sys, "platform", "win32")
+    monkeypatch.setattr(engine_identity.sys, "version", "3.12.1 [MSC v.1937 64 bit (AMD64)]")
+    assert engine_identity._target_name() == "windows-x86_64"
+    monkeypatch.setattr(engine_identity.sys, "version", "3.12.1 [MSC v.1937 64 bit (ARM64)]")
+    with pytest.raises(RuntimeError, match="architecture"):
+        engine_identity._target_name()
+
+
+def test_target_name_linux_x86_64(monkeypatch):
+    from features.edit_content import engine_identity
+
+    class Uname:
+        machine = "x86_64"
+
+    monkeypatch.setattr(engine_identity.sys, "platform", "linux")
+    monkeypatch.setattr(engine_identity.os, "uname", lambda: Uname(), raising=False)
+    assert engine_identity._target_name() == "linux-x86_64"

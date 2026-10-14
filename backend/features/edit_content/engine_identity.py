@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import platform
+import os
 import re
 import sys
 
@@ -23,9 +23,31 @@ class EngineIdentity:
                 "sha256": self.library_sha256}
 
 
+def _host_system() -> str:
+    # platform.system()/machine() fall back to spawning `cmd.exe /c ver` on
+    # Windows, which costs a process launch on every packaged sidecar start.
+    if sys.platform == "win32":
+        return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return sys.platform
+
+
+def _host_machine() -> str:
+    if sys.platform == "win32":
+        # The interpreter banner names its own build architecture, e.g. "(AMD64)".
+        banner = sys.version.lower()
+        if "amd64" in banner:
+            return "amd64"
+        if "arm64" in banner:
+            return "arm64"
+        return os.environ.get("PROCESSOR_ARCHITECTURE", "").lower()
+    return os.uname().machine.lower()
+
+
 def _target_name() -> str:
-    system = platform.system().lower()
-    machine = platform.machine().lower()
+    system = _host_system()
+    machine = _host_machine()
     if machine in {"amd64", "x86_64", "x64"}:
         arch = "x86_64"
     else:

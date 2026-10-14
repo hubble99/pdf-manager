@@ -32,18 +32,18 @@ async def clear_temp():
     )
 
 import os
-import platform
 import subprocess
+import sys
 
 @router.post("/open-downloads", response_model=SuccessResponse)
 async def open_downloads():
     try:
         downloads_path = os.path.join(os.path.expanduser('~'), 'Downloads')
-        if platform.system() == "Windows":
+        if sys.platform == "win32":
             # os.startfile can fail when running as a frozen sidecar due to privilege isolation.
             # Using explorer.exe directly is more reliable.
             subprocess.Popen(['explorer', downloads_path])
-        elif platform.system() == "Darwin":
+        elif sys.platform == "darwin":
             subprocess.Popen(["open", downloads_path])
         else:
             subprocess.Popen(["xdg-open", downloads_path])

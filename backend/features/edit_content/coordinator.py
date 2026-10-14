@@ -80,6 +80,7 @@ class ContentSessionCoordinator:
             return coordinator
         except BaseException:
             adapter.terminate()
+            adapter.discard_inspection_cache()
             if store is not None:
                 store.close()
             raise
@@ -98,6 +99,7 @@ class ContentSessionCoordinator:
             return coordinator
         except BaseException:
             adapter.terminate()
+            adapter.discard_inspection_cache()
             store.close()
             raise
 
@@ -288,6 +290,7 @@ class ContentSessionCoordinator:
             try:
                 self.adapter.close()
             finally:
+                self.adapter.discard_inspection_cache()
                 self.store.close()
 
     def _checkpoint_from_preparation(

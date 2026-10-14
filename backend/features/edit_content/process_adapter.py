@@ -6,14 +6,16 @@ from collections import deque
 from dataclasses import dataclass
 import json
 import logging
+import os
 from pathlib import Path
 import queue
 import re
+import shutil
 import struct
 import subprocess
 import threading
 import time
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 import uuid
 
 logger = logging.getLogger("pdf_manager.edit_content")
@@ -63,6 +65,11 @@ class WorkerLaunchConfig:
     inspect_timeout_seconds: float = 30.0
     close_timeout_seconds: float = 10.0
     parent_process_id: int | None = None
+    # Evaluated at every worker launch: ("host:port", token) of a ready long-lived
+    # inspector, or None to let the worker use its own one-shot inspector.
+    inspector_service: Callable[[], tuple[str, str] | None] | None = None
+    # Identifies the inspector build; cached inspections of another build are ignored.
+    inspection_cache_id: str = ""
 
     @classmethod
     def create(
@@ -73,6 +80,8 @@ class WorkerLaunchConfig:
         workspace_root: Path,
         inspector_command: Sequence[str],
         parent_process_id: int | None = None,
+        inspector_service: Callable[[], tuple[str, str] | None] | None = None,
+        inspection_cache_id: str = "",
     ) -> "WorkerLaunchConfig":
         if not worker_command or not inspector_command:
             raise ValueError("worker and inspector commands are required")
@@ -82,6 +91,8 @@ class WorkerLaunchConfig:
             Path(workspace_root),
             tuple(str(part) for part in inspector_command),
             parent_process_id=parent_process_id,
+            inspector_service=inspector_service,
+            inspection_cache_id=inspection_cache_id,
         )
 
 
@@ -98,6 +109,7 @@ class ContentWorkerAdapter:
         self._accepted_revision = 0
         self._stderr_tail: deque[bytes] = deque()
         self._stderr_tail_bytes = 0
+        self._cache_dir: Path | None = None
 
     @property
     def stderr_tail(self) -> str:
@@ -147,6 +159,17 @@ class ContentWorkerAdapter:
                 command.extend(("--inspector-arg", argument))
             if self._config.parent_process_id is not None:
                 command.extend(("--parent-process-id", str(self._config.parent_process_id)))
+            worker_env = None
+            endpoint = self._service_endpoint()
+            if endpoint is not None:
+                command.extend(("--inspector-endpoint", endpoint[0]))
+                worker_env = {**os.environ, "EDIT_CONTENT_INSPECTOR_TOKEN": endpoint[1]}
+            cache_dir = self._ensure_cache_dir()
+            if cache_dir is not None:
+                command.extend((
+                    "--inspection-cache-dir", str(cache_dir),
+                    "--inspection-cache-id", self._config.inspection_cache_id,
+                ))
             creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
             try:
                 process = subprocess.Popen(
@@ -155,6 +178,7 @@ class ContentWorkerAdapter:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     bufsize=0,
+                    env=worker_env,
                     creationflags=creationflags,
                 )
             except OSError as exc:
@@ -171,6 +195,41 @@ class ContentWorkerAdapter:
             self._stderr_tail_bytes = 0
             threading.Thread(target=self._drain_stderr, args=(process,), daemon=True).start()
             return active_session
+
+    def _service_endpoint(self) -> tuple[str, str] | None:
+        provider = self._config.inspector_service
+        if provider is None:
+            return None
+        try:
+            return provider()
+        except Exception:  # noqa: BLE001 - the service is only an accelerator.
+            return None
+
+    def _ensure_cache_dir(self) -> Path | None:
+        """Private per-session directory that outlives worker restarts."""
+        if not self._config.inspection_cache_id:
+            return None
+        if self._cache_dir is None:
+            root = self._config.workspace_root
+            cutoff = time.time() - 24 * 3600
+            for stale in root.glob("inspection-cache-*"):
+                try:
+                    if stale.is_dir() and not stale.is_symlink() and stale.stat().st_mtime < cutoff:
+                        shutil.rmtree(stale, ignore_errors=True)
+                except OSError:
+                    continue
+            self._cache_dir = root / f"inspection-cache-{uuid.uuid4().hex}"
+        try:
+            self._cache_dir.mkdir(exist_ok=True)
+        except OSError:
+            return None
+        return self._cache_dir
+
+    def discard_inspection_cache(self) -> None:
+        """Remove cached inspections once the session is finished."""
+        directory, self._cache_dir = self._cache_dir, None
+        if directory is not None:
+            shutil.rmtree(directory, ignore_errors=True)
 
     def open(self) -> dict[str, Any]:
         return self._request("open", expected_revision=None, timeout=self._config.startup_timeout_seconds)

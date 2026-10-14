@@ -36,6 +36,9 @@ struct Config {
     source_file: PathBuf,
     inspector_program: Option<PathBuf>,
     inspector_arguments: Vec<String>,
+    inspector_endpoint: Option<String>,
+    inspection_cache_dir: Option<PathBuf>,
+    inspection_cache_id: String,
     test_mode: bool,
     test_timeout: Option<Duration>,
     accepted_revision: u64,
@@ -60,6 +63,9 @@ fn parse_config() -> Result<Config, String> {
     let mut source_file = None;
     let mut inspector_program = None;
     let mut inspector_arguments = Vec::new();
+    let mut inspector_endpoint = None;
+    let mut inspection_cache_dir = None;
+    let mut inspection_cache_id = String::new();
     let mut test_mode = false;
     let mut test_timeout = None;
     let mut accepted_revision = 0;
@@ -76,6 +82,13 @@ fn parse_config() -> Result<Config, String> {
                 args.next()
                     .ok_or_else(|| "missing inspector argument value".to_string())?,
             ),
+            "--inspector-endpoint" => inspector_endpoint = args.next(),
+            "--inspection-cache-dir" => inspection_cache_dir = args.next().map(PathBuf::from),
+            "--inspection-cache-id" => {
+                inspection_cache_id = args
+                    .next()
+                    .ok_or_else(|| "missing inspection cache id".to_string())?
+            }
             "--test-mode" => test_mode = true,
             "--test-timeout-ms" => {
                 let value = args
@@ -121,6 +134,9 @@ fn parse_config() -> Result<Config, String> {
             .ok_or_else(|| "explicit source file argument is required".to_string())?,
         inspector_program,
         inspector_arguments,
+        inspector_endpoint,
+        inspection_cache_dir,
+        inspection_cache_id,
         test_mode,
         test_timeout,
         accepted_revision,
@@ -817,10 +833,32 @@ fn run(config: Config) -> Result<(), String> {
     )
     .map_err(|error| format!("private workspace setup failed: {error:?}"))?;
     let inspector: Box<dyn ResourceInspector> = match config.inspector_program {
-        Some(program) => Box::new(ProcessResourceInspector::new(
-            program,
-            config.inspector_arguments,
-        )),
+        Some(program) => {
+            let one_shot: Box<dyn ResourceInspector> = Box::new(ProcessResourceInspector::new(
+                program,
+                config.inspector_arguments,
+            ));
+            // The token travels in the environment so it never shows up in a process listing.
+            let token = env::var("EDIT_CONTENT_INSPECTOR_TOKEN").unwrap_or_default();
+            let base: Box<dyn ResourceInspector> = match config.inspector_endpoint {
+                Some(endpoint) if !token.is_empty() => Box::new(
+                    edit_content_engine::resource_inspector::ServiceInspector::new(
+                        endpoint, token, one_shot,
+                    ),
+                ),
+                _ => one_shot,
+            };
+            match config.inspection_cache_dir {
+                Some(directory) if !config.inspection_cache_id.is_empty() => Box::new(
+                    edit_content_engine::resource_inspector::DiskCachingInspector::new(
+                        base,
+                        directory,
+                        config.inspection_cache_id,
+                    ),
+                ),
+                _ => base,
+            }
+        }
         None if config.test_mode => Box::new(TestResourceInspector),
         None => Box::new(UnavailableResourceInspector),
     };

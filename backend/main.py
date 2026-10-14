@@ -11,6 +11,11 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--edit-conte
     sys.argv = [sys.argv[0], *sys.argv[2:]]
     raise SystemExit(run_inspector())
 
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--edit-content-inspector-service":
+    from features.edit_content.resource_inspector_service import main as run_inspector_service
+
+    raise SystemExit(run_inspector_service())
+
 import logging
 import shutil
 from contextlib import asynccontextmanager
@@ -73,6 +78,13 @@ async def lifespan(app: FastAPI):
     logger.info("PDF Manager starting up — cleaning leftover temp files from previous session...")
     _clean_directory(settings.TEMP_DIR, "temp")
     settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)  # ensure output dir exists
+    try:
+        # Pay the inspector's interpreter startup now, while the user is still choosing a file.
+        from features.edit_content.session_service import prewarm_inspector_service
+
+        prewarm_inspector_service()
+    except Exception:
+        logger.exception("Edit Content inspector pre-warm failed; one-shot inspection will be used")
     logger.info("Startup cleanup complete. Ready to serve requests.")
 
     yield  # ← app runs here
@@ -83,6 +95,12 @@ async def lifespan(app: FastAPI):
         edit_content.get_content_registry().close_all()
     except Exception:
         logger.exception("Edit Content workers did not all close cleanly")
+    try:
+        from features.edit_content.session_service import stop_inspector_service
+
+        stop_inspector_service()
+    except Exception:
+        logger.exception("Edit Content inspector service did not stop cleanly")
     try:
         from features.organize.documents import registry as organize_documents_registry
 
@@ -261,8 +279,7 @@ if __name__ == "__main__":
         # and needs to self-terminate.
         def monitor_parent():
             ppid = os.getppid()
-            import platform
-            if platform.system() == "Windows":
+            if sys.platform == "win32":
                 import ctypes
                 kernel32 = ctypes.windll.kernel32
                 SYNCHRONIZE = 0x00100000
