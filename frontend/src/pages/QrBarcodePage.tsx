@@ -36,8 +36,8 @@ const BARCODE_TYPES = [
 ];
 
 const FORMAT_OPTIONS = [
-  { value: 'png', label: 'PNG' },
-  { value: 'svg', label: 'SVG' },
+  { value: 'png', label: 'PNG', desc: 'Fixed size, easy to share' },
+  { value: 'svg', label: 'SVG', desc: 'Scales without blur, best for print' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -247,6 +247,21 @@ export function QrBarcodePage() {
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  const optionCard = (
+    group: string,
+    opt: { value: string; label: string; desc: string },
+    selected: boolean,
+    onSelect: () => void,
+  ) => (
+    <label key={opt.value} className={`radio-card${selected ? ' active' : ''}`}>
+      <input type="radio" name={group} value={opt.value} checked={selected} onChange={onSelect} />
+      <span className="radio-copy">
+        <span className="radio-title">{opt.label}</span>
+        <span className="radio-desc">{opt.desc}</span>
+      </span>
+    </label>
+  );
+
   return (
     <div className="feature-page">
       <PageHeader
@@ -255,7 +270,6 @@ export function QrBarcodePage() {
         description="Generate custom QR codes and barcodes"
       />
 
-      {/* ── Tabs ────────────────────────────────────────────────────────────── */}
       <div className="tabs" role="tablist" aria-label="QR and barcode modes">
         <button
           type="button"
@@ -279,223 +293,153 @@ export function QrBarcodePage() {
         </button>
       </div>
 
-      {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="page-body">
-        <div style={{ maxWidth: 840, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24 }}>
-          
-          {/* Left Column: Form */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="form-col form-col--wide form-col--two">
+
+          {/* Left column: what to encode and how */}
+          <div className="col-stack">
             {activeTab === 'qr' ? (
               <>
-                <div className="card">
-                  <label className="input-label" htmlFor="qr-content">Content</label>
-                  <textarea
-                    id="qr-content"
-                    className="input"
-                    value={qrContent}
-                    onChange={(e) => setQrContent(e.target.value)}
-                    placeholder="Enter URL, text, or data..."
-                    rows={4}
-                    style={{ resize: 'vertical' }}
-                  />
-                </div>
-
-                <div className="card">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <label className="input-label" style={{ margin: 0 }}>Size</label>
-                    <span className="badge badge-neutral">{qrSize}</span>
+                <div className="card card--flush">
+                  <div className="card-head">
+                    <span className="card-head-title">
+                      <label htmlFor="qr-content">Content</label>
+                    </span>
                   </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="20"
-                    value={qrSize}
-                    onChange={(e) => setQrSize(parseInt(e.target.value, 10))}
-                    style={{
-                      width: '100%',
-                      accentColor: 'var(--accent)',
-                      height: 4,
-                    }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 11, color: 'var(--on-surface-variant)' }}>
-                    <span>Small (1)</span>
-                    <span>Large (20)</span>
+                  <div className="card-body">
+                    <textarea
+                      id="qr-content"
+                      className="input"
+                      value={qrContent}
+                      onChange={(e) => setQrContent(e.target.value)}
+                      placeholder="Enter URL, text, or data..."
+                      rows={5}
+                    />
                   </div>
                 </div>
 
-                <div className="card">
-                  <label className="input-label">Error Correction</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                    {QR_EC_OPTIONS.map((opt) => (
-                      <label
-                        key={opt.value}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '10px 14px',
-                          borderRadius: 'var(--radius-md)',
-                          border: `1px solid ${qrErrorCorrection === opt.value ? 'var(--accent)' : 'var(--outline-variant)'}`,
-                          background: qrErrorCorrection === opt.value ? 'var(--accent-dim)' : 'var(--surface-container)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="errorCorrection"
-                          value={opt.value}
-                          checked={qrErrorCorrection === opt.value}
-                          onChange={() => setQrErrorCorrection(opt.value)}
-                          style={{ accentColor: 'var(--accent)' }}
-                        />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{opt.label}</div>
-                          <div style={{ fontSize: 11, color: 'var(--on-surface-variant)' }}>{opt.desc}</div>
-                        </div>
-                      </label>
-                    ))}
+                <div className="card card--flush">
+                  <div className="card-head">
+                    <span className="card-head-title">Error correction</span>
+                  </div>
+                  <div className="card-body">
+                    <div className="opt-grid" role="radiogroup" aria-label="Error correction">
+                      {QR_EC_OPTIONS.map((opt) => optionCard(
+                        'errorCorrection', opt, qrErrorCorrection === opt.value,
+                        () => setQrErrorCorrection(opt.value),
+                      ))}
+                    </div>
+                    <small className="hint">Higher levels survive more damage but hold less content.</small>
                   </div>
                 </div>
               </>
             ) : (
               <>
-                <div className="card">
-                  <label className="input-label" htmlFor="barcode-content">Content</label>
-                  <input
-                    id="barcode-content"
-                    className="input"
-                    type="text"
-                    value={barcodeContent}
-                    onChange={(e) => setBarcodeContent(e.target.value)}
-                    placeholder="Enter barcode data..."
-                  />
-                  {barcodeType.startsWith('ean') && (
-                    <p className="text-muted text-body-sm" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                      <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-                      <span>
-                        {barcodeType === 'ean13' 
-                          ? 'EAN-13 requires 12 or 13 numeric digits. The 13th digit is automatically generated as a checksum.' 
-                          : 'EAN-8 requires 7 or 8 numeric digits. The 8th digit is automatically generated as a checksum.'}
-                      </span>
-                    </p>
-                  )}
+                <div className="card card--flush">
+                  <div className="card-head">
+                    <span className="card-head-title">
+                      <label htmlFor="barcode-content">Content</label>
+                    </span>
+                  </div>
+                  <div className="card-body">
+                    <input
+                      id="barcode-content"
+                      className="input"
+                      type="text"
+                      value={barcodeContent}
+                      onChange={(e) => setBarcodeContent(e.target.value)}
+                      placeholder="Enter barcode data..."
+                    />
+                    {barcodeType.startsWith('ean') && (
+                      <small className="hint hint--icon">
+                        <Info size={13} aria-hidden="true" />
+                        <span>
+                          {barcodeType === 'ean13'
+                            ? 'EAN-13 requires 12 or 13 numeric digits. The 13th digit is automatically generated as a checksum.'
+                            : 'EAN-8 requires 7 or 8 numeric digits. The 8th digit is automatically generated as a checksum.'}
+                        </span>
+                      </small>
+                    )}
+                  </div>
                 </div>
 
-                <div className="card">
-                  <label className="input-label">Barcode Type</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 4 }}>
-                    {BARCODE_TYPES.map((opt) => (
-                      <label
-                        key={opt.value}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          padding: '10px 14px',
-                          borderRadius: 'var(--radius-md)',
-                          border: `1px solid ${barcodeType === opt.value ? 'var(--accent)' : 'var(--outline-variant)'}`,
-                          background: barcodeType === opt.value ? 'var(--accent-dim)' : 'var(--surface-container)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="barcodeType"
-                          value={opt.value}
-                          checked={barcodeType === opt.value}
-                          onChange={() => setBarcodeType(opt.value)}
-                          style={{ accentColor: 'var(--accent)' }}
-                        />
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{opt.label}</div>
-                          <div style={{ fontSize: 11, color: 'var(--on-surface-variant)' }}>{opt.desc}</div>
-                        </div>
-                      </label>
-                    ))}
+                <div className="card card--flush">
+                  <div className="card-head">
+                    <span className="card-head-title">Barcode type</span>
+                  </div>
+                  <div className="card-body">
+                    <div className="opt-grid" role="radiogroup" aria-label="Barcode type">
+                      {BARCODE_TYPES.map((opt) => optionCard(
+                        'barcodeType', opt, barcodeType === opt.value,
+                        () => setBarcodeType(opt.value),
+                      ))}
+                    </div>
                   </div>
                 </div>
               </>
             )}
 
-            <div className="card">
-              <label className="input-label">Export Format</label>
-              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                {FORMAT_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    style={{
-                      flex: 1,
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '10px 14px',
-                      borderRadius: 'var(--radius-md)',
-                      border: `1px solid ${format === opt.value ? 'var(--accent)' : 'var(--outline-variant)'}`,
-                      background: format === opt.value ? 'var(--accent-dim)' : 'var(--surface-container)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="format"
-                      value={opt.value}
-                      checked={format === opt.value}
-                      onChange={() => setFormat(opt.value as 'png' | 'svg')}
-                      style={{ margin: 0, accentColor: 'var(--accent)' }}
-                    />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{opt.label}</span>
-                  </label>
-                ))}
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title">Export format</span>
+              </div>
+              <div className="card-body">
+                <div className="opt-grid" role="radiogroup" aria-label="Export format">
+                  {FORMAT_OPTIONS.map((opt) => optionCard(
+                    'format', opt, format === opt.value,
+                    () => setFormat(opt.value as 'png' | 'svg'),
+                  ))}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Preview & Download */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 340 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Preview</h3>
-              
-              <div style={{
-                flex: 1,
-                /* QR and barcode images stay white in every theme. */
-                background: '#ffffff',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid var(--outline-variant)',
-                padding: 24,
-                position: 'relative',
-                overflow: 'hidden'
-              }}>
-                {isLoading ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: 'var(--on-surface-variant)' }}>
-                    <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                    <span style={{ fontSize: 13 }}>Generating...</span>
-                  </div>
-                ) : previewData ? (
-                  <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-                    {/* All formats (PNG, SVG) rendered via <img> with Blob URL */}
-                    <img 
-                      src={previewData.url} 
-                      alt="Preview" 
-                      style={{ maxWidth: '100%', maxHeight: 250, objectFit: 'contain' }} 
+          {/* Right column: preview and download */}
+          <div className="col-stack">
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title">Preview</span>
+              </div>
+              <div className="card-body">
+                <div className="preview-box">
+                  {isLoading ? (
+                    <div className="preview-empty">
+                      <Loader2 size={24} className="spin" />
+                      <span>Generating...</span>
+                    </div>
+                  ) : previewData ? (
+                    <img src={previewData.url} alt="Preview" />
+                  ) : (
+                    <div className="preview-empty">
+                      {activeTab === 'qr' ? <QrCode size={32} aria-hidden="true" /> : <Barcode size={32} aria-hidden="true" />}
+                      <span>Enter content to see preview</span>
+                    </div>
+                  )}
+                </div>
+
+                {activeTab === 'qr' && (
+                  <div className="field">
+                    <label htmlFor="qr-size-slider">
+                      Size <span className="chip">{qrSize}</span>
+                    </label>
+                    <input
+                      id="qr-size-slider"
+                      className="range"
+                      type="range"
+                      min="1"
+                      max="20"
+                      value={qrSize}
+                      onChange={(e) => setQrSize(parseInt(e.target.value, 10))}
                     />
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', color: 'var(--on-surface-variant)' }}>
-                    {activeTab === 'qr' ? <QrCode size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} /> : <Barcode size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />}
-                    <p style={{ fontSize: 13 }}>Enter content to see preview</p>
+                    <div className="range-scale">
+                      <span>Small (1)</span>
+                      <span>Large (20)</span>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {/* Output filename input */}
-                <div>
-                  <label className="input-label" htmlFor="qr-output-name"
-                    style={{ fontSize: 12, marginBottom: 4 }}>Output filename</label>
+                <div className="field">
+                  <label htmlFor="qr-output-name">Output filename</label>
                   <input
                     id="qr-output-name"
                     className="input"
@@ -503,15 +447,12 @@ export function QrBarcodePage() {
                     value={outputFilename}
                     onChange={(e) => setOutputFilename(e.target.value)}
                     placeholder={`${activeTab === 'qr' ? 'qrcode' : 'barcode'}.${format}`}
-                    style={{ fontSize: 13, padding: '7px 10px' }}
                   />
                 </div>
 
-                {/* Download + Open Folder — stacked full-width for even symmetry */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="stack-actions">
                   <button
                     className="btn btn-primary"
-                    style={{ width: '100%' }}
                     onClick={handleDownload}
                     disabled={!previewData || isLoading}
                   >
@@ -520,7 +461,6 @@ export function QrBarcodePage() {
                   </button>
                   <button
                     className="btn btn-secondary"
-                    style={{ width: '100%' }}
                     onClick={() => openOutputFolder()}
                     disabled={!previewData || isLoading}
                   >
@@ -534,9 +474,6 @@ export function QrBarcodePage() {
 
         </div>
       </div>
-
-      
-
     </div>
   );
 }

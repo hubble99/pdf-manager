@@ -67,6 +67,19 @@ function rangeInput() {
   return screen.getByLabelText('Selected pages') as HTMLInputElement;
 }
 
+/** One thumbnail cell in the page picker; its name is "Page N" plus ", selected" when chosen. */
+function pageCell(page: number) {
+  return screen.getByRole('button', { name: new RegExp(`^Page ${page}(,|$)`) });
+}
+
+function pageCells() {
+  return screen.getAllByRole('button', { name: /^Page \d+(,|$)/ });
+}
+
+function selectedPageCells() {
+  return pageCells().filter((cell) => cell.getAttribute('aria-pressed') === 'true' || /selected/.test(cell.getAttribute('aria-label') ?? ''));
+}
+
 function convertButton() {
   return document.getElementById('converter-run') as HTMLButtonElement;
 }
@@ -110,10 +123,10 @@ describe('unified converter workspace', () => {
     expect(screen.getByText('All 5 pages will be exported.')).toBeInTheDocument();
     expect(convertButton()).toBeEnabled();
 
-    const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(5);
-    checkboxes.forEach((box) => expect(box).toBeDisabled());
-    checkboxes.forEach((box) => expect(box).toBeChecked());
+    const cells = pageCells();
+    expect(cells).toHaveLength(5);
+    cells.forEach((cell) => expect(cell).toBeDisabled());
+    expect(selectedPageCells()).toHaveLength(5);
   });
 
   it('derives image direction and shows only image controls', async () => {
@@ -141,7 +154,7 @@ describe('unified converter workspace', () => {
     fireEvent.change(rangeInput(), { target: { value: '1, 3-5, 4' } });
     expect(screen.getByText('Selected: 4 of 5 pages')).toBeInTheDocument();
     expect(convertButton()).toBeEnabled();
-    expect(screen.getAllByRole('checkbox').filter((box) => (box as HTMLInputElement).checked)).toHaveLength(4);
+    expect(selectedPageCells()).toHaveLength(4);
   });
 
   it.each(['', '0', '9', '4-2', '1,wrong'])('blocks conversion for the invalid draft %j', async (draft) => {
@@ -156,16 +169,15 @@ describe('unified converter workspace', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
-  it('keeps zero selected after the final checkbox is cleared', async () => {
+  it('keeps zero selected after the final page is cleared', async () => {
     renderConverter();
     await addFiles([pdf()]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
     fireEvent.change(rangeInput(), { target: { value: '3' } });
 
-    const checkbox = screen.getByRole('checkbox', { name: /Include page 3/i }) as HTMLInputElement;
-    expect(checkbox).toBeChecked();
-    fireEvent.click(checkbox);
+    expect(pageCell(3)).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(pageCell(3));
 
     expect(rangeInput()).toHaveValue('');
     expect(convertButton()).toBeDisabled();
@@ -173,34 +185,32 @@ describe('unified converter workspace', () => {
     expect(screen.getByText(/Choose at least one page/)).toBeInTheDocument();
   });
 
-  it('synchronizes range text, checkbox state, and count from a checkbox edit', async () => {
+  it('synchronizes range text, page cells, and count from a grid edit', async () => {
     renderConverter();
     await addFiles([pdf()]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Include page 2/i }));
-    fireEvent.click(screen.getByRole('checkbox', { name: /Include page 5/i }));
+    fireEvent.click(pageCell(2));
+    fireEvent.click(pageCell(5));
 
     expect(rangeInput()).toHaveValue('2, 5');
     expect(screen.getByText('Selected: 2 of 5 pages')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /Include page 2/i })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /Include page 3/i })).not.toBeChecked();
+    expect(pageCell(2)).toHaveAttribute('aria-pressed', 'true');
+    expect(pageCell(3)).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('does not change export membership when previewing an unselected page', async () => {
+  it('does not let the grid change the export while All pages is chosen', async () => {
     renderConverter();
     await addFiles([pdf()]);
     await screen.findByText(/Total: 5 pages/);
-    fireEvent.click(pageMode('Selected pages'));
-    fireEvent.change(rangeInput(), { target: { value: '2' } });
-    expect(screen.getByText('Selected: 1 of 5 pages')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview page 4' }));
+    fireEvent.click(pageCell(4));
 
-    expect(screen.getByText('Selected: 1 of 5 pages')).toBeInTheDocument();
-    expect(rangeInput()).toHaveValue('2');
-    expect(screen.getByRole('button', { name: 'Preview page 4' })).toHaveAttribute('aria-current', 'page');
+    expect(pageMode('All pages')).toBeChecked();
+    expect(rangeInput()).toHaveValue('');
+    expect(screen.getByText('All 5 pages will be exported.')).toBeInTheDocument();
+    expect(selectedPageCells()).toHaveLength(5);
   });
 
   it('retains a custom draft when toggling modes and ignores it for All pages', async () => {

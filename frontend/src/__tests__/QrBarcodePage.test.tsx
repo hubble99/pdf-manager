@@ -64,7 +64,7 @@ describe('QrBarcodePage', () => {
     fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1), { timeout: 3000 });
 
-    fireEvent.click(screen.getByLabelText('SVG'));
+    fireEvent.click(screen.getByRole('radio', { name: /^SVG/ }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2), { timeout: 3000 });
     await waitFor(() => expect(screen.getByAltText('Preview')).toHaveAttribute('src', 'blob:preview-2'));
 

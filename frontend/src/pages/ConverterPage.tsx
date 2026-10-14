@@ -4,8 +4,9 @@ import {
   ArrowUp,
   CheckCircle,
   FileImage,
+  FileText,
   FolderOpen,
-  Info,
+  Images,
   Loader2,
   RotateCw,
   Trash2,
@@ -13,14 +14,12 @@ import {
   X,
 } from 'lucide-react';
 import { Filename } from '../components/Filename';
-import { PdfThumbnail } from '../components/PdfThumbnail';
-import { PreviewPanel, ThumbnailStrip } from '../components/preview';
-import { PageHeader, StateView } from '../components/ui';
+import { PageThumbGrid } from '../components/preview';
+import { PageHeader } from '../components/ui';
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
 import { DPI_OPTIONS, FORMAT_OPTIONS, PAGE_SIZE_OPTIONS, formatBytes } from '../features/converter/options';
 import { openOutputFolder } from '../utils/tauriDialog';
-import type { QuarterTurn } from '../features/converter/batch';
 
 function FlipIcon() {
   return (
@@ -50,8 +49,7 @@ export function ConverterPage() {
   const {
     kind, pdfFile, images, batchError, error, result, isConverting,
     pdfInfoState, selection, selectionMode, selectionDraft, pdfBlockReason,
-    format, dpi, pdfOutputName, pageSize, imageOutputName,
-    previewPage, activeImage, zoom, accept,
+    format, dpi, pdfOutputName, pageSize, imageOutputName, accept,
   } = converter;
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +79,107 @@ export function ConverterPage() {
   const canConvertPdf = kind === 'pdf' && pdfInfoState === 'ready' && selection.valid && selection.pages.size > 0 && !isConverting;
   const canConvertImages = kind === 'images' && images.length > 0 && !isConverting;
   const canConvert = kind === 'pdf' ? canConvertPdf : canConvertImages;
+  const totalPages = converter.pdfInfo?.total_pages ?? 0;
+  const formatOption = FORMAT_OPTIONS.find((option) => option.value === format);
+  const dpiOption = DPI_OPTIONS.find((option) => option.value === dpi);
+
+  const dropProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => openPicker(),
+    onKeyDown: (event: React.KeyboardEvent) => event.key === 'Enter' && openPicker(),
+    onDragOver: (event: React.DragEvent) => event.preventDefault(),
+    onDrop: (event: React.DragEvent) => {
+      event.preventDefault();
+      converter.addFiles(Array.from(event.dataTransfer.files));
+    },
+  };
+
+  const fileInput = (
+    <input
+      ref={inputRef}
+      id="converter-file-input"
+      type="file"
+      accept={accept}
+      multiple
+      className="converter-file-input"
+      onChange={handleInputChange}
+      tabIndex={-1}
+      aria-hidden="true"
+    />
+  );
+
+  const outcome = (
+    <>
+      {batchError && (
+        <p className="converter-message converter-message--error" role="alert">{batchError}</p>
+      )}
+
+      {error && (
+        <div className="converter-message converter-message--error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={converter.dismissError}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {result && (
+        <div className="card status-card status-card--ok">
+          <CheckCircle size={22} aria-hidden="true" />
+          <div className="status-card-copy">
+            <b>Download started automatically</b>
+            <small><Filename name={result.filename} /> · {result.detail}</small>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            id="converter-open-folder"
+            onClick={() => openOutputFolder()}
+            title="Open download folder"
+          >
+            <FolderOpen size={14} aria-hidden="true" />
+            Open Folder
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  const actions = kind !== 'empty' && (
+    <div className="form-actions">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        id="converter-clear"
+        onClick={converter.clear}
+        disabled={isConverting}
+      >
+        {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
+        {kind === 'images' ? 'Clear All' : 'Clear'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        id="converter-run"
+        onClick={converter.convert}
+        disabled={!canConvert}
+        title={canConvert ? undefined : pdfBlockReason ?? 'Add files to convert'}
+      >
+        {isConverting ? (
+          <>
+            <Loader2 size={15} className="converter-spin" aria-hidden="true" />
+            {kind === 'pdf' ? 'Exporting…' : 'Converting…'}
+          </>
+        ) : (
+          <>
+            <FileImage size={15} aria-hidden="true" />
+            {kind === 'pdf' ? 'Export & Download' : 'Convert & Download'}
+          </>
+        )}
+      </button>
+    </div>
+  );
 
   return (
     <div className="feature-page">
@@ -90,163 +189,125 @@ export function ConverterPage() {
         description={HEADER_COPY[kind].description}
       />
 
-      <div className="page-body page-body--workspace">
-        <div className="feature-split-layout">
-          <section className="feature-controls">
-            <input
-              ref={inputRef}
-              id="converter-file-input"
-              type="file"
-              accept={accept}
-              multiple
-              className="converter-file-input"
-              onChange={handleInputChange}
-              tabIndex={-1}
-              aria-hidden="true"
-            />
+      <div className="page-body">
+        {fileInput}
 
-            {kind === 'empty' && (
-              <div
-                id="converter-drop-zone"
-                className="drop-zone drop-zone--compact"
-                role="button"
-                tabIndex={0}
-                onClick={() => openPicker()}
-                onKeyDown={(event) => event.key === 'Enter' && openPicker()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  converter.addFiles(Array.from(event.dataTransfer.files));
-                }}
-                aria-label="Drop one PDF or image files here, or press Enter to browse"
-              >
-                <Upload className="drop-zone-icon" aria-hidden="true" />
-                <p className="drop-zone-title">Drop a PDF or images here</p>
-                <p className="drop-zone-sub">or click to browse · One PDF, or JPG / PNG / WEBP images</p>
-                <div className="converter-badges">
-                  <span className="badge badge-neutral">PDF → Images</span>
-                  <span className="badge badge-neutral">Images → PDF</span>
-                </div>
+        {/* ── Nothing added yet ─────────────────────────────────────────────── */}
+        {kind === 'empty' && (
+          <div className="form-col">
+            <div
+              id="converter-drop-zone"
+              className="drop-zone"
+              aria-label="Drop one PDF or image files here, or press Enter to browse"
+              {...dropProps}
+            >
+              <Upload className="drop-zone-icon" aria-hidden="true" />
+              <p className="drop-zone-title">Drop a PDF or images here</p>
+              <p className="drop-zone-sub">or click to browse · One PDF, or JPG / PNG / WEBP images</p>
+              <div className="converter-badges">
+                <span className="badge badge-neutral">PDF → Images</span>
+                <span className="badge badge-neutral">Images → PDF</span>
               </div>
-            )}
-
-            {kind === 'images' && (
-              <div
-                id="converter-drop-zone"
-                className="drop-zone drop-zone--compact"
-                role="button"
-                tabIndex={0}
-                onClick={() => openPicker()}
-                onKeyDown={(event) => event.key === 'Enter' && openPicker()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  converter.addFiles(Array.from(event.dataTransfer.files));
-                }}
-                aria-label="Add more images, or press Enter to browse"
-              >
-                <Upload className="drop-zone-icon" aria-hidden="true" />
-                <p className="drop-zone-title">Add more images</p>
-                <p className="drop-zone-sub">JPG, JPEG, PNG, WEBP, BMP and TIFF can be mixed</p>
-              </div>
-            )}
-
-            {kind === 'pdf' && pdfFile && (
-              <div className="card converter-file">
-                <PdfThumbnail file={pdfFile} />
-                <div className="converter-file-copy">
-                  <Filename name={pdfFile.name} className="file-item-name" />
-                  <div className="file-item-meta converter-file-meta">
-                    <span>{formatBytes(pdfFile.size)}</span>
-                    {pdfInfoState === 'loading' && (
-                      <Loader2 size={12} className="converter-spin" aria-hidden="true" />
-                    )}
-                    {pdfInfoState === 'ready' && (
-                      <span className="badge badge-info">
-                        <Info size={11} aria-hidden="true" /> {converter.pdfInfo?.total_pages} pages
-                      </span>
-                    )}
-                    {pdfInfoState === 'error' && <span className="badge badge-error">Page count unavailable</span>}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => openPicker('replace')}
-                  disabled={isConverting}
-                  id="converter-replace-file"
-                >
-                  Replace
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-icon btn-sm converter-danger"
-                  onClick={converter.clear}
-                  disabled={isConverting}
-                  aria-label="Remove PDF"
-                  id="converter-remove-file"
-                >
-                  <X size={15} aria-hidden="true" />
-                </button>
-              </div>
-            )}
-
+            </div>
             {batchError && (
               <p className="converter-message converter-message--error" role="alert">{batchError}</p>
             )}
+            <p className="empty-hint">
+              <strong>No files yet</strong>. The conversion direction is detected from what you add.
+            </p>
+          </div>
+        )}
 
-            {kind === 'empty' && (
-              <StateView
-                icon={FileImage}
-                title="No files yet"
-                description="The conversion direction is detected from what you add."
-                compact
-              />
-            )}
-
-            {kind === 'pdf' && (
-              <>
-                <div className="card">
-                  <div className="converter-card-head">
-                    <span className="input-label" id="converter-pages-label">Pages</span>
-                    {pdfInfoState === 'ready' && (
-                      <span className="badge badge-info">
-                        <Info size={11} aria-hidden="true" /> Total: {converter.pdfInfo?.total_pages} pages
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    className="option-grid option-grid--two"
-                    role="radiogroup"
-                    aria-labelledby="converter-pages-label"
+        {/* ── One PDF: pick pages, set the output ───────────────────────────── */}
+        {kind === 'pdf' && pdfFile && (
+          <div className="form-col form-col--split">
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title">
+                  <FileText size={16} className="card-head-icon" aria-hidden="true" />
+                  <Filename name={pdfFile.name} className="file-item-name" />
+                  <span className="chip">{formatBytes(pdfFile.size)}</span>
+                  {pdfInfoState === 'loading' && (
+                    <Loader2 size={12} className="converter-spin" aria-hidden="true" />
+                  )}
+                  {pdfInfoState === 'ready' && (
+                    <span className="chip">Total: {totalPages} pages</span>
+                  )}
+                  {pdfInfoState === 'error' && <span className="badge badge-error">Page count unavailable</span>}
+                </span>
+                <span className="card-head-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => openPicker('replace')}
+                    disabled={isConverting}
+                    id="converter-replace-file"
                   >
-                    {(['all', 'selected'] as const).map((mode) => (
-                      <label
-                        key={mode}
-                        htmlFor={`converter-pages-${mode}`}
-                        className={`option-card${selectionMode === mode ? ' option-card--selected' : ''}`}
-                      >
-                        <input
-                          id={`converter-pages-${mode}`}
-                          type="radio"
-                          name="converter-page-mode"
-                          value={mode}
-                          checked={selectionMode === mode}
-                          onChange={() => converter.setSelectionMode(mode)}
-                          disabled={pdfInfoState !== 'ready' || isConverting}
-                        />
-                        <span className="option-card-copy">
-                          <span className="option-card-label">{mode === 'all' ? 'All pages' : 'Selected pages'}</span>
-                          <span className="option-card-desc">
-                            {mode === 'all' ? 'Export every page' : 'Choose pages or ranges'}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                    Replace
+                  </button>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={converter.clear}
+                    disabled={isConverting}
+                    aria-label="Remove PDF"
+                    id="converter-remove-file"
+                  >
+                    Remove
+                  </button>
+                </span>
+              </div>
+              {pdfInfoState === 'ready' && totalPages > 0 ? (
+                <PageThumbGrid
+                  file={pdfFile}
+                  totalPages={totalPages}
+                  selected={selection.pages}
+                  interactive={selectionEditable}
+                  onToggle={converter.togglePageSelection}
+                />
+              ) : (
+                <p className="empty-hint">
+                  {pdfInfoState === 'loading' ? 'Reading the document…' : 'Pages are unavailable for this file.'}
+                </p>
+              )}
+            </div>
 
-                  <div className="converter-selection">
-                    <label className="input-label" htmlFor="converter-page-ranges">Selected pages</label>
+            <div className="col-stack">
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title" id="converter-pages-label">Pages</span>
+                  <span className="card-head-actions">
+                    {pdfInfoState === 'ready' && <span>{selection.pages.size} of {totalPages} selected</span>}
+                  </span>
+                </div>
+                <div role="radiogroup" aria-labelledby="converter-pages-label">
+                  {(['all', 'selected'] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      htmlFor={`converter-pages-${mode}`}
+                      className={`mode-row${selectionMode === mode ? ' active' : ''}`}
+                    >
+                      <input
+                        id={`converter-pages-${mode}`}
+                        type="radio"
+                        name="converter-page-mode"
+                        value={mode}
+                        checked={selectionMode === mode}
+                        onChange={() => converter.setSelectionMode(mode)}
+                        disabled={pdfInfoState !== 'ready' || isConverting}
+                      />
+                      <span className="radio-copy">
+                        <span className="radio-title">{mode === 'all' ? 'All pages' : 'Selected pages'}</span>
+                        <span className="radio-desc">
+                          {mode === 'all' ? 'Export every page' : 'Choose pages or ranges'}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="card-body">
+                  <div className="field">
+                    <label htmlFor="converter-page-ranges">Selected pages</label>
                     <input
                       id="converter-page-ranges"
                       className="input"
@@ -260,214 +321,226 @@ export function ConverterPage() {
                       inputMode="text"
                       autoComplete="off"
                     />
-                    <p
+                    <small
                       id="converter-page-help"
-                      className={`converter-help${showSelectionError ? ' converter-help--error' : ''}`}
+                      className={showSelectionError ? 'error' : undefined}
                       role={showSelectionError ? 'alert' : undefined}
                     >
                       {showSelectionError
                         ? selection.error
                         : selectionMode === 'all'
-                          ? `All ${converter.pdfInfo?.total_pages ?? 0} pages will be exported.`
-                          : `Selected: ${selection.pages.size} of ${converter.pdfInfo?.total_pages ?? 0} pages`}
-                    </p>
+                          ? `All ${totalPages} pages will be exported.`
+                          : `Selected: ${selection.pages.size} of ${totalPages} pages`}
+                    </small>
                   </div>
                 </div>
+              </div>
 
-                <div className="option-grid option-grid--two option-grid--cards">
-                  <div className="card">
-                    <span className="input-label">Image Format</span>
-                    <div className="option-stack">
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title">
+                    <Images size={16} className="card-head-icon" aria-hidden="true" />
+                    Output settings
+                  </span>
+                </div>
+                <div className="card-body">
+                  <div className="setting-row">
+                    <span className="setting-label" id="converter-format-label">Format</span>
+                    <div className="seg" role="group" aria-labelledby="converter-format-label">
                       {FORMAT_OPTIONS.map((option) => (
-                        <label
-                          key={option.value}
-                          htmlFor={`converter-format-${option.value}`}
-                          className={`option-card${format === option.value ? ' option-card--selected' : ''}`}
-                        >
-                          <input
-                            id={`converter-format-${option.value}`}
-                            type="radio"
-                            name="converter-format"
-                            value={option.value}
-                            checked={format === option.value}
-                            onChange={() => converter.setFormat(option.value)}
-                            disabled={isConverting}
-                          />
-                          <span className="option-card-copy">
-                            <span className="option-card-label">{option.label}</span>
-                            <span className="option-card-desc">{option.desc}</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="card">
-                    <span className="input-label">Resolution (DPI)</span>
-                    <div className="option-stack">
-                      {DPI_OPTIONS.map((option) => (
-                        <label
-                          key={option.value}
-                          htmlFor={`converter-dpi-${option.value}`}
-                          className={`option-card${dpi === option.value ? ' option-card--selected' : ''}`}
-                        >
-                          <input
-                            id={`converter-dpi-${option.value}`}
-                            type="radio"
-                            name="converter-dpi"
-                            value={option.value}
-                            checked={dpi === option.value}
-                            onChange={() => converter.setDpi(option.value)}
-                            disabled={isConverting}
-                          />
-                          <span className="option-card-copy">
-                            <span className="option-card-label">{option.label}</span>
-                            <span className="option-card-desc">{option.desc}</span>
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <label className="input-label" htmlFor="converter-pdf-output">Output Filename</label>
-                  <input
-                    id="converter-pdf-output"
-                    className="input"
-                    type="text"
-                    value={pdfOutputName}
-                    onChange={(event) => converter.setPdfOutputName(event.target.value)}
-                    placeholder="export"
-                    disabled={isConverting}
-                  />
-                  <p className="converter-help">The .png, .jpg or .zip extension is added automatically.</p>
-                </div>
-              </>
-            )}
-
-            {kind === 'images' && (
-              <>
-                <div className="card">
-                  <div className="converter-card-head">
-                    <span className="input-label" id="converter-images-label">Images to Convert</span>
-                    <span className="badge badge-info">
-                      {images.length} file{images.length === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  <div className="file-list" aria-labelledby="converter-images-label">
-                    {images.map((entry, index) => (
-                      <div
-                        key={entry.id}
-                        className={`file-item${activeImage?.id === entry.id ? ' file-item--active' : ''}`}
-                      >
                         <button
+                          key={option.value}
                           type="button"
-                          className="converter-image-pick"
-                          onClick={() => converter.setActiveImageId(entry.id)}
-                          aria-label={`Preview ${entry.file.name}`}
-                        >
-                          <ConverterThumbnail
-                            file={entry.file}
-                            rotation={entry.rotation}
-                            flipH={entry.flipH}
-                          />
-                          <span className="badge badge-neutral converter-image-index">#{index + 1}</span>
-                        </button>
-                        <div className="file-item-info">
-                          <Filename name={entry.file.name} className="file-item-name" />
-                          <div className="file-item-meta">{formatBytes(entry.file.size)}</div>
-                        </div>
-                        <div className="file-item-actions">
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-sm"
-                            onClick={() => converter.rotateImage(entry.id)}
-                            disabled={isConverting}
-                            aria-label={`Rotate ${entry.file.name} 90 degrees`}
-                            title="Rotate 90°"
-                          >
-                            <RotateCw size={14} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-sm"
-                            onClick={() => converter.flipImage(entry.id)}
-                            disabled={isConverting}
-                            aria-label={`Mirror ${entry.file.name} horizontally`}
-                            title="Mirror horizontally"
-                          >
-                            <FlipIcon />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-sm"
-                            onClick={() => converter.moveImage(entry.id, 'up')}
-                            disabled={isConverting || index === 0}
-                            aria-label={`Move ${entry.file.name} up`}
-                            id={`converter-move-up-${index}`}
-                          >
-                            <ArrowUp size={14} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-sm"
-                            onClick={() => converter.moveImage(entry.id, 'down')}
-                            disabled={isConverting || index === images.length - 1}
-                            aria-label={`Move ${entry.file.name} down`}
-                            id={`converter-move-down-${index}`}
-                          >
-                            <ArrowDown size={14} aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-icon btn-sm converter-danger"
-                            onClick={() => converter.removeImage(entry.id)}
-                            disabled={isConverting}
-                            aria-label={`Remove ${entry.file.name}`}
-                            id={`converter-remove-${index}`}
-                          >
-                            <X size={14} aria-hidden="true" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="card">
-                  <span className="input-label" id="converter-page-size-label">Page Size · applies to all images</span>
-                  <div
-                    className="option-grid option-grid--two"
-                    role="radiogroup"
-                    aria-labelledby="converter-page-size-label"
-                  >
-                    {PAGE_SIZE_OPTIONS.map((option) => (
-                      <label
-                        key={option.value}
-                        htmlFor={`converter-size-${option.value}`}
-                        className={`option-card${pageSize === option.value ? ' option-card--selected' : ''}${option.value === 'match_image' ? ' option-card--wide' : ''}`}
-                      >
-                        <input
-                          id={`converter-size-${option.value}`}
-                          type="radio"
-                          name="converter-page-size"
-                          value={option.value}
-                          checked={pageSize === option.value}
-                          onChange={() => converter.setPageSize(option.value)}
+                          id={`converter-format-${option.value}`}
+                          aria-pressed={format === option.value}
+                          className={format === option.value ? 'active' : ''}
                           disabled={isConverting}
-                        />
-                        <span className="option-card-copy">
-                          <span className="option-card-label">{option.label}</span>
-                          <span className="option-card-desc">{option.desc}</span>
-                        </span>
-                      </label>
-                    ))}
+                          onClick={() => converter.setFormat(option.value)}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="setting-row">
+                    <span className="setting-label" id="converter-dpi-label">Resolution</span>
+                    <div className="seg" role="group" aria-labelledby="converter-dpi-label">
+                      {DPI_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          id={`converter-dpi-${option.value}`}
+                          aria-pressed={dpi === option.value}
+                          className={dpi === option.value ? 'active' : ''}
+                          disabled={isConverting}
+                          onClick={() => converter.setDpi(option.value)}
+                        >
+                          {option.value}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="setting-unit">DPI</span>
+                  </div>
+                  <small className="hint">
+                    {dpiOption?.desc}. {formatOption?.desc}.
+                  </small>
+                </div>
+              </div>
+
+              <div className="card card--flush">
+                <div className="card-body">
+                  <div className="field">
+                    <label htmlFor="converter-pdf-output">Output Filename</label>
+                    <input
+                      id="converter-pdf-output"
+                      className="input"
+                      type="text"
+                      value={pdfOutputName}
+                      onChange={(event) => converter.setPdfOutputName(event.target.value)}
+                      placeholder="export"
+                      disabled={isConverting}
+                    />
+                    <small>The .png, .jpg or .zip extension is added automatically.</small>
                   </div>
                 </div>
+              </div>
 
-                <div className="card">
-                  <label className="input-label" htmlFor="converter-image-output">Output Filename</label>
+              {outcome}
+              {actions}
+            </div>
+          </div>
+        )}
+
+        {/* ── Images: order them, pick a page size ──────────────────────────── */}
+        {kind === 'images' && (
+          <div className="form-col">
+            <div
+              id="converter-drop-zone"
+              className="drop-zone drop-zone--compact"
+              aria-label="Add more images, or press Enter to browse"
+              {...dropProps}
+            >
+              <Upload className="drop-zone-icon" aria-hidden="true" />
+              <p className="drop-zone-title">Add more images</p>
+              <p className="drop-zone-sub">JPG, JPEG, PNG, WEBP, BMP and TIFF can be mixed</p>
+            </div>
+
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title">
+                  <Images size={16} className="card-head-icon" aria-hidden="true" />
+                  <span id="converter-images-label">Images to Convert</span>
+                  <span className="chip">
+                    {images.length} file{images.length === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="card-head-actions">Use ↑ ↓ to reorder</span>
+              </div>
+              <div className="file-list" aria-labelledby="converter-images-label">
+                {images.map((entry, index) => (
+                  <div key={entry.id} className="file-item">
+                    <div className="converter-image-pick">
+                      <ConverterThumbnail
+                        file={entry.file}
+                        rotation={entry.rotation}
+                        flipH={entry.flipH}
+                      />
+                      <span className="badge badge-neutral converter-image-index">#{index + 1}</span>
+                    </div>
+                    <div className="file-item-info">
+                      <Filename name={entry.file.name} className="file-item-name" />
+                      <div className="file-item-meta">{formatBytes(entry.file.size)}</div>
+                    </div>
+                    <div className="file-item-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => converter.rotateImage(entry.id)}
+                        disabled={isConverting}
+                        aria-label={`Rotate ${entry.file.name} 90 degrees`}
+                        title="Rotate 90°"
+                      >
+                        <RotateCw size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => converter.flipImage(entry.id)}
+                        disabled={isConverting}
+                        aria-label={`Mirror ${entry.file.name} horizontally`}
+                        title="Mirror horizontally"
+                      >
+                        <FlipIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => converter.moveImage(entry.id, 'up')}
+                        disabled={isConverting || index === 0}
+                        aria-label={`Move ${entry.file.name} up`}
+                        id={`converter-move-up-${index}`}
+                      >
+                        <ArrowUp size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm"
+                        onClick={() => converter.moveImage(entry.id, 'down')}
+                        disabled={isConverting || index === images.length - 1}
+                        aria-label={`Move ${entry.file.name} down`}
+                        id={`converter-move-down-${index}`}
+                      >
+                        <ArrowDown size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm converter-danger"
+                        onClick={() => converter.removeImage(entry.id)}
+                        disabled={isConverting}
+                        aria-label={`Remove ${entry.file.name}`}
+                        id={`converter-remove-${index}`}
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title" id="converter-page-size-label">
+                  <FileText size={16} className="card-head-icon" aria-hidden="true" />
+                  Page Size · applies to all images
+                </span>
+              </div>
+              <div className="card-body">
+                <div className="opt-grid" role="radiogroup" aria-labelledby="converter-page-size-label">
+                  {PAGE_SIZE_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      htmlFor={`converter-size-${option.value}`}
+                      className={`radio-card${pageSize === option.value ? ' active' : ''}${option.value === 'match_image' ? ' radio-card--wide' : ''}`}
+                    >
+                      <input
+                        id={`converter-size-${option.value}`}
+                        type="radio"
+                        name="converter-page-size"
+                        value={option.value}
+                        checked={pageSize === option.value}
+                        onChange={() => converter.setPageSize(option.value)}
+                        disabled={isConverting}
+                      />
+                      <span className="radio-copy">
+                        <span className="radio-title">{option.label}</span>
+                        <span className="radio-desc">{option.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="field">
+                  <label htmlFor="converter-image-output">Output Filename</label>
                   <input
                     id="converter-image-output"
                     className="input"
@@ -477,122 +550,15 @@ export function ConverterPage() {
                     placeholder="output.pdf"
                     disabled={isConverting}
                   />
-                  <p className="converter-help">The .pdf extension is added automatically if omitted.</p>
+                  <small>The .pdf extension is added automatically if omitted.</small>
                 </div>
-              </>
-            )}
-
-            {error && (
-              <div className="converter-message converter-message--error" role="alert">
-                <span>{error}</span>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={converter.dismissError}>
-                  Dismiss
-                </button>
               </div>
-            )}
+            </div>
 
-            {result && (
-              <div className="card converter-result">
-                <CheckCircle size={26} aria-hidden="true" />
-                <div className="converter-result-copy">
-                  <p className="converter-result-title">Download started automatically</p>
-                  <p className="converter-result-detail">
-                    <Filename name={result.filename} /> · {result.detail}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  id="converter-open-folder"
-                  onClick={() => openOutputFolder()}
-                  title="Open download folder"
-                >
-                  <FolderOpen size={14} aria-hidden="true" />
-                  Open Folder
-                </button>
-              </div>
-            )}
-
-            {kind !== 'empty' && (
-              <div className="converter-actions">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  id="converter-clear"
-                  onClick={converter.clear}
-                  disabled={isConverting}
-                >
-                  {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
-                  {kind === 'images' ? 'Clear All' : 'Clear'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  id="converter-run"
-                  onClick={converter.convert}
-                  disabled={!canConvert}
-                  title={canConvert ? undefined : pdfBlockReason ?? 'Add files to convert'}
-                >
-                  {isConverting ? (
-                    <>
-                      <Loader2 size={15} className="converter-spin" aria-hidden="true" />
-                      {kind === 'pdf' ? 'Exporting…' : 'Converting…'}
-                    </>
-                  ) : (
-                    <>
-                      <FileImage size={15} aria-hidden="true" />
-                      {kind === 'pdf' ? 'Export & Download' : 'Convert & Download'}
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </section>
-
-          <section className="feature-preview">
-            {kind === 'pdf' && pdfFile ? (
-              <PreviewPanel
-                pdfFile={pdfFile}
-                totalPages={pdfInfoState === 'ready' ? converter.pdfInfo?.total_pages : undefined}
-                currentPage={previewPage}
-                onPageChange={converter.setPreviewPage}
-                zoom={zoom}
-                onZoomChange={converter.setZoom}
-                topSlot={pdfInfoState === 'ready' ? (
-                  <ThumbnailStrip
-                    file={pdfFile}
-                    totalPages={converter.pdfInfo?.total_pages ?? 0}
-                    currentPage={previewPage}
-                    selectedPages={selection.pages}
-                    selectionDisabled={!selectionEditable}
-                    onPageClick={converter.setPreviewPage}
-                    onTogglePage={converter.togglePageSelection}
-                  />
-                ) : undefined}
-              />
-            ) : kind === 'images' && activeImage ? (
-              <PreviewPanel
-                imageFile={activeImage.file}
-                currentPage={1}
-                onPageChange={() => {}}
-                zoom={zoom}
-                onZoomChange={converter.setZoom}
-                showRotation
-                rotation={activeImage.rotation as QuarterTurn}
-                flipH={activeImage.flipH}
-                onRotationChange={() => converter.rotateImage(activeImage.id)}
-                onFlipChange={() => converter.flipImage(activeImage.id)}
-              />
-            ) : (
-              <PreviewPanel
-                currentPage={1}
-                onPageChange={() => {}}
-                zoom={zoom}
-                onZoomChange={converter.setZoom}
-              />
-            )}
-          </section>
-        </div>
+            {outcome}
+            {actions}
+          </div>
+        )}
       </div>
     </div>
   );

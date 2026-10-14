@@ -1,17 +1,17 @@
 import { useCallback, useRef, useState } from 'react';
 import {
+  ArrowRight,
   CheckCircle,
+  FileText,
   FolderOpen,
   Loader2,
   Minimize2,
+  SlidersHorizontal,
   Upload,
-  X,
-  Zap,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { API_BASE_URL } from '../api/config';
 import { Filename } from '../components/Filename';
-import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
@@ -181,273 +181,242 @@ export function CompressPage() {
   const clearFile = () => { setFile(null); setResult(null); setOutputFilename(''); };
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  const preset = [
+    { value: 25, label: 'Maximum' },
+    { value: 55, label: 'Balanced' },
+    { value: 80, label: 'High quality' },
+  ];
+
   return (
     <div className="feature-page">
       <PageHeader
         icon={Minimize2}
         title="Compress PDF"
-        description="Reduce PDF file size by re-encoding embedded images"
+        description="Reduce file size while keeping the document readable"
       />
 
-      {/* Body */}
       <div className="page-body">
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="form-col">
 
-          {/* Drop zone */}
           {!file ? (
-            <div
-              id="compress-drop-zone"
-              className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={handleClick}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-              aria-label="Drop a PDF file here or click to browse"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                style={{ display: 'none' }}
-                onChange={handleFileInput}
-                id="compress-file-input"
-              />
-              <Upload className="drop-zone-icon" />
-              <p className="drop-zone-title">Drop a PDF file here</p>
-              <p className="drop-zone-sub">or click to browse · Single PDF</p>
-              <span className="badge badge-neutral">PDF</span>
-            </div>
+            <>
+              <div
+                id="compress-drop-zone"
+                className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleClick}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+                aria-label="Drop a PDF file here or click to browse"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={handleFileInput}
+                  id="compress-file-input"
+                />
+                <Upload className="drop-zone-icon" />
+                <p className="drop-zone-title">Drop a PDF here</p>
+                <p className="drop-zone-sub">or click to browse · One file at a time</p>
+                <span className="badge badge-neutral">PDF</span>
+              </div>
+              <p className="empty-hint">You will see the file size before and after compressing.</p>
+            </>
           ) : (
-            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <PdfThumbnail file={file} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Filename name={file.name} className="file-item-name" />
-                <div className="file-item-meta">{formatBytes(file.size)}</div>
-              </div>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                onClick={clearFile}
-                aria-label="Remove file"
-                id="compress-remove-file"
-                style={{ color: 'var(--error)' }}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-
-          {/* Quality slider */}
-          <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <label className="input-label" htmlFor="compress-quality-slider" style={{ margin: 0 }}>
-                Image Quality
-              </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  color: qualityColor(quality),
-                  fontFamily: 'JetBrains Mono, monospace',
-                  transition: 'color var(--transition-fast)',
-                }}>
-                  {quality}
-                </span>
-                <span className="badge" style={{ background: qualityColor(quality) + '22', color: qualityColor(quality), border: 'none' }}>
-                  {qualityLabel(quality)}
-                </span>
-              </div>
-            </div>
-
-            <input
-              id="compress-quality-slider"
-              type="range"
-              min={10}
-              max={95}
-              step={5}
-              value={quality}
-              onChange={(e) => setQuality(Number(e.target.value))}
-              style={{
-                width: '100%',
-                accentColor: qualityColor(quality),
-                cursor: 'pointer',
-                height: 6,
-              }}
-            />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-              <span className="text-muted text-body-sm">10 — Max compression</span>
-              <span className="text-muted text-body-sm">95 — Best quality</span>
-            </div>
-
-            <div className="seg" role="group" aria-label="Quality preset" style={{ marginTop: 12 }}>
-              {[
-                { value: 25, label: 'Maximum' },
-                { value: 55, label: 'Balanced' },
-                { value: 80, label: 'High quality' },
-              ].map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  aria-pressed={quality === preset.value}
-                  className={quality === preset.value ? 'active' : ''}
-                  onClick={() => setQuality(preset.value)}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-
-            <div style={{
-              marginTop: 12,
-              padding: '8px 12px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-container)',
-              fontSize: 12,
-              color: 'var(--on-surface-variant)',
-              borderLeft: `3px solid ${qualityColor(quality)}`,
-            }}>
-              <Zap size={12} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
-              {quality < 50
-                ? 'Aggressive compression. Best for reducing size significantly, some image quality loss expected.'
-                : quality < 75
-                ? 'Balanced compression. Good size reduction with acceptable quality.'
-                : 'Conservative compression. Minimal quality loss, smaller size reduction.'}
-            </div>
-          </div>
-
-          {/* Before / After cards */}
-          <div className="grid-2">
-            <div className="card" style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--on-surface-variant)', marginBottom: 8 }}>
-                BEFORE
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--on-surface)', fontFamily: 'JetBrains Mono, monospace' }}>
-                {file ? formatBytes(file.size) : '—'}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--on-surface-variant)', marginTop: 4 }}>Original size</div>
-            </div>
-
-            <div className="card" style={{
-              textAlign: 'center',
-              borderColor: result ? 'var(--success)' : 'var(--outline-variant)',
-              background: result ? 'var(--success-container)' : undefined,
-              transition: 'all var(--transition-normal)',
-            }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: result ? 'var(--success)' : 'var(--on-surface-variant)', marginBottom: 8 }}>
-                AFTER
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: result ? 'var(--success)' : 'var(--on-surface)', fontFamily: 'JetBrains Mono, monospace' }}>
-                {result ? formatBytes(result.sizeAfter) : '—'}
-              </div>
-              <div style={{ fontSize: 12, color: result ? 'var(--success)' : 'var(--on-surface-variant)', marginTop: 4 }}>
-                {result ? `↓ ${result.reductionPct}% reduction` : 'After compression'}
-              </div>
-            </div>
-          </div>
-
-          {/* Output Filename */}
-          {file && (
-            <div className="card">
-              <label className="input-label" htmlFor="compress-output-name">Output Filename</label>
-              <input
-                id="compress-output-name"
-                className="input"
-                type="text"
-                value={outputFilename}
-                onChange={(e) => setOutputFilename(e.target.value)}
-                placeholder={`compressed_${file?.name || 'output.pdf'}`}
-              />
-            </div>
-          )}
-
-          {/* Result card — download was triggered automatically */}
-          {result && (
-            <div
-              className="card"
-              style={{
-                background: 'var(--success-container)',
-                border: '1px solid var(--success)',
-                display: 'flex', alignItems: 'center', gap: 16,
-              }}
-            >
-              <CheckCircle size={28} color="var(--success)" style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
-                  Download started automatically
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
-                  <Filename name={result.filename} /> · {result.imagesProcessed} image{result.imagesProcessed !== 1 ? 's' : ''} re-encoded
-                  · saved {formatBytes(result.sizeBefore - result.sizeAfter)}
+            <>
+              {/* File */}
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title">
+                    <FileText size={16} className="card-head-icon" aria-hidden="true" />
+                    <Filename name={file.name} className="file-item-name" />
+                    <span className="chip">{formatBytes(file.size)}</span>
+                  </span>
+                  <span className="card-head-actions">
+                    <button
+                      type="button"
+                      className="link-btn"
+                      id="compress-remove-file"
+                      onClick={clearFile}
+                      disabled={isLoading}
+                    >
+                      Change file
+                    </button>
+                  </span>
                 </div>
               </div>
-              <button
-                className="btn btn-ghost btn-sm"
-                id="compress-open-folder-btn"
-                onClick={() => openOutputFolder()}
-                title="Open download folder"
-              >
-                <FolderOpen size={14} />
-                Open Folder
-              </button>
-            </div>
-          )}
 
-          {/* Progress Bar */}
-          {isLoading && progress && (
-            <div className="card" style={{ padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
-                <span style={{ fontWeight: 500, color: 'var(--on-surface)' }}>Compressing pages...</span>
-                <span className="text-muted text-body-sm">{progress.percent}% ({progress.page}/{progress.total})</span>
+              {/* Quality */}
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title">
+                    <SlidersHorizontal size={16} className="card-head-icon" aria-hidden="true" />
+                    <label htmlFor="compress-quality-slider">Quality</label>
+                  </span>
+                  <span className="card-head-actions">
+                    <b className="card-head-value" style={{ color: qualityColor(quality) }}>
+                      {qualityLabel(quality)}
+                    </b>
+                  </span>
+                </div>
+                <div className="card-body">
+                  <input
+                    id="compress-quality-slider"
+                    className="range"
+                    type="range"
+                    min={10}
+                    max={95}
+                    step={5}
+                    value={quality}
+                    disabled={isLoading}
+                    onChange={(e) => setQuality(Number(e.target.value))}
+                  />
+                  <div className="range-scale">
+                    <span>Smaller file</span>
+                    <b>{quality}</b>
+                    <span>Better quality</span>
+                  </div>
+                  <div className="seg" role="group" aria-label="Quality preset">
+                    {preset.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-pressed={quality === item.value}
+                        className={quality === item.value ? 'active' : ''}
+                        disabled={isLoading}
+                        onClick={() => setQuality(item.value)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  <small className="hint">
+                    {quality < 50
+                      ? 'Aggressive compression. Smallest file, some image quality loss expected.'
+                      : quality < 75
+                      ? 'Balanced compression. Good size reduction with acceptable quality.'
+                      : 'Conservative compression. Minimal quality loss, smaller size reduction.'}
+                  </small>
+                </div>
               </div>
-              <div style={{ width: '100%', height: 6, background: 'var(--surface-container-highest)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ 
-                  height: '100%', 
-                  width: `${progress.percent}%`, 
-                  background: 'var(--primary)', 
-                  transition: 'width 200ms ease-out' 
-                }} />
-              </div>
-            </div>
-          )}
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button
-              className="btn btn-secondary"
-              id="compress-clear-btn"
-              onClick={clearFile}
-              disabled={!file || isLoading}
-            >
-              Clear
-            </button>
-            <button
-              className="btn btn-primary"
-              id="compress-run-btn"
-              onClick={handleCompress}
-              disabled={!file || isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                  Compressing…
-                </>
-              ) : (
-                <>
-                  <Minimize2 size={15} />
-                  Compress & Download
-                </>
+              {/* Size */}
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title">
+                    <Minimize2 size={16} className="card-head-icon" aria-hidden="true" />
+                    Size
+                  </span>
+                  {result && (
+                    <span className="card-head-actions status-ok">
+                      <CheckCircle size={14} aria-hidden="true" /> Compression complete
+                    </span>
+                  )}
+                </div>
+                <div className="card-body">
+                  <div className="size-compare">
+                    <div className="size-box">
+                      <small>Before</small>
+                      <b>{formatBytes(file.size)}</b>
+                      <div className="size-bar"><i style={{ width: '100%' }} /></div>
+                    </div>
+                    <ArrowRight size={16} className="size-arrow" aria-hidden="true" />
+                    <div className={`size-box${result ? ' ok' : ''}`}>
+                      <small>After</small>
+                      <b>{result ? formatBytes(result.sizeAfter) : '—'}</b>
+                      <div className="size-bar">
+                        <i style={{ width: result ? `${Math.max(2, Math.min(100, (result.sizeAfter / Math.max(1, result.sizeBefore)) * 100))}%` : '0%' }} />
+                      </div>
+                      {result && <span className="size-saved">−{result.reductionPct}%</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Output filename */}
+              <div className="card card--flush">
+                <div className="card-body">
+                  <div className="field">
+                    <label htmlFor="compress-output-name">Output Filename</label>
+                    <input
+                      id="compress-output-name"
+                      className="input"
+                      type="text"
+                      value={outputFilename}
+                      disabled={isLoading}
+                      onChange={(e) => setOutputFilename(e.target.value)}
+                      placeholder={`compressed_${file.name}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Result — the download was triggered automatically */}
+              {result && (
+                <div className="card status-card status-card--ok">
+                  <CheckCircle size={22} aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <b>Download started automatically</b>
+                    <small>
+                      <Filename name={result.filename} /> · {result.imagesProcessed} image{result.imagesProcessed !== 1 ? 's' : ''} re-encoded
+                      · saved {formatBytes(result.sizeBefore - result.sizeAfter)}
+                    </small>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    id="compress-open-folder-btn"
+                    onClick={() => openOutputFolder()}
+                    title="Open download folder"
+                  >
+                    <FolderOpen size={14} />
+                    Open Folder
+                  </button>
+                </div>
               )}
-            </button>
-          </div>
 
+              {/* Progress */}
+              {isLoading && progress && (
+                <div className="card status-card" role="status" aria-live="polite">
+                  <Loader2 size={20} className="spin" aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <b>Compressing… {progress.percent}%</b>
+                    <small>Page {progress.page} of {progress.total}</small>
+                    <div className="size-bar" style={{ marginTop: 8 }}>
+                      <i style={{ width: `${progress.percent}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="form-actions">
+                <button
+                  className="btn btn-primary"
+                  id="compress-run-btn"
+                  onClick={handleCompress}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={15} className="spin" />
+                      Compressing…
+                    </>
+                  ) : (
+                    <>
+                      <Minimize2 size={15} />
+                      Compress &amp; Download
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
-
-      
-
     </div>
   );
 }

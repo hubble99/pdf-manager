@@ -1488,11 +1488,13 @@ export function EditCanvasPage() {
           </button>
         </div>
 
-        {/* Spacer */}
-        <div style={{ flex: 1, minWidth: '12px' }} />
-
+        {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
+        <div
+          className="canvas-save-group"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
+        >
         {/* Output Filename Input */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 1, minWidth: '80px', maxWidth: '240px', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
           <input
             id="edit-output-name"
             type="text"
@@ -1548,24 +1550,23 @@ export function EditCanvasPage() {
             <span>Save as PDF</span>
           )}
         </button>
+        </div>
       </div>
 
       {/* ── Contextual Controls Toolbar Sub-Bar (Row 2, Height: 40px) ─────────── */}
       <div
         className="canvas-contextual-bar"
         style={{
-          height: '40px',
           minHeight: '40px',
-          maxHeight: '40px',
           background: showContextualPanel ? 'var(--canvas-panel-bg)' : 'transparent',
           borderBottom: showContextualPanel ? '1px solid var(--canvas-topbar-border)' : '1px solid transparent',
-          padding: '0 20px',
+          padding: '4px 20px',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px',
+          flexWrap: 'wrap',
+          gap: '4px 16px',
           zIndex: 15,
           flexShrink: 0,
-          overflowX: 'auto',
           pointerEvents: showContextualPanel ? 'auto' : 'none',
         }}
       >
@@ -1638,7 +1639,7 @@ export function EditCanvasPage() {
 
             {/* TEXT PROPERTIES */}
             {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Font</span>
                   <select
@@ -1865,7 +1866,7 @@ export function EditCanvasPage() {
             {/* SHAPE PROPERTIES (rect, circle) */}
             {((selectedObject && (selectedObject.type === 'rect' || selectedObject.type === 'circle')) ||
               (!selectedObject && (activeTool === 'rect' || activeTool === 'circle'))) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', margin: 0 }}>
                     <input
@@ -1962,7 +1963,7 @@ export function EditCanvasPage() {
             {/* LINE / FREEHAND PROPERTIES (line, pen, highlighter) */}
             {((selectedObject && (selectedObject.type === 'line' || selectedObject.type === 'pen' || selectedObject.type === 'highlighter')) ||
               (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Color</span>
                   <input

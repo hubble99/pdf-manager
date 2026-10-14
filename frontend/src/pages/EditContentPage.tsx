@@ -90,6 +90,10 @@ export function EditContentPage() {
   const [render, setRender] = useState<NativeRender | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [zoom, setZoom] = useState(0.75);
+  const zoomedByUser = useRef(false);
+  const handleFitZoom = useCallback((fit: number) => {
+    if (!zoomedByUser.current) setZoom(Math.min(1, Math.max(0.2, Math.floor(fit * 100) / 100)));
+  }, []);
   const [selected, setSelected] = useState<NativeTextObjectDescriptor | null>(null);
   const [draft, setDraft] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -223,6 +227,7 @@ export function EditContentPage() {
       setDiscovery(reply.result.discovery);
       setPageIndex(0);
       setZoom(0.75);
+      zoomedByUser.current = false;
       selectTarget(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Edit Content engine is unavailable.');
@@ -707,9 +712,9 @@ export function EditContentPage() {
                   <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'page', pageIndex: pageIndex + 1 })} disabled={pageIndex + 1 >= totalPages || busy} aria-label="Next page"><ChevronRight size={16} /></button>
                 </div>
                 <div className="edit-content-toolbar-group" aria-label="Zoom controls">
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setZoom((value) => Math.max(0.35, value - 0.1))} aria-label="Zoom out"><ZoomOut size={16} /></button>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.max(0.2, value - 0.1)); }} aria-label="Zoom out"><ZoomOut size={16} /></button>
                   <span className="text-mono">{Math.round(zoom * 100)}%</span>
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setZoom((value) => Math.min(1.5, value + 0.1))} aria-label="Zoom in"><ZoomIn size={16} /></button>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.min(1.5, value + 0.1)); }} aria-label="Zoom in"><ZoomIn size={16} /></button>
                 </div>
               </div>
               <EditContentViewport
@@ -717,6 +722,7 @@ export function EditContentPage() {
                 render={render}
                 selected={selected}
                 zoom={zoom}
+                onFitZoom={handleFitZoom}
                 loading={render === null}
                 onPoint={(point, viewportSize) => void handleViewportPoint(point, viewportSize)}
               />

@@ -1,20 +1,19 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import {
   CheckCircle,
+  FileText,
   FolderOpen,
-  Info,
   Loader2,
   Scissors,
   Upload,
-  X,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
-import { PdfThumbnail } from '../components/PdfThumbnail';
-import { PreviewPanel } from '../components/preview';
+import { PageThumbGrid } from '../components/preview';
 import { PageHeader } from '../components/ui';
-import { isPageInRange } from '../utils/pageRange';
+import { parsePageRange } from '../utils/pageRange';
+import { formatPageNumbers } from '../features/converter/pageSelection';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -50,11 +49,6 @@ const OUTPUT_MODE_OPTIONS: { value: OutputMode; label: string; desc: string }[] 
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -72,10 +66,6 @@ export function ExtractPage() {
   const [result, setResult] = useState<ExtractResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Preview State
-  const [previewPage, setPreviewPage] = useState(1);
-  const [zoom, setZoom] = useState(1.0);
-
 
   // ── File handling ───────────────────────────────────────────────────────────
   const loadFile = useCallback(
@@ -88,7 +78,6 @@ export function ExtractPage() {
       setPdfInfo(null);
       setResult(null);
       setInfoLoading(true);
-      setPreviewPage(1);
 
       try {
         const form = new FormData();
@@ -170,232 +159,232 @@ export function ExtractPage() {
     }
   };
 
-  const clearFile = () => { setFile(null); setPdfInfo(null); setResult(null); setPreviewPage(1); setOutputFilename('extracted'); };
+  const clearFile = () => {
+    setFile(null);
+    setPdfInfo(null);
+    setResult(null);
+    setPageRanges('');
+    setOutputFilename('extracted');
+  };
+
+  // The thumbnail grid and the page-range field edit the same value.
+  const totalPages = pdfInfo?.total_pages ?? 0;
+  const selectedPages: Set<number> = outputMode === 'split_all'
+    ? new Set(Array.from({ length: totalPages }, (_, index) => index + 1))
+    : pageRanges.trim() ? parsePageRange(pageRanges, totalPages) : new Set<number>();
+  const gridEditable = outputMode !== 'split_all';
+
+  const togglePage = (page: number) => {
+    const next = new Set(selectedPages);
+    if (next.has(page)) next.delete(page);
+    else next.add(page);
+    setPageRanges(formatPageNumbers(next));
+  };
+  const selectAllPages = () => setPageRanges(totalPages > 0 ? `1-${totalPages}` : '');
+  const clearPages = () => setPageRanges('');
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  const selectionNote = outputMode === 'split_all'
+    ? 'Every page becomes its own PDF'
+    : `${selectedPages.size} of ${totalPages} page${totalPages === 1 ? '' : 's'} selected`;
+
   return (
     <div className="feature-page">
       <PageHeader
         icon={Scissors}
         title="Split PDF"
-        description="Split or extract pages from a PDF into separate files"
+        description="Take out the pages or ranges you need as a new document"
       />
 
-      {/* Body */}
-      <div className="page-body page-body--workspace">
-        <div className="feature-split-layout">
-
-          {/* Controls */}
-          <div className="feature-controls">
-            {!file ? (
-              <div
-                id="extract-drop-zone"
-                className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={handleClick}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                aria-label="Drop a PDF file here or click to browse"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  style={{ display: 'none' }}
-                  onChange={handleFileInput}
-                  id="extract-file-input"
-                />
-                <Upload className="drop-zone-icon" />
-                <p className="drop-zone-title">Drop a PDF file here</p>
-                <p className="drop-zone-sub">or click to browse · Single PDF</p>
-                <span className="badge badge-neutral">PDF</span>
-              </div>
-            ) : (
-              /* File info card */
-              <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <PdfThumbnail file={file} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Filename name={file.name} className="file-item-name" />
-                  <div className="file-item-meta" style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
-                    <span>{formatBytes(file.size)}</span>
-                    {infoLoading && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
-                    {pdfInfo && (
-                      <span className="badge badge-info" style={{ fontSize: 11 }}>
-                        {pdfInfo.total_pages} pages
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-ghost btn-icon btn-sm"
-                  onClick={clearFile}
-                  aria-label="Remove file"
-                  id="extract-remove-file"
-                  style={{ color: 'var(--error)' }}
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            )}
-
-            {/* Page ranges input */}
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
-                <label className="input-label" htmlFor="extract-page-ranges" style={{ margin: 0 }}>
-                  Page Ranges
-                </label>
-                {pdfInfo && (
-                  <span className="badge badge-info">
-                    <Info size={11} /> Total: {pdfInfo.total_pages} pages
-                  </span>
-                )}
-              </div>
+      <div className="page-body">
+        {!file ? (
+          <div className="form-col">
+            <div
+              id="extract-drop-zone"
+              className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+              aria-label="Drop a PDF file here or click to browse"
+            >
               <input
-                id="extract-page-ranges"
-                className="input"
-                type="text"
-                value={pageRanges}
-                onChange={(e) => setPageRanges(e.target.value)}
-                placeholder="e.g. 1-3, 5, 7-9"
-                disabled={outputMode === 'split_all'}
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                style={{ display: 'none' }}
+                onChange={handleFileInput}
+                id="extract-file-input"
               />
-              <p className="text-muted text-body-sm" style={{ marginTop: 6 }}>
-                {outputMode === 'split_all'
-                  ? '⚡ Split All mode will export every page individually.'
-                  : 'Use commas to separate pages/ranges. Example: 1-3, 5, 7-9'}
-              </p>
+              <Upload className="drop-zone-icon" />
+              <p className="drop-zone-title">Drop a PDF here</p>
+              <p className="drop-zone-sub">or click to browse · One file at a time</p>
+              <span className="badge badge-neutral">PDF</span>
             </div>
-
-            {/* Output mode */}
-            <div className="card">
-              <label className="input-label">Output Mode</label>
-              <div className="radio-list" style={{ marginTop: 4 }}>
-                {OUTPUT_MODE_OPTIONS.map((opt) => (
-                  <label
-                    key={opt.value}
-                    htmlFor={`extract-mode-${opt.value}`}
-                    className={`radio-card${outputMode === opt.value ? ' active' : ''}`}
+            <p className="empty-hint">Every page will appear here so you can pick what to split.</p>
+          </div>
+        ) : (
+          <div className="form-col form-col--split">
+            {/* Pages */}
+            <div className="card card--flush">
+              <div className="card-head">
+                <span className="card-head-title">
+                  <FileText size={16} className="card-head-icon" aria-hidden="true" />
+                  <Filename name={file.name} className="file-item-name" />
+                  {pdfInfo && <span className="chip">{pdfInfo.total_pages} pages</span>}
+                  {infoLoading && <Loader2 size={12} className="spin" aria-hidden="true" />}
+                </span>
+                <span className="card-head-actions">
+                  {totalPages > 0 && <span>{selectionNote}</span>}
+                  {gridEditable && totalPages > 0 && (
+                    <>
+                      <button type="button" className="link-btn" onClick={selectAllPages}>Select all</button>
+                      <button type="button" className="link-btn" onClick={clearPages}>Clear</button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    className="link-btn"
+                    id="extract-remove-file"
+                    onClick={clearFile}
+                    disabled={isLoading}
                   >
-                    <input
-                      id={`extract-mode-${opt.value}`}
-                      type="radio"
-                      name="output_mode"
-                      value={opt.value}
-                      checked={outputMode === opt.value}
-                      onChange={() => setOutputMode(opt.value)}
-                      style={{ margin: '2px 0 0', accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
-                    />
-                    <span className="radio-copy">
-                      <span className="radio-title">{opt.label}</span>
-                      <span className="radio-desc">{opt.desc}</span>
-                    </span>
-                  </label>
-                ))}
+                    Change file
+                  </button>
+                </span>
               </div>
+              {totalPages > 0 ? (
+                <PageThumbGrid
+                  file={file}
+                  totalPages={totalPages}
+                  selected={selectedPages}
+                  interactive={gridEditable}
+                  onToggle={togglePage}
+                />
+              ) : (
+                <p className="empty-hint">
+                  {infoLoading ? 'Reading the document…' : 'Pages are unavailable. You can still type the pages to split.'}
+                </p>
+              )}
             </div>
 
-            {/* Output Filename */}
-            {file && (
-              <div className="card">
-                <label className="input-label" htmlFor="extract-output-name">Output Filename</label>
-                <input
-                  id="extract-output-name"
-                  className="input"
-                  type="text"
-                  value={outputFilename}
-                  onChange={(e) => setOutputFilename(e.target.value)}
-                  placeholder="extracted"
-                />
-                <p className="text-muted text-body-sm" style={{ marginTop: 6 }}>
-                  Extension (.pdf or .zip) is added automatically.
-                </p>
+            <div className="col-stack">
+              {/* Split mode */}
+              <div className="card card--flush">
+                <div className="card-head">
+                  <span className="card-head-title">
+                    <Scissors size={16} className="card-head-icon" aria-hidden="true" />
+                    Split mode
+                  </span>
+                </div>
+                <div role="radiogroup" aria-label="Output mode">
+                  {OUTPUT_MODE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      htmlFor={`extract-mode-${opt.value}`}
+                      className={`mode-row${outputMode === opt.value ? ' active' : ''}`}
+                    >
+                      <input
+                        id={`extract-mode-${opt.value}`}
+                        type="radio"
+                        name="output_mode"
+                        value={opt.value}
+                        checked={outputMode === opt.value}
+                        onChange={() => setOutputMode(opt.value)}
+                      />
+                      <span className="radio-copy">
+                        <span className="radio-title">{opt.label}</span>
+                        <span className="radio-desc">{opt.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            )}
 
-            {/* Result */}
-            {result && (
-              <div
-                className="card"
-                style={{
-                  background: 'var(--success-container)',
-                  border: '1px solid var(--success)',
-                  display: 'flex', alignItems: 'center', gap: 16,
-                }}
-              >
-                <CheckCircle size={28} color="var(--success)" style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
-                    Download started automatically
+              {/* Pages + output name */}
+              <div className="card card--flush">
+                <div className="card-body">
+                  <div className="field">
+                    <label htmlFor="extract-page-ranges">Page Ranges</label>
+                    <input
+                      id="extract-page-ranges"
+                      className="input"
+                      type="text"
+                      value={pageRanges}
+                      onChange={(e) => setPageRanges(e.target.value)}
+                      placeholder="e.g. 1-3, 5, 7-9"
+                      disabled={outputMode === 'split_all'}
+                    />
+                    <small>
+                      {outputMode === 'split_all'
+                        ? 'Split all pages exports every page individually.'
+                        : 'Click pages on the left, or type pages and ranges separated by commas.'}
+                    </small>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
-                    <Filename name={result.filename} /> · {result.pagesExtracted} pages extracted
-                    {result.isZip && ' · ZIP archive'}
+                  <div className="field">
+                    <label htmlFor="extract-output-name">Output Filename</label>
+                    <input
+                      id="extract-output-name"
+                      className="input"
+                      type="text"
+                      value={outputFilename}
+                      onChange={(e) => setOutputFilename(e.target.value)}
+                      placeholder="extracted"
+                    />
+                    <small>Extension (.pdf or .zip) is added automatically.</small>
                   </div>
                 </div>
+              </div>
+
+              {result && (
+                <div className="card status-card status-card--ok">
+                  <CheckCircle size={22} aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <b>Download started automatically</b>
+                    <small>
+                      <Filename name={result.filename} /> · {result.pagesExtracted} page{result.pagesExtracted !== 1 ? 's' : ''} extracted
+                      {result.isZip ? ' · ZIP archive' : ''}
+                    </small>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    id="extract-open-folder-btn"
+                    onClick={() => openOutputFolder()}
+                    title="Open download folder"
+                  >
+                    <FolderOpen size={14} />
+                    Open Folder
+                  </button>
+                </div>
+              )}
+
+              <div className="form-actions">
                 <button
-                  className="btn btn-ghost btn-sm"
-                  id="extract-open-folder-btn"
-                  onClick={() => openOutputFolder()}
-                  title="Open download folder"
+                  className="btn btn-primary"
+                  id="extract-run-btn"
+                  onClick={handleExtract}
+                  disabled={!file || isLoading}
                 >
-                  <FolderOpen size={14} />
-                  Open Folder
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={15} className="spin" />
+                      Splitting…
+                    </>
+                  ) : (
+                    <>
+                      <Scissors size={15} />
+                      Split &amp; Download
+                    </>
+                  )}
                 </button>
               </div>
-            )}
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button
-                className="btn btn-secondary"
-                id="extract-clear-btn"
-                onClick={clearFile}
-                disabled={!file || isLoading}
-              >
-                Clear
-              </button>
-              <button
-                className="btn btn-primary"
-                id="extract-run-btn"
-                onClick={handleExtract}
-                disabled={!file || isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                    Extracting…
-                  </>
-                ) : (
-                  <>
-                    <Scissors size={15} />
-                    Extract & Download
-                  </>
-                )}
-              </button>
             </div>
           </div>
-
-          {/* Preview Panel */}
-          <div className="feature-preview">
-            <PreviewPanel
-              pdfFile={file}
-              totalPages={pdfInfo?.total_pages}
-              currentPage={previewPage}
-              onPageChange={setPreviewPage}
-              zoom={zoom}
-              onZoomChange={setZoom}
-              isHighlighted={file && pdfInfo ? isPageInRange(previewPage, pageRanges, pdfInfo.total_pages) : false}
-            />
-          </div>
-
-        </div>
+        )}
       </div>
-
-      
-
     </div>
   );
 }

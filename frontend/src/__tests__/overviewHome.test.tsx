@@ -110,6 +110,22 @@ describe('Donation page', () => {
     expect(paypal.getAttribute('src')).not.toMatch(/^https?:/);
   });
 
+  it('shows one method at a time, starting with Indonesia, and switches by tab', () => {
+    renderAt('/donation', <DonationPage />);
+    const qrisPanel = document.getElementById('donation-panel-qris') as HTMLElement;
+    const paypalPanel = document.getElementById('donation-panel-paypal') as HTMLElement;
+
+    expect(screen.getByRole('tab', { name: /Indonesia/ })).toHaveAttribute('aria-selected', 'true');
+    expect(qrisPanel).toBeVisible();
+    expect(paypalPanel).not.toBeVisible();
+
+    fireEvent.click(screen.getByRole('tab', { name: /International/ }));
+
+    expect(screen.getByRole('tab', { name: /International/ })).toHaveAttribute('aria-selected', 'true');
+    expect(paypalPanel).toBeVisible();
+    expect(qrisPanel).not.toBeVisible();
+  });
+
   it('names the recipient and the pre-payment check for both methods', () => {
     const { container } = renderAt('/donation', <DonationPage />);
     const names = [...container.querySelectorAll('.donation-recipient-name')].map((node) => node.textContent);

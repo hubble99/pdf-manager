@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { FileSearch, Loader2 } from 'lucide-react';
 import { StateView } from '../../components/ui';
 import type { NativePageDescriptor, NativeRender, NativeTextObjectDescriptor, Point } from './types';
@@ -10,6 +11,8 @@ interface EditContentViewportProps {
   zoom: number;
   loading: boolean;
   onPoint: (point: Point, viewportSize: Point) => void;
+  /** Zoom at which the rendered page exactly fits the viewport width. */
+  onFitZoom?: (fitZoom: number) => void;
 }
 
 export function EditContentViewport({
@@ -19,7 +22,26 @@ export function EditContentViewport({
   zoom,
   loading,
   onPoint,
+  onFitZoom,
 }: EditContentViewportProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const renderWidth = render?.widthPx ?? 0;
+
+  // Report the fit-to-width zoom so a narrow window never opens with a cropped page.
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node || !onFitZoom || renderWidth <= 0 || typeof ResizeObserver === 'undefined') return undefined;
+    const measure = () => {
+      const style = getComputedStyle(node);
+      const inner = node.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0');
+      if (inner > 0) onFitZoom(inner / renderWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onFitZoom, renderWidth]);
+
   if (!page || !render) {
     return (
       <div className="edit-content-viewport edit-content-viewport--empty">
@@ -37,7 +59,7 @@ export function EditContentViewport({
   const polygon = selectionPolygon(selected, page, width, height);
 
   return (
-    <div className="edit-content-viewport" aria-busy={loading}>
+    <div className="edit-content-viewport" aria-busy={loading} ref={viewportRef}>
       <div
         className="edit-content-document"
         data-testid="edit-content-page"

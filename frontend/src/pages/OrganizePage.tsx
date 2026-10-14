@@ -3,7 +3,7 @@ import {
   ArrowDownUp, CheckCircle, FileImage, FilePlus2, FolderOpen, Layers, ListTree, Loader2,
   RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipHorizontal2, Upload, X,
 } from 'lucide-react';
-import { PageHeader, StateView } from '../components/ui';
+import { PageHeader } from '../components/ui';
 import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
 import { DeletePagesPanel, InsertPanel, SourcesPanel } from '../features/organize/panels';
@@ -82,46 +82,35 @@ export function OrganizePage() {
         />
 
         {!workspace.hasDocument ? (
-          <div className="feature-split-layout">
-            <section className="feature-controls">
-              <div
-                id="organize-drop-zone"
-                className="drop-zone"
-                role="button"
-                tabIndex={0}
-                onClick={() => !workspace.isBusy && mainInputRef.current?.click()}
-                onKeyDown={(event) => event.key === 'Enter' && mainInputRef.current?.click()}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const file = event.dataTransfer.files[0];
-                  if (file) void workspace.openFile(file);
-                }}
-                aria-label="Drop a PDF here or press Enter to browse"
-              >
-                <Upload className="drop-zone-icon" aria-hidden="true" />
-                <p className="drop-zone-title">Drop a PDF here</p>
-                <p className="drop-zone-sub">or click to browse · one PDF to start from</p>
-                {workspace.isBusy && (
-                  <p className="organize-help">
-                    <Loader2 size={12} className="converter-spin" aria-hidden="true" /> Adding the document…
-                  </p>
-                )}
-              </div>
-              <StateView
-                icon={ListTree}
-                title="No document yet"
-                description="The grid becomes the document: every change is a list change, and the backend only runs when you save."
-                compact
-              />
-            </section>
-            <section className="feature-preview">
-              <StateView
-                icon={Layers}
-                title="Add a PDF to begin"
-                description="Then insert pages from other PDFs or images, and arrange them here."
-              />
-            </section>
+          <div className="form-col">
+            <div
+              id="organize-drop-zone"
+              className="drop-zone"
+              role="button"
+              tabIndex={0}
+              onClick={() => !workspace.isBusy && mainInputRef.current?.click()}
+              onKeyDown={(event) => event.key === 'Enter' && mainInputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const file = event.dataTransfer.files[0];
+                if (file) void workspace.openFile(file);
+              }}
+              aria-label="Drop a PDF here or press Enter to browse"
+            >
+              <Upload className="drop-zone-icon" aria-hidden="true" />
+              <p className="drop-zone-title">Drop a PDF here</p>
+              <p className="drop-zone-sub">or click to browse · One file at a time</p>
+              <span className="badge badge-neutral">PDF</span>
+              {workspace.isBusy && (
+                <p className="organize-help">
+                  <Loader2 size={12} className="converter-spin" aria-hidden="true" /> Adding the document…
+                </p>
+              )}
+            </div>
+            <p className="empty-hint">
+              Then insert pages from other PDFs or images, and arrange them in the grid.
+            </p>
           </div>
         ) : (
           <div className="organize-workspace">

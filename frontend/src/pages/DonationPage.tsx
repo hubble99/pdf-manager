@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react';
-import { Copy, ExternalLink, Heart } from 'lucide-react';
+import { useCallback, useState, type ReactNode } from 'react';
+import { Copy, ExternalLink, Flag, Globe, Heart } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
 import { openInSystemBrowser } from '../utils/openExternal';
+
+type Method = 'qris' | 'paypal';
 
 /**
  * The donation page shows the real bundled codes and the recipient name for each
@@ -14,6 +16,7 @@ import { openInSystemBrowser } from '../utils/openExternal';
 export function DonationPage() {
   const { showToast } = useToast();
   const [isOpening, setIsOpening] = useState(false);
+  const [method, setMethod] = useState<Method>('qris');
 
   const copyLink = useCallback(async () => {
     try {
@@ -54,63 +57,99 @@ export function DonationPage() {
     </div>
   );
 
+  const tab = (id: Method, label: string, icon: ReactNode) => (
+    <button
+      type="button"
+      role="tab"
+      id={`donation-tab-${id}`}
+      aria-selected={method === id}
+      aria-controls={`donation-panel-${id}`}
+      className={`tab${method === id ? ' active' : ''}`}
+      onClick={() => setMethod(id)}
+    >
+      {icon} {label}
+    </button>
+  );
+
   return (
     <div className="feature-page">
       <PageHeader icon={Heart} title={DONATION_TEXTS.title} description={DONATION_TEXTS.summary} />
 
-      <div className="page-body">
-        <div className="donation-panels">
-          <section className="card donation-panel" aria-label={DONATION_TEXTS.domesticTitle}>
-            <h2 className="donation-panel-title">{DONATION_TEXTS.domesticTitle}</h2>
-            {recipient}
-            <img
-              className="donation-qris"
-              src={DONATION.qrisImage}
-              alt={DONATION_TEXTS.qrisAlt}
-            />
-            {QRIS_IS_PLACEHOLDER && (
-              <p className="donation-note" role="note">
-                {DONATION_TEXTS.qrisPlaceholderNote}
-              </p>
-            )}
-            <p className="donation-hint">{DONATION_TEXTS.domesticHint}</p>
-          </section>
+      <div className="tabs" role="tablist" aria-label="Donation method">
+        {tab('qris', 'Indonesia', <Flag size={15} aria-hidden="true" />)}
+        {tab('paypal', 'International', <Globe size={15} aria-hidden="true" />)}
+      </div>
 
-          <section className="card donation-panel" aria-label={DONATION_TEXTS.internationalTitle}>
-            <h2 className="donation-panel-title">{DONATION_TEXTS.internationalTitle}</h2>
-            {recipient}
-            <img
-              className="donation-qris"
-              src={DONATION.paypalImage}
-              alt={DONATION_TEXTS.paypalAlt}
-            />
-            <p className="donation-hint">{DONATION_TEXTS.internationalHint}</p>
-            <p className="donation-value" id="donation-value">{DONATION.paypalUrl}</p>
-            <div className="donation-actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                id="donation-copy"
-                onClick={() => void copyLink()}
-              >
-                <Copy size={13} aria-hidden="true" /> {DONATION_TEXTS.copy}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                id="donation-open"
-                onClick={() => void openPaypal()}
-                disabled={isOpening}
-              >
-                <ExternalLink size={13} aria-hidden="true" /> {DONATION_TEXTS.open}
-              </button>
+      <div className="page-body">
+        <div className="donation-col">
+          {/* Both panels stay in the document; only the chosen one is shown. */}
+          <section
+            id="donation-panel-qris"
+            role="tabpanel"
+            aria-labelledby="donation-tab-qris"
+            hidden={method !== 'qris'}
+            className="card card--flush donation-card"
+          >
+            <div className="donation-visual">
+              <img className="donation-qris" src={DONATION.qrisImage} alt={DONATION_TEXTS.qrisAlt} />
+            </div>
+            <div className="donation-info">
+              <h2 className="donation-panel-title">{DONATION_TEXTS.domesticTitle}</h2>
+              {recipient}
+              {QRIS_IS_PLACEHOLDER && (
+                <p className="donation-note" role="note">{DONATION_TEXTS.qrisPlaceholderNote}</p>
+              )}
+              <p className="donation-hint">{DONATION_TEXTS.domesticHint}</p>
+              <ol className="donation-steps">
+                <li>Open your e-wallet or banking app</li>
+                <li>Scan the QR code</li>
+                <li>Enter an amount and confirm</li>
+              </ol>
             </div>
           </section>
-        </div>
 
-        <p className="donation-safety" role="note">
-          {DONATION_TEXTS.safetyNote}
-        </p>
+          <section
+            id="donation-panel-paypal"
+            role="tabpanel"
+            aria-labelledby="donation-tab-paypal"
+            hidden={method !== 'paypal'}
+            className="card card--flush donation-card"
+          >
+            <div className="donation-visual">
+              <img className="donation-qris" src={DONATION.paypalImage} alt={DONATION_TEXTS.paypalAlt} />
+            </div>
+            <div className="donation-info">
+              <h2 className="donation-panel-title">{DONATION_TEXTS.internationalTitle}</h2>
+              {recipient}
+              <p className="donation-hint">{DONATION_TEXTS.internationalHint}</p>
+              <p className="donation-value" id="donation-value">{DONATION.paypalUrl}</p>
+              <div className="donation-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  id="donation-copy"
+                  onClick={() => void copyLink()}
+                >
+                  <Copy size={13} aria-hidden="true" /> {DONATION_TEXTS.copy}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  id="donation-open"
+                  onClick={() => void openPaypal()}
+                  disabled={isOpening}
+                >
+                  <ExternalLink size={13} aria-hidden="true" /> {DONATION_TEXTS.open}
+                </button>
+              </div>
+              <small className="hint">Opens PayPal in your system browser.</small>
+            </div>
+          </section>
+
+          <p className="donation-safety" role="note">
+            {DONATION_TEXTS.safetyNote}
+          </p>
+        </div>
       </div>
     </div>
   );
