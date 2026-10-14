@@ -35,6 +35,8 @@ pub struct PreflightReport {
     pub eligible: bool,
     pub guard_reasons: Vec<String>,
     pub primary_guard_reason: Option<String>,
+    /// Specific, stable causes behind the guard reasons (for user messaging).
+    pub detail_codes: Vec<String>,
     pub target_id: String,
     pub resulting_text: Option<String>,
     pub unsupported_code_points: Vec<u32>,
@@ -59,13 +61,14 @@ pub fn evaluate_preflight(
                     "REJECTED_TARGET_NOT_FOUND"
                 }
             };
-            return report(target_id, vec![reason.into()], None, Vec::new(), proof);
+            return report(target_id, vec![reason.into()], vec!["SELECTION_EXPIRED".into()], None, Vec::new(), proof);
         }
     };
     if record.text != input.expected_text {
         return report(
             target_id,
             vec!["REJECTED_TARGET_NOT_FOUND".into()],
+            vec!["SELECTION_EXPIRED".into()],
             None,
             Vec::new(),
             proof,
@@ -77,6 +80,7 @@ pub fn evaluate_preflight(
             return report(
                 target_id,
                 vec!["REJECTED_UNSUPPORTED_STRUCTURE".into()],
+                vec!["INVALID_REQUEST".into()],
                 None,
                 Vec::new(),
                 proof,
@@ -91,6 +95,7 @@ pub fn evaluate_preflight(
         return report(
             target_id,
             vec!["REJECTED_TARGET_NOT_FOUND".into()],
+            vec!["SELECTION_EXPIRED".into()],
             None,
             Vec::new(),
             proof,
@@ -107,6 +112,12 @@ pub fn evaluate_preflight(
     let mut type3 = Vec::new();
     let mut glyph = Vec::new();
     let mut collision = Vec::new();
+    let mut details: Vec<String> = Vec::new();
+    let mut detail = |code: &str| {
+        if !details.iter().any(|known| known == code) {
+            details.push(code.to_string());
+        }
+    };
     if visible_word_crosses_object(
         registry,
         revision,
@@ -115,24 +126,49 @@ pub fn evaluate_preflight(
         range.scalar_end,
     ) {
         split.push("REJECTED_SPLIT_TEXT_OBJECT".to_string());
+        detail("SPLIT_WORD");
     }
-    if input.replacement_text.contains(['\n', '\r'])
-        || requires_unsupported_shaping(&resulting_text)
-        || record.evidence.source_scope_kind != "page"
-        || record.evidence.has_clip_path
-        || !supported_render_mode(&record.evidence.render_mode)
-    {
+    let mut structural = false;
+    if input.replacement_text.contains(['\n', '\r']) {
+        structural = true;
+        detail("NEW_LINE");
+    }
+    if requires_unsupported_shaping(&resulting_text) {
+        structural = true;
+        detail("COMPLEX_SCRIPT");
+    }
+    if record.evidence.source_scope_kind != "page" {
+        structural = true;
+        detail("NESTED_CONTENT_SCOPE");
+    }
+    if record.evidence.has_clip_path {
+        structural = true;
+        detail("CLIPPED_TEXT");
+    }
+    if !supported_render_mode(&record.evidence.render_mode) {
+        structural = true;
+        detail("UNSUPPORTED_RENDER_MODE");
+    }
+    if structural {
         unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
     }
     match record.evidence.font_subtype.as_deref() {
-        Some("/Type3") => type3.push("REJECTED_TYPE3".to_string()),
+        Some("/Type3") => {
+            type3.push("REJECTED_TYPE3".to_string());
+            detail("TYPE3_FONT");
+        }
         Some("/Type0" | "/Type1" | "/TrueType" | "/MMType1") => {}
-        _ => unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string()),
+        _ => {
+            unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
+            detail("UNSUPPORTED_FONT_TYPE");
+        }
     }
     if record.view_only_reason.as_deref() == Some("REJECTED_TYPE3") {
         type3.push("REJECTED_TYPE3".to_string());
+        detail("TYPE3_FONT");
     } else if !record.editable {
         unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
+        detail("OBJECT_NOT_EDITABLE");
     }
 
     let mut unsupported_code_points = Vec::new();
@@ -142,18 +178,24 @@ pub fn evaluate_preflight(
             GlyphVerdict::Missing(points) => {
                 unsupported_code_points = points;
                 glyph.push("REJECTED_UNSUPPORTED_GLYPH".to_string());
+                detail("MISSING_GLYPH");
             }
             GlyphVerdict::Unknown => {
                 unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
+                detail("GLYPH_COVERAGE_UNKNOWN");
             }
         }
     }
     match collision_verdict(inspection, record.page_index) {
         CollisionVerdict::Safe => {}
         CollisionVerdict::Collision => {
-            collision.push("REJECTED_FONT_RESOURCE_COLLISION".to_string())
+            collision.push("REJECTED_FONT_RESOURCE_COLLISION".to_string());
+            detail("FONT_RESOURCE_COLLISION");
         }
-        CollisionVerdict::Unknown => unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string()),
+        CollisionVerdict::Unknown => {
+            unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
+            detail("RESOURCE_SCOPE_UNKNOWN");
+        }
     }
 
     let mut reasons = Vec::new();
@@ -167,6 +209,7 @@ pub fn evaluate_preflight(
     report(
         target_id,
         reasons,
+        details,
         Some(resulting_text),
         unsupported_code_points,
         proof,
@@ -182,6 +225,7 @@ pub fn rejected_preflight_report(
     report(
         target_id,
         vec![reason.into()],
+        vec!["INVALID_REQUEST".into()],
         None,
         Vec::new(),
         mutation_neutral_proof(revision, source_sha256),
@@ -203,6 +247,7 @@ fn mutation_neutral_proof(revision: u64, source_sha256: &str) -> MutationNeutral
 fn report(
     target_id: &str,
     guard_reasons: Vec<String>,
+    detail_codes: Vec<String>,
     resulting_text: Option<String>,
     unsupported_code_points: Vec<u32>,
     mutation_neutral: MutationNeutralProof,
@@ -212,6 +257,7 @@ fn report(
         eligible: guard_reasons.is_empty(),
         primary_guard_reason: guard_reasons.first().cloned(),
         guard_reasons,
+        detail_codes,
         target_id: target_id.into(),
         resulting_text,
         unsupported_code_points,

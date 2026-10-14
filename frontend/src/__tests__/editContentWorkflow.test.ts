@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ContentReply, NativePageDescriptor } from '../features/edit-content/types';
 import {
   buildEditCommand,
+  explainPreflight,
+  formatMissingCharacters,
   isCurrentReply,
   projectNativePoint,
 } from '../features/edit-content/workflow';
@@ -25,7 +27,57 @@ describe('Edit Content workflow contracts', () => {
       utf16End: 3,
     });
     expect(buildEditCommand('same', 'same')).toBeNull();
-    expect(buildEditCommand('AB', 'AXB')).toBeNull();
+  });
+
+  it('sends a pure insertion as a replacement of one neighbouring character', () => {
+    // prepend: ayam -> bayam
+    expect(buildEditCommand('ayam', 'bayam')).toEqual({
+      expectedText: 'ayam', expectedOldText: 'a', replacementText: 'ba', utf16Start: 0, utf16End: 1,
+    });
+    // middle: AB -> AXB widens to the character before the caret
+    expect(buildEditCommand('AB', 'AXB')).toEqual({
+      expectedText: 'AB', expectedOldText: 'A', replacementText: 'AX', utf16Start: 0, utf16End: 1,
+    });
+    // append: Gedung -> Gedungs
+    expect(buildEditCommand('Gedung', 'Gedungs')).toEqual({
+      expectedText: 'Gedung', expectedOldText: 'g', replacementText: 'gs', utf16Start: 5, utf16End: 6,
+    });
+    // repeated characters: aa -> aaa
+    expect(buildEditCommand('aa', 'aaa')).toEqual({
+      expectedText: 'aa', expectedOldText: 'a', replacementText: 'aa', utf16Start: 1, utf16End: 2,
+    });
+    // surrogate pairs stay whole when they are the widened neighbour
+    expect(buildEditCommand('😀B', '😀XB')).toEqual({
+      expectedText: '😀B', expectedOldText: '😀', replacementText: '😀X', utf16Start: 0, utf16End: 2,
+    });
+    // the result always rebuilds the draft exactly
+    for (const [from, to] of [['ayam', 'bayam'], ['AB', 'AXB'], ['Gedung', 'Gedungs'], ['aa', 'aaa'], ['abc', 'Xabc']]) {
+      const edit = buildEditCommand(from, to)!;
+      expect(from.slice(0, edit.utf16Start) + edit.replacementText + from.slice(edit.utf16End)).toBe(to);
+      expect(from.slice(edit.utf16Start, edit.utf16End)).toBe(edit.expectedOldText);
+    }
+  });
+
+  it('keeps substitution and deletion commands unchanged', () => {
+    expect(buildEditCommand('ayam', 'ayim')).toEqual({
+      expectedText: 'ayam', expectedOldText: 'a', replacementText: 'i', utf16Start: 2, utf16End: 3,
+    });
+    expect(buildEditCommand('ayam', 'aym')).toEqual({
+      expectedText: 'ayam', expectedOldText: 'a', replacementText: '', utf16Start: 2, utf16End: 3,
+    });
+  });
+
+  it('turns dry-run verdicts into specific, actionable messages', () => {
+    const base = { eligible: false, guardReasons: [], primaryGuardReason: null, detailCodes: [], unsupportedCodePoints: [] };
+    expect(explainPreflight({ ...base, detailCodes: ['MISSING_GLYPH'], unsupportedCodePoints: [0x51, 0x151] }))
+      .toContain('"Q", "ő"');
+    expect(explainPreflight({ ...base, detailCodes: ['SPLIT_WORD'] })).toContain('split across several text pieces');
+    expect(explainPreflight({ ...base, detailCodes: ['UNSUPPORTED_FONT_TYPE', 'RESOURCE_SCOPE_UNKNOWN'] }))
+      .toContain('font type');
+    // unknown detail codes fall back to the guard reason
+    expect(explainPreflight({ ...base, primaryGuardReason: 'REJECTED_FONT_RESOURCE_COLLISION', detailCodes: ['NEW_CODE'] }))
+      .toBe('This page has colliding font resources and cannot be regenerated safely.');
+    expect(formatMissingCharacters([1, 2, 3, 4, 5, 6, 7]).endsWith('…')).toBe(true);
   });
 
   it('accepts async data only for the exact session, request, and revision', () => {

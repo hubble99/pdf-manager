@@ -95,3 +95,11 @@ export interface HitTestResult {
   candidateTargetIds?: string[];
   mutationCommandCreated: false;
 }
+
+export interface PreflightResult {
+  eligible: boolean;
+  guardReasons: string[];
+  primaryGuardReason: string | null;
+  detailCodes: string[];
+  unsupportedCodePoints: number[];
+}

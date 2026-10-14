@@ -53,6 +53,19 @@ class FakeCoordinator:
             result = {"discovery": discovery(self.revision)}
         return {"status": "accepted", "acceptedRevision": self.revision, "result": result}
 
+    def preflight(self, **kwargs):
+        if kwargs["expected_revision"] != self.revision:
+            raise ContentCoordinatorError("stale", "REJECTED_STALE_REVISION")
+        blocked = kwargs["edit"]["replacementText"] == "q"
+        return {
+            "eligible": not blocked,
+            "guardReasons": ["REJECTED_UNSUPPORTED_GLYPH"] if blocked else [],
+            "primaryGuardReason": "REJECTED_UNSUPPORTED_GLYPH" if blocked else None,
+            "detailCodes": ["MISSING_GLYPH"] if blocked else [],
+            "unsupportedCodePoints": [113] if blocked else [],
+            "mutationNeutral": {"mutationAttempted": False},
+        }
+
     def render(self, **kwargs):
         if kwargs["expected_revision"] != self.revision:
             raise ContentCoordinatorError("stale", "REJECTED_STALE_REVISION")
@@ -356,3 +369,84 @@ async def test_two_content_sessions_and_canvas_surface_remain_independent(regist
         assert first.revision == 1
         assert second.revision == 0
         assert canvas.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_preflight_dry_run_reports_verdicts_without_mutating_the_session(registry):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        opened = await client.post(
+            "/api/v1/edit-content/sessions",
+            data={"schemaVersion": "edit-content-request/v1", "requestId": "open1", "command": "open"},
+            files={"file": ("source.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+        )
+        session_id = opened.json()["sessionId"]
+
+        def probe(replacement, request_id, revision=0):
+            edit = {"expectedText": "word", "expectedOldText": "o", "replacementText": replacement,
+                    "utf16Start": 1, "utf16End": 2}
+            return client.post(
+                f"/api/v1/edit-content/sessions/{session_id}/objects",
+                json=envelope(session_id, request_id, "inspect", revision,
+                              {"operation": "preflight", "edit": edit}, "target-0"),
+            )
+
+        allowed = await probe("e", "pf1")
+        blocked = await probe("q", "pf2")
+        assert allowed.json()["status"] == "accepted"
+        assert allowed.json()["result"]["preflight"] == {
+            "eligible": True, "guardReasons": [], "primaryGuardReason": None,
+            "detailCodes": [], "unsupportedCodePoints": [],
+        }
+        verdict = blocked.json()["result"]["preflight"]
+        assert verdict["eligible"] is False and verdict["detailCodes"] == ["MISSING_GLYPH"]
+        assert "mutationNeutral" not in verdict
+        assert (await probe("e", "pf3", revision=7)).json()["status"] == "stale"
+        missing_target = await client.post(
+            f"/api/v1/edit-content/sessions/{session_id}/objects",
+            json=envelope(session_id, "pf4", "inspect", 0, {"operation": "preflight", "edit": {
+                "expectedText": "w", "expectedOldText": "w", "replacementText": "x", "utf16Start": 0, "utf16End": 1}}),
+        )
+        assert missing_target.status_code == 422
+        assert registry.sessions[session_id].revision == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure,status,code,fragment", [
+    (ContentCoordinatorError("rejected", "PDF_ENCRYPTED"), 422, "PDF_ENCRYPTED", "encrypted or permission-protected"),
+    (ContentCoordinatorError("rejected", "PDF_UNREADABLE"), 422, "PDF_UNREADABLE", "could not read the structure"),
+    (ContentCoordinatorError("rejected", "REJECTED_UNSUPPORTED_STRUCTURE"), 422, "REJECTED_UNSUPPORTED_STRUCTURE", "outside the supported structure"),
+    (ContentCoordinatorError("unknown", "committed checkpoint could not be reopened"), 503, "ENGINE_UNAVAILABLE", "engine is unavailable"),
+])
+async def test_open_failures_tell_a_bad_file_apart_from_an_engine_outage(registry, monkeypatch, failure, status, code, fragment):
+    def fail(_source):
+        raise failure
+
+    monkeypatch.setattr(registry, "open", fail)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/edit-content/sessions",
+            data={"schemaVersion": "edit-content-request/v1", "requestId": "open1", "command": "open"},
+            files={"file": ("source.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+        )
+    assert response.status_code == status
+    assert response.headers["x-edit-content-error"] == code
+    assert fragment in response.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_worker_start_and_timeout_failures_get_their_own_messages(registry, monkeypatch):
+    from features.edit_content.process_adapter import ContentWorkerError
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for code, fragment in (("OPEN_TIMEOUT", "took too long to open"), ("ENGINE_START_FAILED", "could not be started")):
+            def fail(_source, code=code):
+                raise ContentWorkerError("x", code=code)
+
+            monkeypatch.setattr(registry, "open", fail)
+            response = await client.post(
+                "/api/v1/edit-content/sessions",
+                data={"schemaVersion": "edit-content-request/v1", "requestId": f"open-{code}", "command": "open"},
+                files={"file": ("source.pdf", b"%PDF-1.4\n%%EOF", "application/pdf")},
+            )
+            assert response.status_code == 503 and response.headers["x-edit-content-error"] == code
+            assert fragment in response.json()["message"]

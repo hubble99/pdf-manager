@@ -7,6 +7,7 @@ import type {
   NativeDiscovery,
   NativeRender,
   Point,
+  PreflightResult,
 } from './types';
 
 const SCHEMA = 'edit-content-request/v1' as const;
@@ -179,6 +180,23 @@ export async function downloadContentOutput(sessionId: string, outputId: string)
   const response = await apiClient.get<Blob>(
     `/api/v1/edit-content/sessions/${sessionId}/outputs/${outputId}`,
     { responseType: 'blob' },
+  );
+  return response.data;
+}
+
+/** Read-only dry run of the engine's guards for one proposed edit. */
+export async function preflightContentEdit(
+  sessionId: string,
+  acceptedRevision: number,
+  targetId: string,
+  edit: EditCommand,
+  signal?: AbortSignal,
+) {
+  const requestId = contentRequestId('preflight');
+  const response = await apiClient.post<ContentReply<{ preflight: PreflightResult }>>(
+    `/api/v1/edit-content/sessions/${sessionId}/objects`,
+    envelope(sessionId, requestId, 'inspect', acceptedRevision, { operation: 'preflight', edit }, targetId),
+    { signal },
   );
   return response.data;
 }

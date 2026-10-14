@@ -111,3 +111,54 @@ def test_frozen_empty_glyph_layout_proof(tmp_path,variant):
             assert backend.record(sid).read_bytes() == before
     finally:
         backend.stop()
+
+
+def standard_font_page(base='/ArialMT', *, flags=32, encoding='/WinAnsiEncoding', to_unicode=False,
+                       subtype='/TrueType', embedded=False):
+    writer = PdfWriter(); page = writer.add_blank_page(width=200, height=200)
+    desc = DictionaryObject({NameObject('/Type'):NameObject('/FontDescriptor'), NameObject('/FontName'):NameObject(base),
+        NameObject('/Flags'):NumberObject(flags)})
+    if embedded:
+        stream = DecodedStreamObject(); stream.set_data(b'not-a-font'); desc[NameObject('/FontFile2')] = writer._add_object(stream)
+    font = DictionaryObject({NameObject('/Type'):NameObject('/Font'), NameObject('/Subtype'):NameObject(subtype),
+        NameObject('/BaseFont'):NameObject(base), NameObject('/Encoding'):NameObject(encoding),
+        NameObject('/FontDescriptor'):writer._add_object(desc)})
+    if to_unicode:
+        mapping = DecodedStreamObject(); mapping.set_data(b''); font[NameObject('/ToUnicode')] = writer._add_object(mapping)
+    page[NameObject('/Resources')] = DictionaryObject({NameObject('/Font'):DictionaryObject({NameObject('/A'):writer._add_object(font)})})
+    stream = DecodedStreamObject()
+    stream.set_data(b'BT /A 12 Tf 1 0 0 1 30 100 Tm (AA) Tj ET\nBT /A 12 Tf 1 0 0 1 45 100 Tm ( ) Tj ET\n')
+    page[NameObject('/Contents')] = writer._add_object(stream)
+    out = io.BytesIO(); writer.write(out)
+    return PdfReader(io.BytesIO(out.getvalue())).pages[0]
+
+
+def test_standard_space_policy_is_limited_to_nonembedded_nonsymbolic_latin_faces():
+    from features.edit_content.empty_paint import standard_nonembedded_space
+    cases = [
+        (dict(), True), (dict(base='/TimesNewRomanPSMT'), True), (dict(base='/Arial-BoldMT'), True),
+        (dict(base='/Helvetica', subtype='/Type1'), True),
+        (dict(embedded=True), False),                      # embedded fonts use the glyph proof instead
+        (dict(base='/ABCDEF+ArialMT'), False),             # subset prefix: meant to be embedded
+        (dict(base='/WingdingsRegular'), False),           # not a known Latin face
+        (dict(flags=4), False),                            # symbolic
+        (dict(encoding='/MacRomanEncoding'), False),
+        (dict(to_unicode=True), False),
+        (dict(subtype='/Type0'), False),
+    ]
+    for kwargs, expected in cases:
+        page = standard_font_page(**kwargs)
+        assert standard_nonembedded_space(page['/Resources']['/Font']['/A']) is expected, kwargs
+
+
+def test_standard_space_slots_name_their_proof_and_embedded_slots_keep_theirs():
+    page = standard_font_page()
+    slots = text_paint_slots(page, page['/Resources'])
+    assert [s['emptyPaint'] for s in slots] == [False, True]
+    assert all(s['emptyProof'] == 'standard-space/v1' for s in slots)
+    assert slots[0]['asciiCodes'] == [65, 65]
+    embedded = PdfReader(io.BytesIO(fixture('safe'))).pages[0]
+    assert all(s['emptyProof'] == 'winansi-loca/v1' for s in text_paint_slots(embedded, embedded['/Resources']))
+    unproven = standard_font_page(base='/WingdingsRegular')
+    slots = text_paint_slots(unproven, unproven['/Resources'])
+    assert not any(s['emptyPaint'] for s in slots) and all(s['asciiCodes'] is None for s in slots)

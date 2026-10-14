@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from config import settings
 from features.edit_content.commit_store import UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError
+from features.edit_content.open_diagnosis import OPEN_FAILURE_MESSAGES
 from features.edit_content.session_service import (
     ContentSessionRegistry,
     ContentSessionUnavailable,
@@ -104,6 +105,11 @@ class ApplyPayload(StrictModel):
     edit: EditPayload
 
 
+class PreflightPayload(StrictModel):
+    operation: Literal["preflight"]
+    edit: EditPayload
+
+
 class HistoryPayload(StrictModel):
     action: Literal["undo", "redo"]
     pendingDraft: bool = False
@@ -186,9 +192,24 @@ async def open_session(
             {"state": state, "discovery": discovery},
         )
     except ContentCoordinatorError as exc:
-        raise HTTPException(status_code=503, detail="Edit Content engine is unavailable.") from exc
+        # A document the engine rejected is the file's problem (422), not an
+        # engine outage (503); say which, so the user can act on it.
+        if exc.status == "rejected" and exc.reason in OPEN_FAILURE_MESSAGES:
+            raise HTTPException(
+                status_code=422, detail=OPEN_FAILURE_MESSAGES[exc.reason],
+                headers={"X-Edit-Content-Error": exc.reason},
+            ) from exc
+        raise HTTPException(
+            status_code=503, detail=OPEN_FAILURE_MESSAGES["ENGINE_UNAVAILABLE"],
+            headers={"X-Edit-Content-Error": "ENGINE_UNAVAILABLE"},
+        ) from exc
     except (OSError, RuntimeError) as exc:
-        raise HTTPException(status_code=503, detail="Edit Content engine is unavailable.") from exc
+        code = getattr(exc, "code", "ENGINE_UNAVAILABLE")
+        raise HTTPException(
+            status_code=503,
+            detail=OPEN_FAILURE_MESSAGES.get(code, OPEN_FAILURE_MESSAGES["ENGINE_UNAVAILABLE"]),
+            headers={"X-Edit-Content-Error": code},
+        ) from exc
     finally:
         source.unlink(missing_ok=True)
 
@@ -203,6 +224,30 @@ def objects(session_id: str, envelope: CommandEnvelope):
         payload = _payload(ValidateRangePayload, envelope.payload).model_dump()
         if envelope.targetId is None:
             raise HTTPException(status_code=422, detail="Range validation requires targetId.")
+    elif operation == "preflight":
+        if envelope.targetId is None:
+            raise HTTPException(status_code=422, detail="Preflight requires targetId.")
+        preflight_edit = _payload(PreflightPayload, envelope.payload).edit.model_dump()
+
+        def preflight_call(coordinator, _cancelled):
+            report = coordinator.preflight(
+                request_id=envelope.requestId,
+                expected_revision=envelope.expectedAcceptedRevision,
+                target_id=envelope.targetId,
+                edit=preflight_edit,
+            )
+            public = {
+                "eligible": bool(report.get("eligible")),
+                "guardReasons": list(report.get("guardReasons", [])),
+                "primaryGuardReason": report.get("primaryGuardReason"),
+                "detailCodes": list(report.get("detailCodes", [])),
+                "unsupportedCodePoints": list(report.get("unsupportedCodePoints", [])),
+            }
+            return accepted_read_reply(
+                envelope.requestId, session_id, envelope.expectedAcceptedRevision, {"preflight": public},
+            )
+
+        return get_content_registry().run(session_id, envelope.requestId, preflight_call)
     elif envelope.payload:
         raise HTTPException(status_code=422, detail="Unsupported object operation.")
     else:

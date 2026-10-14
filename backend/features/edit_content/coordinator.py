@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import hashlib
+import logging
 from pathlib import Path
 import threading
+import time
 from typing import Any, Callable
 import uuid
 
 from features.edit_content.commit_store import ContentCommitStore, UnknownOutcome
 from features.edit_content.engine_identity import load_engine_identity
+from features.edit_content.open_diagnosis import diagnose_rejected_source
 from features.edit_content.process_adapter import (
     ContentPreparationRejected, ContentWorkerAdapter, ContentWorkerError, PreparedArtifactLease,
     WorkerLaunchConfig,
@@ -19,6 +22,8 @@ from features.edit_content.transaction_state import (
     Checkpoint, EditMetadata, Outcome, REQUIRED_CHECKS, SessionState,
     TransitionRejected, VERIFIER_POLICY,
 )
+
+logger = logging.getLogger("pdf_manager.edit_content")
 
 
 class ContentCoordinatorError(RuntimeError):
@@ -41,14 +46,25 @@ class ContentSessionCoordinator:
         cls, config: WorkerLaunchConfig, storage_parent: Path, source: Path,
         *, session_id: str | None = None,
     ) -> ContentSessionCoordinator:
-        adapter = ContentWorkerAdapter(config)
-        active_session = adapter.start(source, session_id=session_id, accepted_revision=0)
+        # Opening is read-only and idempotent, so one automatic retry on a worker
+        # start/open/inspect failure is safe. A document the engine rejected is
+        # never retried.
+        for attempt in (1, 2):
+            adapter = ContentWorkerAdapter(config)
+            try:
+                active_session = adapter.start(source, session_id=session_id, accepted_revision=0)
+                opened = adapter.open()
+                inspected = adapter.inspect()
+                break
+            except ContentWorkerError as exc:
+                adapter.terminate()
+                if attempt == 2:
+                    raise
+                logger.warning("edit-content open failed (%s); retrying once", exc.code)
         store = None
         try:
-            opened = adapter.open()
-            inspected = adapter.inspect()
             if opened.get("status") != "accepted" or inspected.get("status") != "accepted":
-                raise ContentCoordinatorError("rejected", "REJECTED_UNSUPPORTED_STRUCTURE")
+                raise ContentCoordinatorError("rejected", diagnose_rejected_source(source))
             result = opened.get("result", {})
             digest = result.get("sourceSha256")
             size = result.get("sourceBytes")
@@ -110,6 +126,33 @@ class ContentSessionCoordinator:
                 )
             return self._checked_read_reply(reply, state.revision)
 
+    def preflight(
+        self, *, request_id: str, expected_revision: int, target_id: str, edit: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Read-only dry run of the worker's guards for one proposed edit.
+
+        Returns the worker's preflight report whether or not the edit is
+        eligible; it never creates a candidate or changes accepted state.
+        """
+        with self._lock:
+            self._ensure_worker()
+            state = self.store.state()
+            if expected_revision != state.revision:
+                raise ContentCoordinatorError("stale", "REJECTED_STALE_REVISION")
+            reply = self.adapter.inspect_request(
+                request_id=request_id,
+                expected_revision=state.revision,
+                target_id=target_id,
+                payload={"operation": "preflight", **edit},
+            )
+            if reply.get("acceptedRevision") != state.revision:
+                raise ContentCoordinatorError("unknown", "Content worker revision could not be established")
+            report = reply.get("result", {}).get("preflight")
+            if reply.get("status") not in {"accepted", "rejected", "stale"} or not isinstance(report, dict):
+                reason = str(reply.get("guardReason") or "REJECTED_UNSUPPORTED_STRUCTURE")
+                raise ContentCoordinatorError("stale" if reply.get("status") == "stale" else "rejected", reason)
+            return report
+
     def render(
         self,
         *,
@@ -138,6 +181,7 @@ class ContentSessionCoordinator:
         edit: dict[str, Any], save: bool = False, cancelled: Callable[[], bool] = lambda: False,
     ) -> Outcome:
         operation = "save-with-draft" if save else "apply"
+        started = time.monotonic()
         with self._lock:
             try:
                 self._ensure_worker()
@@ -157,7 +201,14 @@ class ContentSessionCoordinator:
                     pending_draft=True, prepare=prepare, cancelled=cancelled,
                 )
             except ContentPreparationRejected as exc:
-                self._restore_after_failure()
+                # A rejected candidate was prepared on a private copy and has been
+                # discarded by the worker; the accepted document it holds is
+                # unchanged. Only an unknown outcome needs a fresh worker.
+                restarted = self._restore_after_failure(worker_state_clean=not exc.unknown)
+                logger.info(
+                    "edit-content %s rejected reason=%s elapsed_ms=%d worker_restarted=%s",
+                    operation, exc.reason, int((time.monotonic() - started) * 1000), restarted,
+                )
                 raise ContentCoordinatorError("unknown" if exc.unknown else "rejected", exc.reason) from exc
             except ContentWorkerError as exc:
                 # The coordinator is the sole commit authority. If preparation
@@ -170,7 +221,12 @@ class ContentSessionCoordinator:
             except UnknownOutcome as exc:
                 self.adapter.terminate()
                 raise ContentCoordinatorError("unknown", str(exc)) from exc
+            committed = time.monotonic()
             self._restart_after_commit()
+            logger.info(
+                "edit-content %s accepted prepare_commit_ms=%d restart_ms=%d",
+                operation, int((committed - started) * 1000), int((time.monotonic() - committed) * 1000),
+            )
             return outcome
 
     def save(
@@ -300,11 +356,15 @@ class ContentSessionCoordinator:
             # Commit already happened. A later call retries from committed bytes.
             self.adapter.terminate()
 
-    def _restore_after_failure(self) -> None:
+    def _restore_after_failure(self, *, worker_state_clean: bool = False) -> bool:
+        """Return True when a replacement worker was started."""
+        if worker_state_clean and self.adapter.is_running:
+            return False
         try:
             self._restart_current()
         except Exception:
             self.adapter.terminate()
+        return True
 
     @staticmethod
     def _checked_read_reply(reply: dict[str, Any], revision: int) -> dict[str, Any]:

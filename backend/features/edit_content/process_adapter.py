@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 import json
+import logging
 from pathlib import Path
 import queue
 import re
 import struct
 import subprocess
 import threading
+import time
 from typing import Any, Sequence
 import uuid
+
+logger = logging.getLogger("pdf_manager.edit_content")
 
 
 REQUEST_SCHEMA = "edit-content-request/v1"
@@ -19,10 +24,18 @@ REPLY_SCHEMA = "edit-content-reply/v1"
 PREPARATION_SCHEMA = "edit-content-preparation/v1"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_REPLY_BYTES = 16 * 1024 * 1024
+STDERR_TAIL_BYTES = 64 * 1024
 
 
 class ContentWorkerError(RuntimeError):
-    """Safe adapter failure that never includes private paths or worker stderr."""
+    """Safe adapter failure that never includes private paths or worker stderr.
+
+    ``code`` is a stable machine-readable class of failure for the API layer.
+    """
+
+    def __init__(self, message: str = "", *, code: str = "ENGINE_UNAVAILABLE"):
+        super().__init__(message)
+        self.code = code
 
 
 class ContentPreparationRejected(ContentWorkerError):
@@ -46,7 +59,7 @@ class WorkerLaunchConfig:
     pdfium_library: Path
     workspace_root: Path
     inspector_command: tuple[str, ...]
-    startup_timeout_seconds: float = 10.0
+    startup_timeout_seconds: float = 30.0
     inspect_timeout_seconds: float = 30.0
     close_timeout_seconds: float = 10.0
     parent_process_id: int | None = None
@@ -83,6 +96,13 @@ class ContentWorkerAdapter:
         self._session_id: str | None = None
         self._source: Path | None = None
         self._accepted_revision = 0
+        self._stderr_tail: deque[bytes] = deque()
+        self._stderr_tail_bytes = 0
+
+    @property
+    def stderr_tail(self) -> str:
+        """Bounded tail of worker diagnostics, for server-side logs only."""
+        return b"".join(self._stderr_tail).decode("utf-8", "replace")
 
     @property
     def process_id(self) -> int | None:
@@ -138,13 +158,17 @@ class ContentWorkerAdapter:
                     creationflags=creationflags,
                 )
             except OSError as exc:
-                raise ContentWorkerError("Content worker could not be started") from exc
+                raise ContentWorkerError(
+                    "Content worker could not be started", code="ENGINE_START_FAILED"
+                ) from exc
             self._process = process
             self._session_id = active_session
             self._source = source_path
             self._accepted_revision = accepted_revision
             self._replies = queue.Queue(maxsize=1)
             threading.Thread(target=self._read_replies, args=(process,), daemon=True).start()
+            self._stderr_tail = deque()
+            self._stderr_tail_bytes = 0
             threading.Thread(target=self._drain_stderr, args=(process,), daemon=True).start()
             return active_session
 
@@ -319,13 +343,31 @@ class ContentWorkerAdapter:
                 process.stdin.flush()
             except (BrokenPipeError, OSError) as exc:
                 raise ContentWorkerError("Content worker is unavailable") from exc
+            started = time.monotonic()
             try:
                 outcome = self._replies.get(timeout=timeout)
             except queue.Empty as exc:
                 self._terminate(process)
-                raise ContentWorkerError("Content worker command timed out") from exc
+                logger.warning(
+                    "edit-content worker command=%s timed out after %.1fs; worker stderr tail: %s",
+                    command, time.monotonic() - started, self.stderr_tail[-2048:] or "<empty>",
+                )
+                raise ContentWorkerError(
+                    "Content worker command timed out", code=f"{command.upper()}_TIMEOUT"
+                ) from exc
+            logger.info(
+                "edit-content worker command=%s elapsed_ms=%d",
+                command, int((time.monotonic() - started) * 1000),
+            )
             if isinstance(outcome, BaseException):
-                raise ContentWorkerError("Content worker is unavailable") from outcome
+                logger.warning(
+                    "edit-content worker command=%s ended unexpectedly (%s); worker stderr tail: %s",
+                    command, type(outcome).__name__, self.stderr_tail[-2048:] or "<empty>",
+                )
+                raise ContentWorkerError(
+                    "Content worker is unavailable",
+                    code="ENGINE_START_FAILED" if command == "open" else "ENGINE_UNAVAILABLE",
+                ) from outcome
             if (
                 outcome.get("schemaVersion") != response_schema
                 or outcome.get("requestId") != request_id
@@ -388,12 +430,18 @@ class ContentWorkerAdapter:
             except queue.Full:
                 pass
 
-    @staticmethod
-    def _drain_stderr(process: subprocess.Popen[bytes]) -> None:
+    def _drain_stderr(self, process: subprocess.Popen[bytes]) -> None:
         if process.stderr is None:
             return
-        while process.stderr.read(4096):
-            pass
+        while True:
+            chunk = process.stderr.read(4096)
+            if not chunk:
+                return
+            tail = self._stderr_tail
+            tail.append(chunk)
+            self._stderr_tail_bytes += len(chunk)
+            while self._stderr_tail_bytes > STDERR_TAIL_BYTES and len(tail) > 1:
+                self._stderr_tail_bytes -= len(tail.popleft())
 
     @staticmethod
     def _terminate(process: subprocess.Popen[bytes]) -> None:

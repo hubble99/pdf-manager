@@ -138,3 +138,38 @@ def test_failed_close_retains_ownership_for_shutdown_retry(tmp_path):
         registry.get("session")
     assert registry.close_all() == 1
     assert coordinator.closed
+
+
+def test_open_evicts_least_recently_used_idle_session_instead_of_failing(tmp_path: Path, monkeypatch):
+    from features.edit_content import session_service
+
+    registry = ContentSessionRegistry(config_factory=lambda: object(), storage_root=tmp_path / "sessions")
+    leaked = {sid: ClosingCoordinator() for sid in ("a" * 32, "b" * 32)}
+    for index, (sid, coordinator) in enumerate(leaked.items()):
+        registry._sessions[sid] = coordinator
+        registry._outcomes[sid] = {}
+        registry._last_used[sid] = float(index)
+    fresh = ClosingCoordinator()
+    fresh.inspect = lambda: {"status": "accepted"}
+    monkeypatch.setattr(
+        session_service.ContentSessionCoordinator, "create", classmethod(lambda cls, *a, **k: fresh)
+    )
+
+    coordinator, _ = registry.open(tmp_path / "source.pdf")
+
+    assert coordinator is fresh
+    assert leaked["a" * 32].closed is True  # oldest idle session was released
+    assert leaked["b" * 32].closed is False
+    assert len(registry._sessions) == 2
+
+
+def test_open_does_not_evict_a_session_with_a_running_request(tmp_path: Path):
+    registry = ContentSessionRegistry(config_factory=lambda: object(), storage_root=tmp_path / "sessions")
+    for index, sid in enumerate(("a" * 32, "b" * 32)):
+        registry._sessions[sid] = ClosingCoordinator()
+        registry._outcomes[sid] = {}
+        registry._last_used[sid] = float(index)
+        registry._in_flight[(sid, "r")] = threading.Event()
+
+    with pytest.raises(ContentCoordinatorError, match="session limit"):
+        registry.open(tmp_path / "source.pdf")

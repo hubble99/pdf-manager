@@ -139,6 +139,52 @@ impl ResourceInspector for ProcessResourceInspector {
     }
 }
 
+/// Content-addressed memo in front of another inspector.
+///
+/// One edit transaction inspects the same accepted bytes several times
+/// (discovery, preflight, baseline capture). The inspection of a file is a pure
+/// function of that file's bytes, so a result is reused only for byte-identical
+/// content, keyed by its SHA-256. Unsupported outcomes are never cached, and a
+/// changed file always produces a different key.
+pub struct CachingInspector {
+    inner: Box<dyn ResourceInspector>,
+    entries: std::cell::RefCell<Vec<(String, Value)>>,
+}
+
+const CACHE_CAPACITY: usize = 4;
+
+impl CachingInspector {
+    pub fn new(inner: Box<dyn ResourceInspector>) -> Self {
+        Self { inner, entries: std::cell::RefCell::new(Vec::new()) }
+    }
+}
+
+impl ResourceInspector for CachingInspector {
+    fn inspect(&self, source: &Path) -> InspectionOutcome {
+        let key = match std::fs::File::open(source)
+            .and_then(|mut file| crate::sha256_reader(&mut file))
+        {
+            Ok(key) => key,
+            // If the content cannot be fingerprinted, do not cache at all.
+            Err(_) => return self.inner.inspect(source),
+        };
+        if let Some((_, value)) = self.entries.borrow().iter().find(|(known, _)| *known == key) {
+            return InspectionOutcome::Supported(value.clone());
+        }
+        match self.inner.inspect(source) {
+            InspectionOutcome::Supported(value) => {
+                let mut entries = self.entries.borrow_mut();
+                if entries.len() >= CACHE_CAPACITY {
+                    entries.remove(0);
+                }
+                entries.push((key, value.clone()));
+                InspectionOutcome::Supported(value)
+            }
+            other => other,
+        }
+    }
+}
+
 pub struct UnavailableResourceInspector;
 
 impl ResourceInspector for UnavailableResourceInspector {
@@ -156,5 +202,67 @@ impl ResourceInspector for TestResourceInspector {
             "schemaVersion": "edit-content-resource-inspection/v1",
             "pages": [],
         }))
+    }
+}
+
+#[cfg(test)]
+mod caching_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+
+    struct Counting {
+        calls: Arc<AtomicU32>,
+        supported: bool,
+    }
+    impl ResourceInspector for Counting {
+        fn inspect(&self, source: &Path) -> InspectionOutcome {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            if self.supported {
+                InspectionOutcome::Supported(serde_json::json!({
+                    "supported": true,
+                    "bytes": std::fs::read(source).unwrap().len(),
+                }))
+            } else {
+                InspectionOutcome::Unsupported
+            }
+        }
+    }
+
+    fn temp(name: &str, bytes: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("cache-{}-{name}", std::process::id()));
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn identical_bytes_are_inspected_once_regardless_of_path() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let cache = CachingInspector::new(Box::new(Counting { calls: calls.clone(), supported: true }));
+        let (a, b) = (temp("a.pdf", b"same"), temp("b.pdf", b"same"));
+        assert!(matches!(cache.inspect(&a), InspectionOutcome::Supported(_)));
+        assert!(matches!(cache.inspect(&a), InspectionOutcome::Supported(_)));
+        assert!(matches!(cache.inspect(&b), InspectionOutcome::Supported(_)));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn changed_bytes_and_unsupported_results_are_never_served_from_cache() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let cache = CachingInspector::new(Box::new(Counting { calls: calls.clone(), supported: true }));
+        let path = temp("c.pdf", b"one");
+        let first = cache.inspect(&path);
+        std::fs::write(&path, b"three").unwrap();
+        let second = cache.inspect(&path);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        match (first, second) {
+            (InspectionOutcome::Supported(x), InspectionOutcome::Supported(y)) => assert_ne!(x, y),
+            _ => panic!("both inspections must be supported"),
+        }
+        let failing_calls = Arc::new(AtomicU32::new(0));
+        let failing = CachingInspector::new(Box::new(Counting { calls: failing_calls.clone(), supported: false }));
+        assert!(matches!(failing.inspect(&path), InspectionOutcome::Unsupported));
+        assert!(matches!(failing.inspect(&path), InspectionOutcome::Unsupported));
+        assert_eq!(failing_calls.load(Ordering::SeqCst), 2);
     }
 }

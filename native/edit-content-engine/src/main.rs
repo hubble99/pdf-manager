@@ -147,7 +147,9 @@ fn native_worker(
     // Obtain both symbol tables before the wrapper installs its singleton.
     // Only Pdfium::new below initializes PDFium; the inspector is read-only.
     let inspector: Box<dyn ResourceInspector> = match Pdfium::bind_to_library(&library_path) {
-        Ok(bindings) => Box::new(edit_content_engine::marked_content::NativeBoundInspector::new(inspector, bindings)),
+        Ok(bindings) => Box::new(edit_content_engine::resource_inspector::CachingInspector::new(Box::new(
+            edit_content_engine::marked_content::NativeBoundInspector::new(inspector, bindings),
+        ))),
         Err(_) => {
             let _ = startup.send(Err("pinned ownership bindings could not be loaded".into()));
             return;

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 import re
 import shlex
 import sys
 import threading
+import time
 from typing import Any, Callable
 import uuid
 
@@ -60,6 +62,8 @@ def default_worker_config() -> WorkerLaunchConfig:
         parent_process_id=os.getpid() if resource_dir else None,
     )
 
+logger = logging.getLogger("pdf_manager.edit_content")
+
 
 class ContentSessionRegistry:
     """Owns independent live coordinators and request outcomes for the API layer."""
@@ -80,9 +84,31 @@ class ContentSessionRegistry:
         self._close_lock = threading.Lock()
         self._closing: set[str] = set()
         self._closed: set[str] = set()
+        self._last_used: dict[str, float] = {}
         self._shutting_down = False
 
+    def _evict_stalest_idle_session(self) -> None:
+        """Free a slot by closing the least-recently-used session with no running request.
+
+        A reloaded or crashed window never closes its private session, so without
+        eviction two such leaks would make every later open fail until restart.
+        Committed history of the evicted session stays on disk.
+        """
+        with self._lock:
+            if len(self._sessions) < MAX_ACTIVE_SESSIONS:
+                return
+            busy = {key[0] for key in self._in_flight}
+            candidates = [sid for sid in self._sessions if sid not in busy and sid not in self._closing]
+            if not candidates:
+                return
+            victim = min(candidates, key=lambda sid: self._last_used.get(sid, 0.0))
+        try:
+            self.close(victim)
+        except (ContentSessionUnavailable, RuntimeError, OSError):
+            logger.warning("edit-content could not evict idle session")
+
     def open(self, source: Path) -> tuple[ContentSessionCoordinator, dict[str, Any]]:
+        self._evict_stalest_idle_session()
         with self._lock:
             if self._shutting_down:
                 raise ContentCoordinatorError("rejected", "Edit Content is shutting down")
@@ -99,6 +125,7 @@ class ContentSessionRegistry:
                 raise
             self._sessions[session_id] = coordinator
             self._outcomes[session_id] = {}
+            self._last_used[session_id] = time.monotonic()
         return coordinator, inspected
 
     def get(self, session_id: str) -> ContentSessionCoordinator:
@@ -106,6 +133,8 @@ class ContentSessionRegistry:
             if self._shutting_down or session_id in self._closing or session_id in self._closed:
                 raise ContentSessionUnavailable("REJECTED_SESSION_NOT_FOUND")
             coordinator = self._sessions.get(session_id)
+            if coordinator is not None:
+                self._last_used[session_id] = time.monotonic()
             if coordinator is None:
                 root = self._recovery_root(session_id)
                 if len(self._sessions) >= MAX_ACTIVE_SESSIONS:
@@ -118,6 +147,7 @@ class ContentSessionRegistry:
                     raise ContentSessionUnavailable("Content recovery could not be verified.", unknown=True) from exc
                 self._sessions[session_id] = coordinator
                 self._outcomes[session_id] = {}
+                self._last_used[session_id] = time.monotonic()
             return coordinator
 
     def _recovery_root(self, session_id: str) -> Path:
@@ -238,6 +268,7 @@ class ContentSessionRegistry:
             with self._idle:
                 self._sessions.pop(session_id, None)
                 self._outcomes.pop(session_id, None)
+                self._last_used.pop(session_id, None)
                 self._closing.discard(session_id)
                 self._closed.add(session_id)
                 self._idle.notify_all()

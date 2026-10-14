@@ -12,6 +12,34 @@ from features.edit_content.marked_content import require, MAX_OPERATIONS
 from features.edit_content.preservation import optional_proof
 
 
+# Non-embedded Latin text faces whose WinAnsi space (code 32) is blank by
+# typographic convention in every substitute a viewer can pick. Nothing in the
+# file can prove the outline, so this is a deliberately narrow, name-based policy.
+_STANDARD_SPACE_FAMILIES = (
+    "Arial", "TimesNewRoman", "CourierNew", "Calibri", "Cambria", "Verdana",
+    "Tahoma", "Georgia", "TrebuchetMS", "Helvetica", "Times-", "Times", "Courier",
+)
+
+
+def standard_nonembedded_space(font) -> bool:
+    """Policy proof for a non-embedded, nonsymbolic WinAnsi simple font."""
+    font = font.get_object()
+    if font.get('/Subtype') not in ('/TrueType', '/Type1') or font.get('/Encoding') != '/WinAnsiEncoding':
+        return False
+    if '/ToUnicode' in font:
+        return False
+    desc = font.get('/FontDescriptor', {}).get_object() if '/FontDescriptor' in font else {}
+    if any(key in desc for key in ('/FontFile', '/FontFile2', '/FontFile3')):
+        return False
+    if desc and desc.get('/Flags') != 32:
+        return False
+    base = str(font.get('/BaseFont', '')).removeprefix('/')
+    if len(base) > 7 and base[6] == '+':
+        return False  # a subset prefix means the font was meant to be embedded
+    base = base.replace(' ', '')
+    return any(base.startswith(family) for family in _STANDARD_SPACE_FAMILIES)
+
+
 def empty_winansi_space(font):
     """Pinned TrueType mapping: WinAnsi code 32 -> Windows Unicode cmap U+0020.
 
@@ -67,7 +95,7 @@ def text_paint_slots(page, resources):
     ops = page.get_contents().operations
     require(len(ops) <= MAX_OPERATIONS)
     state = dict(font=None, size=None, ctm_identity=True, mode=0, rise=0, scale=100)
-    stack, marks, slots, empty_fonts = [], [], [], {}
+    stack, marks, slots, empty_fonts, standard_fonts = [], [], [], {}, {}
     matrix, painted, in_text = None, False, False
     f32 = lambda x: struct.unpack('<f', struct.pack('<f', float(x)))[0]
     bits = lambda x: struct.unpack('<I', struct.pack('<f', float(x)))[0]
@@ -86,7 +114,10 @@ def text_paint_slots(page, resources):
             if state['font'] not in empty_fonts:
                 # An unprovable glyph in another font supplies no exception;
                 # it must not erase the complete slot census for proven fonts.
-                empty_fonts[state['font']] = optional_proof(empty_winansi_space, raw) is True
+                embedded_proof = optional_proof(empty_winansi_space, raw) is True
+                standard_proof = (not embedded_proof) and optional_proof(standard_nonembedded_space, raw) is True
+                empty_fonts[state['font']] = embedded_proof or standard_proof
+                standard_fonts[state['font']] = standard_proof
         elif op in (b'Tr', b'Ts', b'Tz'):
             state[{b'Tr': 'mode', b'Ts': 'rise', b'Tz': 'scale'}[op]] = float(args[0])
         elif op == b'BT':
@@ -120,6 +151,7 @@ def text_paint_slots(page, resources):
                 fontObject=state['font'], matrixBits=[bits(v) for v in matrix], fontSizeBits=bits(state['size']),
                 asciiCodes=list(code_bytes) if empty_fonts[state['font']] and len(code_bytes) <= 1024
                     and all(32 <= v <= 126 for v in code_bytes) else None,
-                emptyPaint=state['mode'] == 0 and code_bytes == b' ' and empty_fonts[state['font']]))
+                emptyPaint=state['mode'] == 0 and code_bytes == b' ' and empty_fonts[state['font']],
+                emptyProof='standard-space/v1' if standard_fonts[state['font']] else 'winansi-loca/v1'))
             painted = True
     return slots

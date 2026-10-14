@@ -47,8 +47,15 @@ fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> 
                 support.push((oi,bounds));
             }
         }
+        // The inspector names the proof it used. Embedded fonts are proven from
+        // glyph storage; a non-embedded standard face is a policy proof for the
+        // blank WinAnsi space only and must be named as such.
+        let font_proven = match matches[0].1["emptyProof"].as_str() {
+            Some("standard-space/v1") => obj.style["font"]["embedded"] == false,
+            _ => obj.style["font"]["embedded"] == true,
+        };
         if matches[0].1["emptyPaint"] == true && obj.text.as_deref() == Some("") &&
-            obj.style["font"]["embedded"] == true && obj.style["renderMode"] == "FilledUnstroked" &&
+            font_proven && obj.style["renderMode"] == "FilledUnstroked" &&
             obj.quad.len() == 4 && obj.quad.iter().all(|p| *p == obj.quad[0]) {
             proven.push(oi);
         }
@@ -933,6 +940,34 @@ mod tests {
         duplicate["nativeMarkedOwnership"].as_array_mut().unwrap().push(json!({"markedContentId":5,"fontObject":"8:0"}));
         assert!(bind_empty_paint(&duplicate,&mut objects).is_none());
         for obj in objects { assert!(obj.style["emptyGlyphPaint"].is_null()); }
+    }
+
+    #[test]
+    fn standard_space_proof_binds_only_nonembedded_fonts_that_name_it() {
+        let (mut before, _) = fixture("word", "word", "ward");
+        let object = &mut before.objects[0];
+        object.text = Some("".into());
+        object.quad = vec![[10.0, 10.0]; 4];
+        object.style["renderMode"] = json!("FilledUnstroked");
+        let slot = |proof: Option<&str>| {
+            let mut slot = json!({"mcid":5,"fontObject":"8:0","emptyPaint":true,
+                "fontSizeBits":12_f32.to_bits(),
+                "matrixBits":[1_f32.to_bits(),0,0,1_f32.to_bits(),10_f32.to_bits(),10_f32.to_bits()]});
+            if let Some(proof) = proof { slot["emptyProof"] = json!(proof); }
+            json!({"nativeMarkedOwnership":[{"markedContentId":5,"fontObject":"8:0"}],"textPaintSlots":[slot]})
+        };
+        let bound = |embedded: bool, proof: Option<&str>| {
+            let mut objects = before.objects.clone();
+            objects[0].style["font"] = json!({"embedded": embedded});
+            assert!(bind_empty_paint(&slot(proof), &mut objects).is_some());
+            objects[0].style["emptyGlyphPaint"] == "winansi-loca/v1"
+        };
+        assert!(bound(false, Some("standard-space/v1")));
+        assert!(bound(true, Some("winansi-loca/v1")));
+        assert!(bound(true, None));
+        assert!(!bound(false, None), "a non-embedded font without a named policy proof proves nothing");
+        assert!(!bound(false, Some("winansi-loca/v1")));
+        assert!(!bound(true, Some("standard-space/v1")), "the policy proof never covers an embedded font");
     }
 
     #[test]

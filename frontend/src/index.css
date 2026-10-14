@@ -1500,6 +1500,29 @@ select.input {
   line-height: 1.45;
 }
 
+.edit-content-check {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  color: var(--on-surface-variant);
+  border-left: 3px solid transparent;
+}
+
+.edit-content-check-ok {
+  color: var(--on-surface);
+  background: var(--success-container);
+  border-left: 3px solid var(--success);
+}
+
+.edit-content-check-blocked {
+  color: var(--on-surface);
+  background: var(--error-container);
+  border-left: 3px solid var(--error);
+}
+
 .edit-content-section-heading {
   display: flex;
   justify-content: space-between;

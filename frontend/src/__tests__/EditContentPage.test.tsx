@@ -15,6 +15,7 @@ vi.mock('../features/edit-content/api', () => ({
   hitTestContentObject: vi.fn(),
   renderContentPage: vi.fn(),
   applyContentDraft: vi.fn(),
+  preflightContentEdit: vi.fn(),
   saveContentSession: vi.fn(),
   moveContentHistory: vi.fn(),
   closeContentSession: vi.fn(),
@@ -110,10 +111,85 @@ beforeEach(() => {
     hitTest: { outcome: 'selected' as const, targetId: 'target-0', mutationCommandCreated: false as const },
   }));
   vi.mocked(contentApi.inspectContentObjects).mockResolvedValue(accepted('inspect-request', { discovery }, 1));
+  vi.mocked(contentApi.preflightContentEdit).mockResolvedValue(accepted('preflight-request', {
+    preflight: { eligible: true, guardReasons: [], primaryGuardReason: null, detailCodes: [], unsupportedCodePoints: [] },
+  }));
 });
 
 
 describe('Edit Content page', () => {
+  it('shows the engine verdict before Apply and blocks an edit the guards will reject', async () => {
+    vi.mocked(contentApi.preflightContentEdit).mockResolvedValue(accepted('preflight-request', {
+      preflight: {
+        eligible: false,
+        guardReasons: ['REJECTED_UNSUPPORTED_GLYPH'],
+        primaryGuardReason: 'REJECTED_UNSUPPORTED_GLYPH',
+        detailCodes: ['MISSING_GLYPH'],
+        unsupportedCodePoints: [0x71],
+      },
+    }));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press q to continue' } });
+    const message = await screen.findByText(/has no glyph for "q"/);
+    expect(message).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: /Apply & verify/i })).toBeDisabled();
+    expect(contentApi.preflightContentEdit).toHaveBeenCalledWith(
+      'session-1', 0, 'target-0',
+      { expectedText: 'Press A to continue', expectedOldText: 'A', replacementText: 'q', utf16Start: 6, utf16End: 7 },
+      expect.anything(),
+    );
+    expect(contentApi.applyContentDraft).not.toHaveBeenCalled();
+
+    // Fixing the text re-runs the check and re-enables Apply.
+    vi.mocked(contentApi.preflightContentEdit).mockResolvedValue(accepted('preflight-request', {
+      preflight: { eligible: true, guardReasons: [], primaryGuardReason: null, detailCodes: [], unsupportedCodePoints: [] },
+    }));
+    fireEvent.change(screen.getByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    await screen.findByText(/passes the engine checks/);
+    expect(screen.getByRole('button', { name: /Apply & verify/i })).toBeEnabled();
+  });
+
+  it('does not block Apply when the advisory check itself fails', async () => {
+    vi.mocked(contentApi.preflightContentEdit).mockRejectedValue(new Error('network'));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    await waitFor(() => expect(contentApi.preflightContentEdit).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: /Apply & verify/i })).toBeEnabled();
+    expect(screen.queryByRole('status', { name: '' })).toBeNull();
+  });
+
+  it('sends an insertion such as ayam -> bayam as a one-character replacement', async () => {
+    const insertDiscovery = {
+      ...discovery,
+      textObjects: [{ ...discovery.textObjects[0], text: 'ayam', unicodeScalarLength: 4 }],
+    };
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery: insertDiscovery }));
+    vi.mocked(contentApi.applyContentDraft).mockResolvedValue(accepted(
+      'apply-request', { state: { ...state, acceptedRevision: 1, dirty: true, canUndo: true }, clearDraft: true }, 1,
+    ));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'bayam' } });
+    await screen.findByText(/passes the engine checks/);
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    await waitFor(() => expect(contentApi.applyContentDraft).toHaveBeenCalledWith(
+      'session-1', 0, 'target-0',
+      { expectedText: 'ayam', expectedOldText: 'a', replacementText: 'ba', utf16Start: 0, utf16End: 1 },
+      'apply-request',
+    ));
+  });
+
   it('opens text choices below the picker and shows V1 limits before editing', async () => {
     const { container } = renderPage();
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();

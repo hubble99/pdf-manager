@@ -225,3 +225,142 @@ def test_stale_selection_after_undo_cannot_prepare(coordinator):
                           target_id="target-1", edit=edit())
     assert coordinator.adapter.preparations == preparations
     assert coordinator.store.state().revision == 2
+
+
+def test_clean_rejection_keeps_the_worker_but_a_dead_or_unknown_one_is_restarted(coordinator):
+    adapter = coordinator.adapter
+    adapter.failure = "REJECTED_UNSUPPORTED_GLYPH"
+    with pytest.raises(ContentCoordinatorError) as rejected:
+        coordinator.apply(request_id="clean", expected_revision=0, target_id="target-0", edit=edit())
+    assert rejected.value.status == "rejected"
+    # The candidate lived on a private copy; the worker's accepted document is unchanged.
+    assert adapter.restarts == [] and adapter.is_running is True
+
+    def rejected_then_died(**_request):
+        adapter.is_running = False
+        raise ContentPreparationRejected("REJECTED_COLLATERAL_INTEGRITY")
+
+    adapter.prepare_apply = rejected_then_died
+    with pytest.raises(ContentCoordinatorError):
+        coordinator.apply(request_id="died", expected_revision=0, target_id="target-0", edit=edit())
+    assert len(adapter.restarts) == 1
+
+    def unknown(**_request):
+        raise ContentPreparationRejected("worker outcome unknown", unknown=True)
+
+    adapter.prepare_apply = unknown
+    with pytest.raises(ContentCoordinatorError) as unknown_outcome:
+        coordinator.apply(request_id="unknown", expected_revision=0, target_id="target-0", edit=edit())
+    assert unknown_outcome.value.status == "unknown"
+    assert len(adapter.restarts) == 2
+
+
+def test_preflight_is_a_read_only_dry_run_that_reports_ineligible_edits(coordinator):
+    calls = []
+
+    def inspect_request(**request):
+        calls.append(request)
+        eligible = request["payload"]["replacementText"] != "q"
+        return {
+            "status": "accepted" if eligible else "rejected", "acceptedRevision": 0,
+            "result": {"preflight": {
+                "eligible": eligible, "guardReasons": [] if eligible else ["REJECTED_UNSUPPORTED_GLYPH"],
+                "primaryGuardReason": None if eligible else "REJECTED_UNSUPPORTED_GLYPH",
+                "detailCodes": [] if eligible else ["MISSING_GLYPH"], "unsupportedCodePoints": [] if eligible else [113],
+            }},
+        }
+
+    coordinator.adapter.inspect_request = inspect_request
+    before = coordinator.store.state()
+    good = coordinator.preflight(request_id="p1", expected_revision=0, target_id="target-0", edit=edit("e"))
+    bad = coordinator.preflight(request_id="p2", expected_revision=0, target_id="target-0", edit=edit("q"))
+    assert good["eligible"] is True and bad["eligible"] is False and bad["detailCodes"] == ["MISSING_GLYPH"]
+    assert calls[0]["payload"]["operation"] == "preflight" and calls[0]["target_id"] == "target-0"
+    assert coordinator.store.state() == before and coordinator.adapter.preparations == 0
+    with pytest.raises(ContentCoordinatorError) as stale:
+        coordinator.preflight(request_id="p3", expected_revision=5, target_id="target-0", edit=edit())
+    assert stale.value.status == "stale"
+
+
+class FlakyOpenAdapter:
+    """Worker whose first open times out; used to prove the one safe retry."""
+
+    instances = []
+    open_failures = 1
+    inspect_status = "accepted"
+
+    def __init__(self, _config):
+        self.index = len(FlakyOpenAdapter.instances)
+        FlakyOpenAdapter.instances.append(self)
+        self.terminated = False
+        self.source = None
+
+    def start(self, source, *, session_id, accepted_revision):
+        self.source = Path(source)
+        return session_id
+
+    def open(self):
+        if self.index < FlakyOpenAdapter.open_failures:
+            raise ContentWorkerError("Content worker command timed out", code="OPEN_TIMEOUT")
+        data = self.source.read_bytes()
+        return {"status": "accepted", "acceptedRevision": 0,
+                "result": {"sourceSha256": digest(data), "sourceBytes": len(data)}}
+
+    def inspect(self):
+        return {"status": FlakyOpenAdapter.inspect_status, "acceptedRevision": 0,
+                "result": {"discovery": {"pages": [{"pageIndex": 0}], "textObjects": [{"pageIndex": 0}], "viewOnlyObjects": []}}}
+
+    def restart(self, source, *, accepted_revision=None):
+        return {"status": "accepted", "acceptedRevision": accepted_revision}
+
+    def terminate(self):
+        self.terminated = True
+
+    def close(self):
+        return {"status": "accepted"}
+
+
+@pytest.fixture
+def flaky(monkeypatch):
+    from features.edit_content import coordinator as module
+    FlakyOpenAdapter.instances = []
+    FlakyOpenAdapter.open_failures = 1
+    FlakyOpenAdapter.inspect_status = "accepted"
+    monkeypatch.setattr(module, "ContentWorkerAdapter", FlakyOpenAdapter)
+    return FlakyOpenAdapter
+
+
+def test_open_retries_once_after_a_worker_timeout(flaky, tmp_path):
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-1.4 source")
+    created = ContentSessionCoordinator.create(object(), tmp_path / "store", source, session_id="session")
+    try:
+        assert len(flaky.instances) == 2 and flaky.instances[0].terminated is True
+    finally:
+        created.close()
+
+
+def test_open_gives_up_after_the_retry_and_keeps_the_specific_code(flaky, tmp_path):
+    flaky.open_failures = 5
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"%PDF-1.4 source")
+    with pytest.raises(ContentWorkerError) as failed:
+        ContentSessionCoordinator.create(object(), tmp_path / "store", source, session_id="session")
+    assert failed.value.code == "OPEN_TIMEOUT" and len(flaky.instances) == 2
+
+
+def test_rejected_document_is_diagnosed_and_never_retried(flaky, tmp_path):
+    from pypdf import PdfWriter
+
+    flaky.open_failures = 0
+    flaky.inspect_status = "rejected"
+    writer = PdfWriter()
+    writer.add_blank_page(100, 100)
+    writer.encrypt("", owner_password="owner", algorithm="RC4-128")
+    source = tmp_path / "locked.pdf"
+    with source.open("wb") as handle:
+        writer.write(handle)
+    with pytest.raises(ContentCoordinatorError) as rejected:
+        ContentSessionCoordinator.create(object(), tmp_path / "store", source, session_id="session")
+    assert rejected.value.status == "rejected" and rejected.value.reason == "PDF_ENCRYPTED"
+    assert len(flaky.instances) == 1 and flaky.instances[0].terminated is True

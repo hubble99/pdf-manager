@@ -35,6 +35,7 @@ import {
   inspectContentObjects,
   moveContentHistory,
   openContentSession,
+  preflightContentEdit,
   renderContentPage,
   saveContentSession,
 } from '../features/edit-content/api';
@@ -47,7 +48,7 @@ import type {
   NativeTextObjectDescriptor,
   Point,
 } from '../features/edit-content/types';
-import { buildEditCommand, explainGuard } from '../features/edit-content/workflow';
+import { buildEditCommand, explainGuard, explainPreflight } from '../features/edit-content/workflow';
 
 
 type Phase = 'idle' | 'opening' | 'rendering' | 'selecting' | 'applying' | 'saving' | 'history' | 'closing';
@@ -68,7 +69,7 @@ function EditContentLimits() {
     <aside className="edit-content-limits" aria-label="Edit Content V1 limits">
       <strong>Edit Content V1 limits</strong>
       <p>Replace or delete existing selectable text in one supported text object. Longer replacements work only when they fit without reflow.</p>
-      <p>Scans, outlined text, insert-only edits, new lines, font changes, and text split across objects are not supported. Uncertain PDFs may still be rejected during verification.</p>
+      <p>Scans, outlined text, new lines, font changes, and text split across objects are not supported. Text can be replaced, deleted, or extended inside the selected object. Uncertain PDFs may still be rejected during verification.</p>
     </aside>
   );
 }
@@ -106,6 +107,10 @@ export function EditContentPage() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
+  // Dry run of the engine's guards for the current draft (read-only, no PDF change).
+  const [check, setCheck] = useState<
+    { state: 'idle' } | { state: 'checking' } | { state: 'ok' } | { state: 'blocked'; message: string }
+  >({ state: 'idle' });
 
   const currentPage = discovery?.pages.find((page) => page.pageIndex === pageIndex);
   const pageObjects = useMemo(
@@ -119,6 +124,33 @@ export function EditContentPage() {
   const draftDirty = Boolean(selected && draft !== selected.text);
   const unsaved = draftDirty || Boolean(session?.dirty);
   const busy = phase !== 'idle';
+  const sessionId = session?.sessionId;
+  const sessionRevision = session?.acceptedRevision;
+
+  useEffect(() => {
+    setCheck({ state: 'idle' });
+    if (!sessionId || sessionRevision === undefined || !selected || !draftDirty) return undefined;
+    const edit = buildEditCommand(selected.text, draft);
+    if (!edit) return undefined;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCheck({ state: 'checking' });
+      try {
+        const reply = await preflightContentEdit(sessionId, sessionRevision, selected.targetId, edit, controller.signal);
+        if (controller.signal.aborted) return;
+        const result = reply.status === 'accepted' ? reply.result?.preflight : undefined;
+        if (!result) setCheck({ state: 'idle' });
+        else setCheck(result.eligible ? { state: 'ok' } : { state: 'blocked', message: explainPreflight(result) });
+      } catch {
+        // The check is advisory; Apply runs the same guards authoritatively.
+        if (!controller.signal.aborted) setCheck({ state: 'idle' });
+      }
+    }, 350);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [draft, draftDirty, selected, sessionId, sessionRevision]);
 
   const selectTarget = useCallback((target: NativeTextObjectDescriptor | null) => {
     setPickerOpen(false);
@@ -308,7 +340,7 @@ export function EditContentPage() {
     if (!session || !selected || !draftDirty) return false;
     const edit = buildEditCommand(selected.text, draft);
     if (!edit) {
-      setError('Insert-only changes are outside Edit Content V1. Replace or remove existing text instead.');
+      setError('This change could not be converted into a valid edit. Adjust the text and try again.');
       return false;
     }
     const requestId = contentRequestId('apply');
@@ -351,7 +383,7 @@ export function EditContentPage() {
     if (!session) return false;
     const edit = selected && draftDirty ? buildEditCommand(selected.text, draft) ?? undefined : undefined;
     if (selected && draftDirty && !edit) {
-      setError('Insert-only changes are outside Edit Content V1. Replace or remove existing text instead.');
+      setError('This change could not be converted into a valid edit. Adjust the text and try again.');
       return false;
     }
     const requestId = contentRequestId('save');
@@ -681,8 +713,20 @@ export function EditContentPage() {
                       <span>{selected.fontSizePt.toFixed(1)} pt</span>
                       {selected.rotation !== 0 && <span>{Math.round(selected.rotation)}°</span>}
                     </div>
+                    {draftDirty && check.state !== 'idle' && (
+                      <p
+                        id="edit-content-check"
+                        className={`edit-content-check edit-content-check-${check.state}`}
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {check.state === 'checking' && 'Checking this edit…'}
+                        {check.state === 'ok' && 'This edit passes the engine checks. Final verification runs when you apply.'}
+                        {check.state === 'blocked' && check.message}
+                      </p>
+                    )}
                     <div className="edit-content-editor-actions">
-                      <button className="btn btn-primary" onClick={() => void applyDraft()} disabled={!draftDirty || busy} id="edit-content-apply">
+                      <button className="btn btn-primary" onClick={() => void applyDraft()} disabled={!draftDirty || busy || check.state === 'blocked'} id="edit-content-apply">
                         <RotateCcw size={15} aria-hidden="true" /> Apply & verify
                       </button>
                       <button className="btn btn-ghost" onClick={() => requestAction({ kind: 'deselect' })} disabled={busy}>Deselect</button>
