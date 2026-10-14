@@ -1,39 +1,28 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Heart } from 'lucide-react';
-import apiClient from '../api/client';
+import { useCallback, useState } from 'react';
+import { Copy, ExternalLink, Heart } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
-import { DONATION_TEXTS, QRIS_IMAGE, QRIS_IS_PLACEHOLDER } from '../config/donation';
+import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
+import { openInSystemBrowser } from '../utils/openExternal';
 
-interface DonationState {
-  value: string;
-  is_placeholder: boolean;
-  can_open: boolean;
-}
-
+/**
+ * The donation page shows the real bundled codes and the recipient name for each
+ * method. It collects nothing: there is no form, no card field, and no account
+ * or credential input anywhere on this screen. The PayPal action opens the one
+ * fixed URL in the system browser.
+ */
 export function DonationPage() {
   const { showToast } = useToast();
-  const [state, setState] = useState<DonationState>({ value: '', is_placeholder: true, can_open: false });
   const [isOpening, setIsOpening] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiClient
-      .get<{ status: string; data: DonationState }>('/api/v1/settings/donation')
-      .then((response) => { if (!cancelled) setState(response.data.data); })
-      .catch(() => { /* stays at the placeholder state */ });
-    return () => { cancelled = true; };
-  }, []);
-
-  const copyValue = useCallback(async () => {
-    // The preferred path, with a selection-based fallback for a WebView that is
-    // not treated as a secure context.
+  const copyLink = useCallback(async () => {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(state.value);
+        await navigator.clipboard.writeText(DONATION.paypalUrl);
       } else {
+        // Selection-based fallback for a WebView that is not a secure context.
         const field = document.createElement('textarea');
-        field.value = state.value;
+        field.value = DONATION.paypalUrl;
         document.body.appendChild(field);
         field.select();
         document.execCommand('copy');
@@ -41,20 +30,29 @@ export function DonationPage() {
       }
       showToast({ type: 'success', title: DONATION_TEXTS.copied });
     } catch {
-      showToast({ type: 'error', title: 'Could not copy', message: 'Copy the value manually.' });
+      showToast({ type: 'error', title: 'Could not copy', message: 'Copy the link manually.' });
     }
-  }, [showToast, state.value]);
+  }, [showToast]);
 
-  const openValue = useCallback(async () => {
+  const openPaypal = useCallback(async () => {
     setIsOpening(true);
     try {
-      await apiClient.post('/api/v1/settings/open-donation');
+      await openInSystemBrowser(DONATION.paypalUrl);
     } catch {
       showToast({ type: 'error', title: 'Could not open the link' });
     } finally {
       setIsOpening(false);
     }
   }, [showToast]);
+
+  const recipient = (
+    <div className="donation-recipient">
+      <p className="donation-recipient-name">
+        {DONATION_TEXTS.recipientLabel}: <strong>{DONATION.recipientName}</strong>
+      </p>
+      <p className="donation-recipient-check">{DONATION_TEXTS.recipientCheck}</p>
+    </div>
+  );
 
   return (
     <div className="feature-page">
@@ -64,27 +62,36 @@ export function DonationPage() {
         <div className="donation-panels">
           <section className="card donation-panel" aria-label={DONATION_TEXTS.domesticTitle}>
             <h2 className="donation-panel-title">{DONATION_TEXTS.domesticTitle}</h2>
-            <img className="donation-qris" src={QRIS_IMAGE} alt="QRIS payment code" />
+            {recipient}
+            <img
+              className="donation-qris"
+              src={DONATION.qrisImage}
+              alt={DONATION_TEXTS.qrisAlt}
+            />
             {QRIS_IS_PLACEHOLDER && (
-              <p className="donation-note" role="note">{DONATION_TEXTS.qrisPlaceholderNote}</p>
+              <p className="donation-note" role="note">
+                {DONATION_TEXTS.qrisPlaceholderNote}
+              </p>
             )}
             <p className="donation-hint">{DONATION_TEXTS.domesticHint}</p>
           </section>
 
           <section className="card donation-panel" aria-label={DONATION_TEXTS.internationalTitle}>
             <h2 className="donation-panel-title">{DONATION_TEXTS.internationalTitle}</h2>
-            {state.is_placeholder ? (
-              <p className="donation-note" role="note">{DONATION_TEXTS.placeholderNote}</p>
-            ) : (
-              <p className="donation-value" id="donation-value">{state.value}</p>
-            )}
+            {recipient}
+            <img
+              className="donation-qris"
+              src={DONATION.paypalImage}
+              alt={DONATION_TEXTS.paypalAlt}
+            />
+            <p className="donation-hint">{DONATION_TEXTS.internationalHint}</p>
+            <p className="donation-value" id="donation-value">{DONATION.paypalUrl}</p>
             <div className="donation-actions">
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 id="donation-copy"
-                onClick={() => void copyValue()}
-                disabled={state.is_placeholder || !state.value}
+                onClick={() => void copyLink()}
               >
                 <Copy size={13} aria-hidden="true" /> {DONATION_TEXTS.copy}
               </button>
@@ -92,20 +99,18 @@ export function DonationPage() {
                 type="button"
                 className="btn btn-primary btn-sm"
                 id="donation-open"
-                onClick={() => void openValue()}
-                disabled={!state.can_open || isOpening}
-                title={state.can_open ? undefined : 'Available once a payment link is configured'}
+                onClick={() => void openPaypal()}
+                disabled={isOpening}
               >
                 <ExternalLink size={13} aria-hidden="true" /> {DONATION_TEXTS.open}
               </button>
             </div>
-            {state.value && !state.can_open && (
-              <p className="donation-hint">
-                <Check size={12} aria-hidden="true" /> Copy the value above; opening needs a payment link.
-              </p>
-            )}
           </section>
         </div>
+
+        <p className="donation-safety" role="note">
+          {DONATION_TEXTS.safetyNote}
+        </p>
       </div>
     </div>
   );

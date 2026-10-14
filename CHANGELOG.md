@@ -10,7 +10,8 @@
 - Showed the real application version from `frontend/package.json` everywhere instead of hardcoding it, so the interface can no longer drift from the release version.
 - Made **Recent output files** session-only: the list lives in `sessionStorage` and clears when the app closes.
 - Made **Canvas PDF** and **Edit Content** responsive and overflow-safe: the canvas toolbar wraps instead of clipping, the workspace shares the available height, and long text wraps instead of overflowing.
-- Did not implement the reference's prototype simulations. Compress estimates, update checks, and download simulations were left out; the QRIS image and PayPal link remain the existing configured placeholders.
+- Did not implement the reference's prototype simulations. Compress estimates, update checks, and download simulations were left out.
+- Replaced the donation placeholders with the **real bundled assets**: the QRIS and PayPal codes ship in `frontend/src/assets`, and `frontend/src/config/donation.ts` is the single source for the PayPal URL, the recipient name, and both asset paths. The Donation page shows `Recipient: Ramadhoni Nasri` for each method, the pre-payment check, and the guidance that PDF Manager never asks for payment details or for donations by email or chat. The PayPal link opens in the system browser only, the Tauri `opener:allow-open-url` scope allows exactly that one URL, and the page collects no card, account, or credential data. `donationAssets.test.ts` pins the URL, the recipient name, both image SHA-256 hashes, and the capability scope.
 
 ## 1.6.0 — 2026-10-12
 

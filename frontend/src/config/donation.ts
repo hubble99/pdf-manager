@@ -1,17 +1,50 @@
 /**
- * Donation content, in one place.
+ * Donation content and assets, in one place.
  *
- * The QRIS image ships with the app so the page works offline. The payment value
- * is deliberately NOT here: the backend holds it, because the open action may
- * only ever open the configured destination and can only enforce that where the
- * destination lives. The page reads it from `/api/v1/settings/donation`.
+ * Everything a payment surface needs lives here: the two bundled QR images, the
+ * exact PayPal destination, and the recipient name shown for each method.
+ *
+ * Hard rules for this module:
+ * - the images are imported from `assets/`, so they are committed and bundled
+ *   and are never fetched from a remote URL;
+ * - `paypalUrl` is a fixed constant; no URL is ever built from user input and no
+ *   query parameters are added;
+ * - the Tauri opener capability allows exactly `paypalUrl` and nothing else, so
+ *   changing the URL here requires the same change in
+ *   `frontend/src-tauri/capabilities/default.json`;
+ * - the app never collects card, account, or credential data. This page only
+ *   displays a code and a link.
+ *
+ * `donationAssets.test.ts` pins the URL, the recipient name, both image hashes,
+ * and the capability scope, so any change fails CI.
  */
-import qrisPlaceholder from '../assets/donation-qris-placeholder.png';
+import { APP_SOURCE_URL } from './app';
+import paypalImage from '../assets/donation-paypal.jpeg';
+import qrisImage from '../assets/donation-qris.jpeg';
 
-export const QRIS_IMAGE = qrisPlaceholder;
+export interface DonationDetails {
+  /** The only payment destination the app may open. */
+  paypalUrl: string;
+  /** The name the payer must see in their payment app before confirming. */
+  recipientName: string;
+  /** Bundled QRIS code (Indonesia). */
+  qrisImage: string;
+  /** Bundled PayPal code (international). */
+  paypalImage: string;
+}
 
-/** True while the bundled image is still the generated placeholder. */
-export const QRIS_IS_PLACEHOLDER = true;
+export const DONATION: DonationDetails = {
+  paypalUrl: 'https://www.paypal.com/qrcodes/p2pqrc/VFBT2J9WJA3EY',
+  recipientName: 'Ramadhoni Nasri',
+  qrisImage,
+  paypalImage,
+};
+
+/** False now that the bundled images are the real codes. */
+export const QRIS_IS_PLACEHOLDER = false;
+
+/** The official source, without the scheme, as it appears in safety copy. */
+const OFFICIAL_SOURCE_HOST = APP_SOURCE_URL.replace(/^https?:\/\//, '');
 
 export const DONATION_TEXTS = {
   title: 'Support this app',
@@ -21,9 +54,16 @@ export const DONATION_TEXTS = {
   domesticTitle: 'Indonesia - QRIS',
   domesticHint: 'Scan with any QRIS-capable app, such as ShopeePay or your bank app.',
   internationalTitle: 'International - PayPal',
-  copy: 'Copy',
+  internationalHint: 'Scan the code with the PayPal app, or open the link below.',
+  recipientLabel: 'Recipient',
+  recipientCheck: 'Before you pay, check that your payment app shows this name.',
+  safetyNote:
+    'PDF Manager never asks for payment details, or for donations by email or '
+    + `chat. The only official source is ${OFFICIAL_SOURCE_HOST}.`,
+  copy: 'Copy link',
   open: 'Open PayPal',
-  placeholderNote: 'Not configured yet. The value will be added in a later update.',
+  copied: 'Link copied to the clipboard.',
   qrisPlaceholderNote: 'Placeholder image - the real QRIS code will be added later.',
-  copied: 'Copied to the clipboard.',
+  qrisAlt: 'QRIS payment code',
+  paypalAlt: 'PayPal payment QR code',
 };

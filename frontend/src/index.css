@@ -4594,3 +4594,41 @@ select.input {
     transition: none;
   }
 }
+
+/* ── Donation: recipient identity and payment-safety copy ──────────────────── */
+.donation-recipient {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.donation-recipient-name {
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.donation-recipient-name strong {
+  font-weight: 700;
+}
+
+.donation-recipient-check {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.donation-safety {
+  margin: var(--space-6) auto 0;
+  max-width: 720px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,5 @@
+# Donation data and assets define the only payment surface the app may open and
+# the codes users are asked to pay. Any change must be reviewed by the maintainer.
+/frontend/src/config/donation.ts            @hubble99
+/frontend/src/assets/donation-qris.jpeg     @hubble99
+/frontend/src/assets/donation-paypal.jpeg   @hubble99
