@@ -26,7 +26,17 @@ export interface FeatureEntry {
   group: FeatureGroupId;
   icon: LucideIcon;
   route: string;
+  /**
+   * Marks a feature the product still considers unstable. The badge is rendered
+   * on both navigation surfaces so the warning cannot drift between them.
+   */
+  beta?: boolean;
 }
+
+/**
+ * The single tooltip for the BETA badge, on the sidebar item and the Home card.
+ */
+export const BETA_TOOLTIP = 'Beta: this feature is still unstable.';
 
 /** Group order defines the order on both surfaces. */
 export const FEATURE_GROUPS: { id: FeatureGroupId; label: string }[] = [
@@ -56,12 +66,13 @@ export const FEATURES: FeatureEntry[] = [
     description: 'Turn PDF pages into images, or images into a single PDF.', route: '/converter',
   },
   {
-    id: 'edit-canvas', name: 'Edit Canvas', group: 'edit', icon: PenLine,
+    id: 'edit-canvas', name: 'Canvas PDF', group: 'edit', icon: PenLine,
     description: 'Add text, shapes, drawings, and highlights onto a page.', route: '/edit-canvas',
   },
   {
     id: 'edit-content', name: 'Edit Content', group: 'edit', icon: FilePenLine,
     description: 'Correct existing text in a PDF, verified before it is saved.', route: '/edit-content',
+    beta: true,
   },
   {
     id: 'metadata', name: 'Edit Metadata', group: 'edit', icon: Tag,

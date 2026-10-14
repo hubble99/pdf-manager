@@ -22,6 +22,7 @@ import {
 
 import { Filename } from '../components/Filename';
 import { PageHeader, StateView } from '../components/ui';
+import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { triggerBlobDownload } from '../utils/downloadHelper';
 import {
@@ -474,6 +475,7 @@ export function EditContentPage() {
         icon={FilePenLine}
         title="Edit Content"
         description="Correct supported native PDF text with guarded regeneration and verification"
+        badge={{ label: 'BETA', title: BETA_TOOLTIP }}
         actions={session ? (
           <>
             <span className={`badge ${unsaved ? 'badge-warning' : 'badge-success'}`}>
@@ -527,6 +529,10 @@ export function EditContentPage() {
                 <strong>Verified before acceptance</strong>
                 <p>Every supported edit is regenerated privately, reopened, and checked before it enters history or becomes downloadable.</p>
               </div>
+            </div>
+            <div className="edit-content-limits edit-content-beta-notice" role="note" aria-label="Beta feature">
+              <strong>Beta feature</strong>
+              <p>Edit Content is still in beta and may be unstable. Some edits can fail or look different from what you expect. Your original file is never overwritten, so check the result before you use it.</p>
             </div>
             <EditContentLimits />
             {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} />{error}</div>}

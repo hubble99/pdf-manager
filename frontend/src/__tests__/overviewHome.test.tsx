@@ -73,6 +73,22 @@ describe('Home', () => {
     expect(document.getElementById('home-card-merge')).toHaveAttribute('href', '/merge');
     expect(document.getElementById('home-card-organize')).toHaveAttribute('href', '/organize');
   });
+
+  it('keeps the BETA badge on Edit Content and its tooltip', () => {
+    renderAt('/', <HomePage />);
+    const card = document.getElementById('home-card-edit-content') as HTMLElement;
+    const badge = card.querySelector('.home-card-badge');
+    expect(badge).toHaveTextContent('BETA');
+    expect(badge).toHaveAttribute('title', 'Beta: this feature is still unstable.');
+    // Every other card is free of the badge.
+    expect(document.querySelectorAll('.home-card-badge')).toHaveLength(1);
+  });
+
+  it('names the canvas feature Canvas PDF everywhere', () => {
+    renderAt('/', <HomePage />);
+    expect(document.getElementById('home-card-edit-canvas')).toHaveTextContent('Canvas PDF');
+    expect(document.body.textContent).not.toContain('Edit Canvas');
+  });
 });
 
 describe('Donation page', () => {

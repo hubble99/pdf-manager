@@ -40,9 +40,13 @@ describe('Sidebar Component', () => {
     expect(ids).toContain('nav-donation');
     expect(ids.indexOf('nav-donation')).toBeLessThan(ids.indexOf('nav-settings'));
 
-    // Group headings come from the registry and appear on the surface.
+    // Group headings come from the registry and appear on the surface. The
+    // footer entries (Donation, Settings) are not features, so they carry no
+    // heading of their own.
     const labels = [...container.querySelectorAll('.sidebar-section-label')].map((n) => n.textContent);
-    expect(labels).toEqual(['Organize', 'Convert', 'Edit', 'Optimize', 'Protect', 'Create', 'App']);
+    expect(labels).toEqual(['Organize', 'Convert', 'Edit', 'Optimize', 'Protect', 'Create']);
+    expect(container.querySelector('.sidebar-foot #nav-donation')).toBeInTheDocument();
+    expect(container.querySelector('.sidebar-foot #nav-settings')).toBeInTheDocument();
   });
 
   it('shows the grouped feature names from the registry', () => {
@@ -72,5 +76,21 @@ describe('Sidebar Component', () => {
 
     expect(mergeItem).toHaveClass('active');
     expect(extractItem).not.toHaveClass('active');
+  });
+
+  it('marks Edit Content as Beta on the navigation item', () => {
+    const { container } = renderSidebar();
+    const item = container.querySelector('#nav-edit-content');
+    expect(item).toBeInTheDocument();
+    const badge = container.querySelector('#nav-beta-edit-content');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('BETA');
+    expect(badge).toHaveAttribute('title', 'Beta: this feature is still unstable.');
+  });
+
+  it('renames Edit Canvas to Canvas PDF in the sidebar', () => {
+    const { container } = renderSidebar();
+    expect(container.querySelector('#nav-edit-canvas')).toHaveTextContent('Canvas PDF');
+    expect(container.querySelector('#nav-edit-canvas')).not.toHaveTextContent('Edit Canvas');
   });
 });

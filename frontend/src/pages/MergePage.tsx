@@ -18,6 +18,7 @@ import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useRowReorder } from '../hooks/useRowReorder';
 import { FolderWorkspace } from '../features/merge/FolderWorkspace';
 import { isTauri } from '../utils/tauriDialog';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -125,6 +126,37 @@ export function MergePage() {
     });
   };
 
+  /** Moves the lifted row onto another row's position while the drag is live. */
+  const reorderFiles = useCallback((fromId: string, toId: string) => {
+    setFiles((prev) => {
+      if (!prev) return [];
+      const from = prev.findIndex((f) => f.id === fromId);
+      const to = prev.findIndex((f) => f.id === toId);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, [setFiles]);
+
+  const { activeId: draggingFileId, rowProps } = useRowReorder(reorderFiles);
+
+  /** The keyboard alternative to dragging: Alt+Up / Alt+Down on a focused row. */
+  const handleRowKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+    id: string,
+  ) => {
+    if (!event.altKey) return;
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveFile(id, 'up');
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveFile(id, 'down');
+    }
+  };
+
   // ── Drag & drop ─────────────────────────────────────────────────────────────
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -199,13 +231,13 @@ export function MergePage() {
         description="Combine multiple PDF files into one document"
       />
 
-      <div className="merge-mode-toggle" role="tablist" aria-label="Merge mode">
+      <div className="tabs" role="tablist" aria-label="Merge mode">
         <button
           type="button"
           role="tab"
           id="merge-mode-quick"
           aria-selected={mode === 'quick'}
-          className={`btn btn-sm ${mode === 'quick' ? 'btn-primary' : 'btn-ghost'}`}
+          className={`tab${mode === 'quick' ? ' active' : ''}`}
           onClick={() => setMode('quick')}
         >
           Quick
@@ -215,7 +247,7 @@ export function MergePage() {
           role="tab"
           id="merge-mode-folder"
           aria-selected={mode === 'folder'}
-          className={`btn btn-sm ${mode === 'folder' ? 'btn-primary' : 'btn-ghost'}`}
+          className={`tab${mode === 'folder' ? ' active' : ''}`}
           onClick={() => setMode('folder')}
           disabled={!folderModeAvailable}
           title={folderModeAvailable ? undefined : 'Folder mode requires the desktop app'}
@@ -231,7 +263,7 @@ export function MergePage() {
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="page-body" hidden={mode === 'folder'}>
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="form-col">
 
           {/* Drop zone */}
           <div
@@ -275,8 +307,22 @@ export function MergePage() {
                 <span className="text-muted" style={{ fontSize: 12 }}>Drag ↑↓ to reorder</span>
               </div>
               <div className="file-list">
-                {files.map((entry, idx) => (
-                  <div key={entry.id} className="file-item">
+                {files.map((entry, idx) => {
+                  const isDragging = draggingFileId === entry.id;
+                  return (
+                  <div
+                    key={entry.id}
+                    className={[
+                      'file-item',
+                      'file-item--draggable',
+                      isDragging ? 'file-item--dragging file-item--drop-before' : '',
+                    ].filter(Boolean).join(' ')}
+                    tabIndex={0}
+                    onKeyDown={(event) => handleRowKeyDown(event, entry.id)}
+                    title="Drag to reorder, or press Alt+Up / Alt+Down"
+                    aria-label={`Position ${idx + 1}: ${entry.file.name}`}
+                    {...rowProps(entry.id)}
+                  >
                     <PdfThumbnail file={entry.file} />
                     <div className="file-item-info">
                       <Filename name={entry.file.name} className="file-item-name" />
@@ -320,7 +366,8 @@ export function MergePage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

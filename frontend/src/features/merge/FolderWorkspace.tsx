@@ -1,14 +1,10 @@
 import {
-  DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import {
-  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, GripVertical,
+  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen,
   Loader2, RefreshCw, X,
 } from 'lucide-react';
 import { StateView } from '../../components/ui';
+import { useRowReorder } from '../../hooks/useRowReorder';
+import type { RowReorderHandlers } from '../../hooks/useRowReorder';
 import { useFolderMerge } from './useFolderMerge';
 import type { FolderFileNode } from './api';
 
@@ -87,35 +83,33 @@ function FolderRow({
 }
 
 function QueueRow({
-  relative, index, onRemove, onStep, disabled,
+  relative, index, onRemove, onStep, disabled, reorderProps, dragging, onKeyDown,
 }: {
   relative: string;
   index: number;
   onRemove: (index: number) => void;
   onStep: (index: number, direction: -1 | 1) => void;
   disabled: boolean;
+  reorderProps: (id: string) => RowReorderHandlers;
+  dragging: boolean;
+  onKeyDown: (event: React.KeyboardEvent<HTMLLIElement>, index: number) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: relative, disabled });
   const name = relative.split('/').pop() ?? relative;
   const folder = relative.includes('/') ? `${relative.slice(0, relative.lastIndexOf('/'))}/` : '';
 
   return (
     <li
-      ref={setNodeRef}
-      className="merge-queue-row"
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={[
+        'merge-queue-row',
+        'merge-queue-row--draggable',
+        dragging ? 'merge-queue-row--dragging' : '',
+      ].filter(Boolean).join(' ')}
+      tabIndex={0}
+      onKeyDown={(event) => onKeyDown(event, index)}
+      title="Drag to reorder, or press Alt+Up / Alt+Down"
+      {...(disabled ? {} : reorderProps(relative))}
     >
-      <button
-        type="button"
-        className="merge-queue-handle"
-        {...attributes}
-        {...listeners}
-        aria-label={`Reorder ${name}`}
-        disabled={disabled}
-      >
-        <GripVertical size={13} aria-hidden="true" />
-      </button>
-      <span className="merge-queue-index">{index + 1}</span>
+      <span className="merge-queue-index">#{index + 1}</span>
       <span className="merge-queue-copy">
         <span className="merge-queue-name">{name}</span>
         {/* Always shown, so rows never change height and duplicate names stay clear. */}
@@ -138,15 +132,23 @@ function QueueRow({
 
 export function FolderWorkspace() {
   const workspace = useFolderMerge();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const { activeId, rowProps } = useRowReorder((fromId, toId) => {
+    workspace.moveAt(workspace.queue.indexOf(fromId), workspace.queue.indexOf(toId));
+  });
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    workspace.moveAt(workspace.queue.indexOf(String(active.id)), workspace.queue.indexOf(String(over.id)));
+  /** Keyboard alternative for a focused queue row. */
+  const handleRowKeyDown = (
+    event: React.KeyboardEvent<HTMLLIElement>,
+    index: number,
+  ) => {
+    if (!event.altKey) return;
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      workspace.step(index, -1);
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      workspace.step(index, 1);
+    }
   };
 
   const addFileRow = (relative: string) => {
@@ -228,22 +230,21 @@ export function FolderWorkspace() {
           {workspace.queue.length === 0 ? (
             <StateView icon={FolderOpen} title="Add files from the folder on the left." compact />
           ) : (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={workspace.queue} strategy={verticalListSortingStrategy}>
-                <ul className="merge-queue-list">
-                  {workspace.queue.map((relative, index) => (
-                    <QueueRow
-                      key={relative}
-                      relative={relative}
-                      index={index}
-                      onRemove={workspace.removeAt}
-                      onStep={workspace.step}
-                      disabled={workspace.isBusy}
-                    />
-                  ))}
-                </ul>
-              </SortableContext>
-            </DndContext>
+            <ul className="merge-queue-list">
+              {workspace.queue.map((relative, index) => (
+                <QueueRow
+                  key={relative}
+                  relative={relative}
+                  index={index}
+                  onRemove={workspace.removeAt}
+                  onStep={workspace.step}
+                  disabled={workspace.isBusy}
+                  reorderProps={rowProps}
+                  dragging={activeId === relative}
+                  onKeyDown={handleRowKeyDown}
+                />
+              ))}
+            </ul>
           )}
 
           {workspace.problems && (

@@ -256,49 +256,27 @@ export function QrBarcodePage() {
       />
 
       {/* ── Tabs ────────────────────────────────────────────────────────────── */}
-      <div style={{ borderBottom: '1px solid var(--outline-variant)', padding: '0 24px' }}>
-        <div style={{ display: 'flex', gap: 24, maxWidth: 840, margin: '0 auto' }}>
-          <button
-            className={`tab-btn ${activeTab === 'qr' ? 'active' : ''}`}
-            onClick={() => setActiveTab('qr')}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '12px 4px',
-              fontSize: 14,
-              fontWeight: activeTab === 'qr' ? 600 : 500,
-              color: activeTab === 'qr' ? 'var(--accent)' : 'var(--on-surface-variant)',
-              borderBottom: `2px solid ${activeTab === 'qr' ? 'var(--accent)' : 'transparent'}`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'all var(--transition-fast)',
-            }}
-          >
-            <QrCode size={16} /> QR Code
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'barcode' ? 'active' : ''}`}
-            onClick={() => setActiveTab('barcode')}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '12px 4px',
-              fontSize: 14,
-              fontWeight: activeTab === 'barcode' ? 600 : 500,
-              color: activeTab === 'barcode' ? 'var(--accent)' : 'var(--on-surface-variant)',
-              borderBottom: `2px solid ${activeTab === 'barcode' ? 'var(--accent)' : 'transparent'}`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'all var(--transition-fast)',
-            }}
-          >
-            <Barcode size={16} /> Barcode
-          </button>
-        </div>
+      <div className="tabs" role="tablist" aria-label="QR and barcode modes">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'qr'}
+          className={`tab${activeTab === 'qr' ? ' active' : ''}`}
+          onClick={() => setActiveTab('qr')}
+          id="qr-tab-qr"
+        >
+          <QrCode size={15} aria-hidden="true" /> QR Code
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'barcode'}
+          className={`tab${activeTab === 'barcode' ? ' active' : ''}`}
+          onClick={() => setActiveTab('barcode')}
+          id="qr-tab-barcode"
+        >
+          <Barcode size={15} aria-hidden="true" /> Barcode
+        </button>
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
@@ -480,7 +458,8 @@ export function QrBarcodePage() {
               
               <div style={{
                 flex: 1,
-                background: previewData ? '#ffffff' : 'var(--surface)',
+                /* QR and barcode images stay white in every theme. */
+                background: '#ffffff',
                 borderRadius: 'var(--radius-md)',
                 display: 'flex',
                 alignItems: 'center',

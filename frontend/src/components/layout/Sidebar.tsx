@@ -2,8 +2,8 @@ import { Fragment, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, FileText, Heart, Home, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { APP_NAME } from '../../config/app';
-import { DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
+import { APP_NAME, APP_VERSION } from '../../config/app';
+import { BETA_TOOLTIP, DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
 import type { NavItemId } from '../../types';
 
 interface NavEntryProps {
@@ -16,6 +16,8 @@ interface NavEntryProps {
   accent?: boolean;
   /** Home must match the root path exactly. */
   end?: boolean;
+  /** Renders the BETA chip and its tooltip beside the label. */
+  beta?: boolean;
 }
 
 /**
@@ -23,7 +25,9 @@ interface NavEntryProps {
  * this, so the row markup exists once. `NavLink` marks the current item and sets
  * `aria-current` on its own.
  */
-function NavEntry({ id, label, icon: Icon, path, collapsed, accent = false, end = false }: NavEntryProps) {
+function NavEntry({
+  id, label, icon: Icon, path, collapsed, accent = false, end = false, beta = false,
+}: NavEntryProps) {
   return (
     <NavLink
       to={path}
@@ -37,8 +41,17 @@ function NavEntry({ id, label, icon: Icon, path, collapsed, accent = false, end 
       id={`nav-${id}`}
       title={collapsed ? label : undefined}
     >
-      <Icon className="nav-item-icon" size={20} strokeWidth={1.75} aria-hidden="true" />
-      {!collapsed && <span className="nav-item-label">{label}</span>}
+      <Icon className="nav-item-icon" size={18} strokeWidth={1.75} aria-hidden="true" />
+      {!collapsed && (
+        <>
+          <span className="nav-item-label">{label}</span>
+          {beta && (
+            <span className="nav-item-badge" title={BETA_TOOLTIP} id={`nav-beta-${id}`}>
+              BETA
+            </span>
+          )}
+        </>
+      )}
     </NavLink>
   );
 }
@@ -67,12 +80,12 @@ export function Sidebar() {
       <div className="sidebar-header">
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon" aria-hidden="true">
-            <FileText size={18} color="#fff" strokeWidth={2.5} />
+            <FileText size={17} strokeWidth={2.25} />
           </div>
           {!collapsed && (
-            <div>
-              <div className="sidebar-logo-text">{APP_NAME}</div>
-              <div className="sidebar-logo-sub">v1.6.0</div>
+            <div className="sidebar-brand">
+              <span className="sidebar-logo-text">{APP_NAME}</span>
+              <span className="sidebar-logo-sub">v{APP_VERSION}</span>
             </div>
           )}
         </div>
@@ -100,15 +113,15 @@ export function Sidebar() {
                 icon={feature.icon}
                 path={feature.route}
                 collapsed={collapsed}
+                beta={feature.beta}
               />
             ))}
           </Fragment>
         ))}
+      </nav>
 
-        <div className="divider" style={{ margin: '12px 16px' }} />
-        {!collapsed && <div className="sidebar-section-label">App</div>}
-
-        {/* Pinned below the features so it stays reachable however long they get. */}
+      {/* ── Footer: the two entries that are not features ── */}
+      <div className="sidebar-foot">
         <NavEntry
           id={DONATION_ENTRY.id}
           label={DONATION_ENTRY.name}
@@ -124,7 +137,7 @@ export function Sidebar() {
           path="/settings"
           collapsed={collapsed}
         />
-      </nav>
+      </div>
 
       {/* ── Collapse Toggle ── */}
       <button
@@ -136,16 +149,6 @@ export function Sidebar() {
       >
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>
-
-      {/* ── Footer ── */}
-      {!collapsed && (
-        <div className="sidebar-footer">
-          <p className="text-mono text-muted" style={{ fontSize: '10px', lineHeight: '1.4' }}>
-            {APP_NAME} v1.6.0<br />
-            <span style={{ opacity: 0.6 }}>Offline · Local Processing</span>
-          </p>
-        </div>
-      )}
     </aside>
   );
 }

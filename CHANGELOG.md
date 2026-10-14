@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.7.0 — 2026-10-14
+
+- Rebuilt the interface around the design reference in `ui_improvement/pdf-manager-ui.html` using the existing React components and tokens. Every screen now shares one header bar, one card language, and one set of navigation roles (`--bg`, `--surface`, `--sc`, `--sch`, `--line`, `--text`, `--muted`, `--act`, `--pb`, `--hov`, `--sel`), and no backend behaviour changed.
+- Added **Light** as the default theme and kept **Dark**, **Dusty Rose**, and **Steel Blue**. A saved theme is preserved, and only the fallback changed. Settings > Appearance now offers all four. Document pages and QR/barcode images stay white in every theme.
+- Renamed **Edit Canvas** to **Canvas PDF** in the sidebar, Home card, page title, toolbar, and documentation. The `/edit-canvas` route and `edit-canvas` feature id are unchanged for compatibility.
+- Kept the **BETA** badge on Edit Content in the sidebar and on its Home card, with the tooltip “Beta: this feature is still unstable.”, and added a matching beta notice above the limits card before a file is opened.
+- Made the **whole file row draggable** in Merge PDF Quick and Folder modes, with a grab cursor, a hover background, an elevated lifted row, and a live insertion line. The number badges renumber while the row is in the air. The up/down buttons remain, and a focused row supports Alt+Up / Alt+Down.
+- Showed the real application version from `frontend/package.json` everywhere instead of hardcoding it, so the interface can no longer drift from the release version.
+- Made **Recent output files** session-only: the list lives in `sessionStorage` and clears when the app closes.
+- Made **Canvas PDF** and **Edit Content** responsive and overflow-safe: the canvas toolbar wraps instead of clipping, the workspace shares the available height, and long text wraps instead of overflowing.
+- Did not implement the reference's prototype simulations. Compress estimates, update checks, and download simulations were left out; the QRIS image and PayPal link remain the existing configured placeholders.
+
 ## 1.6.0 — 2026-10-12
 
 - Added **Home** as the entry point. Opening the app now shows what it is and what it can do, instead of dropping you into one tool.

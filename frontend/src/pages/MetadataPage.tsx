@@ -197,7 +197,7 @@ export function MetadataPage() {
 
       {/* Body */}
       <div className="page-body">
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="form-col">
 
           {/* Drop zone */}
           {!file ? (
@@ -251,48 +251,50 @@ export function MetadataPage() {
           {/* Form Area */}
           {file && !infoLoading && (
             <div className="card">
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FileText size={16} color="var(--accent)" /> Document Properties
+              <div className="card-head">
+                <span className="card-head-title">
+                  <FileText size={16} aria-hidden="true" /> Document properties
+                </span>
               </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                <div>
-                  <label className="input-label">Title</label>
+              <div className="card-body">
+                <div className="field">
+                  <label htmlFor="metadata-title">Title</label>
                   <input
+                    id="metadata-title"
                     className="input"
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Document Title"
+                    placeholder="Document title"
                   />
-                  <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
-                    Nama file output akan mengikuti Title.
-                    Kosongkan untuk mempertahankan nama asli.
-                  </p>
+                  <small>The output file name follows the title. Leave it empty to keep the original name.</small>
                 </div>
-                <div>
-                  <label className="input-label">Author</label>
+                <div className="field">
+                  <label htmlFor="metadata-author">Author</label>
                   <input
+                    id="metadata-author"
                     className="input"
                     type="text"
                     value={author}
                     onChange={(e) => setAuthor(e.target.value)}
-                    placeholder="Author Name"
+                    placeholder="Who created the document"
                   />
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label className="input-label">Subject</label>
+                <div className="field">
+                  <label htmlFor="metadata-subject">Subject</label>
                   <input
+                    id="metadata-subject"
                     className="input"
                     type="text"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
-                    placeholder="Subject of the document"
+                    placeholder="What the document is about"
                   />
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label className="input-label">Keywords</label>
+                <div className="field">
+                  <label htmlFor="metadata-keywords">Keywords</label>
                   <input
+                    id="metadata-keywords"
                     className="input"
                     type="text"
                     value={keywords}

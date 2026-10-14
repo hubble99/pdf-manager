@@ -1225,24 +1225,27 @@ export function EditCanvasPage() {
       <div
         className="canvas-top-bar"
         style={{
-          height: '52px',
           minHeight: '52px',
-          maxHeight: '52px',
           background: 'var(--canvas-topbar-bg)',
           borderBottom: '1px solid var(--canvas-topbar-border)',
-          padding: '0 16px',
+          padding: '6px 16px',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
+          flexWrap: 'wrap',
+          rowGap: '6px',
+          columnGap: '10px',
           zIndex: 20,
           flexShrink: 0,
         }}
       >
         {/* Brand / Title Icon */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-[var(--canvas-accent)] font-bold text-sm flex items-center gap-1.5">
+          <span
+            className="text-[var(--canvas-accent)] font-bold text-sm flex items-center gap-1.5"
+            style={{ whiteSpace: 'nowrap' }}
+          >
             <FileEdit size={18} />
-            <span>Edit Canvas</span>
+            <span>Canvas PDF</span>
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--canvas-panel-border)] text-[var(--canvas-text-muted)] font-semibold">
             BETA
@@ -2009,7 +2012,7 @@ export function EditCanvasPage() {
         className="canvas-workspace"
         style={{
           flex: 1,
-          height: 'calc(100% - 92px)',
+          minHeight: 0,
           width: '100%',
           overflowY: 'auto',
           overflowX: 'auto',

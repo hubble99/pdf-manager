@@ -4,11 +4,11 @@ import { readFileSync } from 'node:fs';
 const stylesheet = readFileSync('src/index.css', 'utf8');
 
 describe('theme validation', () => {
-  it.each(['dark', 'dusty-rose', 'steel-blue'])('accepts %s', (theme) => {
+  it.each(['light', 'dark', 'dusty-rose', 'steel-blue'])('accepts %s', (theme) => {
     expect(isTheme(theme)).toBe(true);
   });
 
-  it.each([null, '', 'blue', 'theme-name'])('rejects %s', (theme) => {
+  it.each([null, '', 'blue', 'theme-name', 'system'])('rejects %s', (theme) => {
     expect(isTheme(theme)).toBe(false);
   });
 });
@@ -28,7 +28,8 @@ describe('canvas theme tokens', () => {
 
 describe('accent text tokens', () => {
   it.each([
-    ['dark', ':root'],
+    ['light', ':root'],
+    ['dark', '[data-theme="dark"]'],
     ['dusty-rose', '[data-theme="dusty-rose"]'],
     ['steel-blue', '[data-theme="steel-blue"]'],
   ])('defines --on-accent for %s', (_theme, selector) => {

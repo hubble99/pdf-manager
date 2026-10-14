@@ -224,12 +224,15 @@ export function ProtectPage() {
 
       {/* Body */}
       <div className="page-body">
-        <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="form-col">
 
           {/* Mode tabs */}
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div role="tablist" aria-label="Protect mode" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button
-              className={`btn ${mode === 'add' ? 'btn-primary' : 'btn-ghost'}`}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'add'}
+              className={`tab${mode === 'add' ? ' active' : ''}`}
               onClick={() => { setMode('add'); setResult(null); }}
               id="protect-tab-add"
             >
@@ -237,7 +240,10 @@ export function ProtectPage() {
               Add Password
             </button>
             <button
-              className={`btn ${mode === 'remove' ? 'btn-primary' : 'btn-ghost'}`}
+              type="button"
+              role="tab"
+              aria-selected={mode === 'remove'}
+              className={`tab${mode === 'remove' ? ' active' : ''}`}
               onClick={() => { setMode('remove'); setResult(null); }}
               id="protect-tab-remove"
             >

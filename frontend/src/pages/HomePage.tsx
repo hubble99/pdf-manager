@@ -2,7 +2,7 @@ import { Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from '../config/app';
-import { featuresByGroup } from '../config/features';
+import { BETA_TOOLTIP, featuresByGroup } from '../config/features';
 
 /**
  * The entry point: what the product is, then every feature grouped by the task it
@@ -16,15 +16,20 @@ export function HomePage() {
 
       <div className="page-body home-page">
         <section className="home-hero" aria-label="About this application">
-          <div className="card home-hero-copy">
+          <div className="home-hero-copy">
             <h2 className="home-hero-name">{APP_NAME}</h2>
             <p className="home-hero-tagline">{APP_TAGLINE}</p>
             <p className="home-hero-description">{APP_DESCRIPTION}</p>
           </div>
 
           <div className="card home-donation-teaser">
-            <Heart size={18} className="home-donation-icon" aria-hidden="true" />
-            <p className="home-donation-title">Support this app</p>
+            <p className="home-donation-title">
+              <Heart size={16} className="home-donation-icon" aria-hidden="true" />
+              Support this app
+            </p>
+            <p className="home-donation-copy">
+              {APP_NAME} is independent, private, and offline software.
+            </p>
             <Link to="/donation" className="btn btn-primary btn-sm" id="home-donate">
               Donate
             </Link>
@@ -40,8 +45,15 @@ export function HomePage() {
                 return (
                   <li key={feature.id}>
                     <Link to={feature.route} className="card home-card" id={`home-card-${feature.id}`}>
-                      <Icon size={20} className="home-card-icon" aria-hidden="true" />
-                      <span className="home-card-name">{feature.name}</span>
+                      <span className="home-card-head">
+                        <span className="home-card-icon" aria-hidden="true">
+                          <Icon size={16} strokeWidth={1.9} />
+                        </span>
+                        <span className="home-card-name">{feature.name}</span>
+                        {feature.beta && (
+                          <span className="home-card-badge" title={BETA_TOOLTIP}>BETA</span>
+                        )}
+                      </span>
                       <span className="home-card-description">{feature.description}</span>
                     </Link>
                   </li>

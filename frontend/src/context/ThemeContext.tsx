@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { ThemeContext } from './ThemeContext.context';
-import { isTheme } from './ThemeContext.context';
+import { DEFAULT_THEME, isTheme } from './ThemeContext.context';
 import type { Theme } from './ThemeContext.context';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const saved = localStorage.getItem('app_theme');
+    // An existing saved theme is kept; only the fallback changes to Light.
     if (isTheme(saved)) return saved;
-    return 'dark';
+    return DEFAULT_THEME;
   });
 
   useEffect(() => {

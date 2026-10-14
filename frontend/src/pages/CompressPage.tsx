@@ -282,6 +282,24 @@ export function CompressPage() {
               <span className="text-muted text-body-sm">95 — Best quality</span>
             </div>
 
+            <div className="seg" role="group" aria-label="Quality preset" style={{ marginTop: 12 }}>
+              {[
+                { value: 25, label: 'Maximum' },
+                { value: 55, label: 'Balanced' },
+                { value: 80, label: 'High quality' },
+              ].map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  aria-pressed={quality === preset.value}
+                  className={quality === preset.value ? 'active' : ''}
+                  onClick={() => setQuality(preset.value)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
             <div style={{
               marginTop: 12,
               padding: '8px 12px',

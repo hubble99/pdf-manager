@@ -272,38 +272,26 @@ export function ExtractPage() {
             {/* Output mode */}
             <div className="card">
               <label className="input-label">Output Mode</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+              <div className="radio-list" style={{ marginTop: 4 }}>
                 {OUTPUT_MODE_OPTIONS.map((opt) => (
                   <label
                     key={opt.value}
                     htmlFor={`extract-mode-${opt.value}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 12,
-                      padding: '10px 14px',
-                      borderRadius: 'var(--radius-md)',
-                      border: `1px solid ${outputMode === opt.value ? 'var(--accent)' : 'var(--outline-variant)'}`,
-                      background: outputMode === opt.value ? 'var(--accent-dim)' : 'var(--surface-container)',
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                    }}
+                    className={`radio-card${outputMode === opt.value ? ' active' : ''}`}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', paddingTop: 1 }}>
-                      <input
-                        id={`extract-mode-${opt.value}`}
-                        type="radio"
-                        name="output_mode"
-                        value={opt.value}
-                        checked={outputMode === opt.value}
-                        onChange={() => setOutputMode(opt.value)}
-                        style={{ margin: 0, accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
-                      />
-                    </div>
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', textAlign: 'left', justifyContent: 'center' }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-surface)', lineHeight: 1.3 }}>{opt.label}</div>
-                      <div style={{ fontSize: 12, color: 'var(--on-surface-variant)', marginTop: 3, lineHeight: 1.4 }}>{opt.desc}</div>
-                    </div>
+                    <input
+                      id={`extract-mode-${opt.value}`}
+                      type="radio"
+                      name="output_mode"
+                      value={opt.value}
+                      checked={outputMode === opt.value}
+                      onChange={() => setOutputMode(opt.value)}
+                      style={{ margin: '2px 0 0', accentColor: 'var(--accent)', cursor: 'pointer', width: 15, height: 15, flexShrink: 0 }}
+                    />
+                    <span className="radio-copy">
+                      <span className="radio-title">{opt.label}</span>
+                      <span className="radio-desc">{opt.desc}</span>
+                    </span>
                   </label>
                 ))}
               </div>
