@@ -272,7 +272,7 @@ describe('merge folder mode', () => {
     fireEvent.click(document.getElementById('merge-refresh-folder') as HTMLButtonElement);
     expect(await screen.findByText('Choose folder again.')).toBeInTheDocument();
     // The root is forgotten so the user is back at a clean folder state.
-    expect(screen.getByText('No folder chosen')).toBeInTheDocument();
+    expect(screen.getByText('Choose a folder')).toBeInTheDocument();
   });
 
   it('reports how many items could not be read', async () => {

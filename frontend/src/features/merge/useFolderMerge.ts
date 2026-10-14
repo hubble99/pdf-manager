@@ -24,6 +24,7 @@ export interface FolderMergeState {
   chooseFolder: () => Promise<void>;
   refresh: () => Promise<void>;
   toggleFolder: (relativePath: string) => void;
+  setExpandedPaths: (paths: string[]) => void;
   addFile: (relativePath: string) => void;
   addFolder: (node: FolderFileNode) => void;
   removeAt: (index: number) => void;
@@ -166,6 +167,10 @@ export function useFolderMerge(): FolderMergeState {
     });
   }, []);
 
+  const setExpandedPaths = useCallback((paths: string[]) => {
+    setExpanded(new Set(paths));
+  }, []);
+
   const addFiles = useCallback((relativePaths: string[]) => {
     setQueue((previous) => {
       const seen = new Set(previous);
@@ -291,6 +296,7 @@ export function useFolderMerge(): FolderMergeState {
     chooseFolder,
     refresh,
     toggleFolder,
+    setExpandedPaths,
     addFile,
     addFolder,
     removeAt,

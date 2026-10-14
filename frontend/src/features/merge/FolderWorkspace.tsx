@@ -1,12 +1,16 @@
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen,
-  Loader2, RefreshCw, X,
+  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FileText, Folder, FolderOpen,
+  Loader2, Merge, Plus, RefreshCw, Trash2, X,
 } from 'lucide-react';
-import { StateView } from '../../components/ui';
 import { useRowReorder } from '../../hooks/useRowReorder';
 import type { RowReorderHandlers } from '../../hooks/useRowReorder';
 import { useFolderMerge } from './useFolderMerge';
 import type { FolderFileNode } from './api';
+
+/** Every folder path in a listing, so one control can open or close the whole tree. */
+function folderPaths(node: FolderFileNode): string[] {
+  return node.folders.flatMap((child) => [child.relative_path, ...folderPaths(child)]);
+}
 
 function FolderRow({
   node, depth, expanded, onToggle, onAddAll, queued,
@@ -21,7 +25,7 @@ function FolderRow({
   const isOpen = expanded.has(node.relative_path);
   return (
     <li className="merge-tree-folder">
-      <div className="merge-tree-row" style={{ paddingLeft: depth * 14 + 8 }}>
+      <div className="merge-tree-row" style={{ paddingLeft: depth * 18 + 10 }}>
         <button
           type="button"
           className="merge-tree-toggle"
@@ -29,14 +33,16 @@ function FolderRow({
           aria-expanded={isOpen}
           aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${node.name}`}
         >
-          {isOpen ? <ChevronDown size={13} aria-hidden="true" /> : <ChevronRight size={13} aria-hidden="true" />}
-          <FolderOpen size={13} aria-hidden="true" />
+          {isOpen ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          {isOpen
+            ? <FolderOpen size={16} className="merge-tree-folder-icon" aria-hidden="true" />
+            : <Folder size={16} className="merge-tree-folder-icon" aria-hidden="true" />}
           <span className="merge-tree-name">{node.name}</span>
-          <span className="merge-tree-count">{node.pdf_count}</span>
+          <span className="chip merge-tree-count">{node.pdf_count}</span>
         </button>
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="link-btn merge-tree-addall"
           onClick={() => onAddAll(node)}
           aria-label={`Add all ${node.pdf_count} PDFs under ${node.name}`}
         >
@@ -65,13 +71,14 @@ function FolderRow({
                 <button
                   type="button"
                   className={`merge-tree-file${already ? ' merge-tree-file--queued' : ''}`}
-                  style={{ paddingLeft: (depth + 1) * 14 + 8 }}
+                  style={{ paddingLeft: (depth + 1) * 18 + 14 }}
                   onClick={() => onToggle(`file:${relative}`)}
                   disabled={already}
                   aria-label={already ? `${name} is already queued` : `Add ${name}`}
                 >
+                  <span className="pdf-badge pdf-badge--sm" aria-hidden="true">PDF</span>
                   <span className="merge-tree-name">{name}</span>
-                  {already && <Check size={12} aria-hidden="true" />}
+                  <AddTag added={already} />
                 </button>
               </li>
             );
@@ -79,6 +86,16 @@ function FolderRow({
         </ul>
       )}
     </li>
+  );
+}
+
+/** The reference's "+ Add" / "✓ Added" tag at the end of a file row. */
+function AddTag({ added }: { added: boolean }) {
+  return (
+    <span className="merge-tree-tag" aria-hidden="true">
+      {added ? <Check size={13} /> : <Plus size={13} />}
+      {added ? 'Added' : 'Add'}
+    </span>
   );
 }
 
@@ -109,12 +126,13 @@ function QueueRow({
       title="Drag to reorder, or press Alt+Up / Alt+Down"
       {...(disabled ? {} : reorderProps(relative))}
     >
-      <span className="merge-queue-index">#{index + 1}</span>
+      <span className="pdf-badge" aria-hidden="true">PDF</span>
       <span className="merge-queue-copy">
         <span className="merge-queue-name">{name}</span>
         {/* Always shown, so rows never change height and duplicate names stay clear. */}
         <span className="merge-queue-folder">{folder || '\u00a0'}</span>
       </span>
+      <span className="chip merge-queue-index">#{index + 1}</span>
       <span className="merge-queue-actions">
         <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => onStep(index, -1)} disabled={disabled || index === 0} aria-label={`Move ${name} up`}>
           <ArrowUp size={13} aria-hidden="true" />
@@ -156,37 +174,82 @@ export function FolderWorkspace() {
     if (relative.startsWith('file:')) workspace.addFile(relative.slice(5));
   };
 
+  const folders = workspace.listing ? folderPaths(workspace.listing.root) : [];
+  const allOpen = folders.length > 0 && folders.every((path) => workspace.expanded.has(path));
+  const rootFiles = workspace.listing?.root.files ?? [];
+
   return (
-    <div className="page-body page-body--workspace">
-      <div className="merge-folder-layout">
-        <section className="card merge-sources" aria-label="Sources">
-          <div className="merge-panel-head">
-            <span className="merge-panel-title">Sources</span>
-            <span className="merge-panel-actions">
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => void workspace.chooseFolder()} disabled={workspace.isBusy || !workspace.folderModeAvailable} id="merge-choose-folder">
-                <FolderOpen size={13} aria-hidden="true" /> Choose folder
-              </button>
-              {workspace.root && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => void workspace.refresh()} disabled={workspace.isBusy} id="merge-refresh-folder">
-                  <RefreshCw size={13} aria-hidden="true" /> Refresh
-                </button>
-              )}
+    <div className="page-body">
+      <div className="form-col form-col--wide form-col--two merge-folder-grid">
+        <section className="card card--flush merge-sources" aria-label="Sources">
+          <div className="card-head">
+            <span className="card-head-title">
+              <Folder size={16} className="card-head-icon" aria-hidden="true" /> Folder
             </span>
+            {workspace.root && (
+              <span className="card-head-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={() => void workspace.refresh()}
+                  disabled={workspace.isBusy}
+                  id="merge-refresh-folder"
+                  aria-label="Refresh folder"
+                  title="Refresh folder"
+                >
+                  <RefreshCw size={14} className={workspace.isBusy ? 'spin' : undefined} aria-hidden="true" />
+                </button>
+                {folders.length > 0 && (
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => workspace.setExpandedPaths(allOpen ? [] : folders)}
+                  >
+                    {allOpen ? 'Collapse all' : 'Expand all'}
+                  </button>
+                )}
+              </span>
+            )}
           </div>
 
-          {workspace.root && <p className="merge-root-path" title={workspace.root.path}>{workspace.root.path}</p>}
+          {!workspace.root ? (
+            <div className="merge-folder-empty">
+              <FolderOpen size={28} aria-hidden="true" />
+              <b>Choose a folder</b>
+              <small>Its folders and PDFs will be listed here. Nothing is added to the queue automatically.</small>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => void workspace.chooseFolder()}
+                disabled={workspace.isBusy || !workspace.folderModeAvailable}
+                id="merge-choose-folder"
+              >
+                Choose folder
+              </button>
+            </div>
+          ) : (
+            <div className="merge-root-bar">
+              <FolderOpen size={16} className="card-head-icon" aria-hidden="true" />
+              <span className="merge-root-path" title={workspace.root.path}>{workspace.root.path}</span>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => void workspace.chooseFolder()}
+                disabled={workspace.isBusy || !workspace.folderModeAvailable}
+                id="merge-choose-folder"
+              >
+                Change folder
+              </button>
+            </div>
+          )}
+
           {workspace.notice && <p className="merge-notice" role="status">{workspace.notice}</p>}
 
-          {!workspace.root ? (
-            <StateView
-              icon={FolderOpen}
-              title="No folder chosen"
-              description="Choose a folder to list the PDFs inside it. Nothing is added to the queue automatically."
-              compact
-            />
-          ) : workspace.listing && workspace.listing.pdf_count === 0 ? (
-            <StateView icon={FolderOpen} title="No PDFs in this folder" compact />
-          ) : workspace.listing ? (
+          {workspace.root && workspace.listing && workspace.listing.pdf_count === 0 && (
+            <p className="empty-hint">No PDFs in this folder</p>
+          )}
+
+          {workspace.root && workspace.listing && workspace.listing.pdf_count > 0 && (
             <ul className="merge-tree">
               {workspace.listing.root.folders.map((child) => (
                 <FolderRow
@@ -200,7 +263,7 @@ export function FolderWorkspace() {
                 />
               ))}
               {/* The root's own PDFs sit below its folders, as in the tree rule. */}
-              {workspace.listing.root.files.map((name) => {
+              {rootFiles.map((name) => {
                 const already = workspace.isQueued(name);
                 return (
                   <li key={name}>
@@ -211,44 +274,57 @@ export function FolderWorkspace() {
                       disabled={already}
                       aria-label={already ? `${name} is already queued` : `Add ${name}`}
                     >
+                      <span className="pdf-badge pdf-badge--sm" aria-hidden="true">PDF</span>
                       <span className="merge-tree-name">{name}</span>
-                      {already && <Check size={12} aria-hidden="true" />}
+                      <AddTag added={already} />
                     </button>
                   </li>
                 );
               })}
             </ul>
-          ) : null}
-        </section>
-
-        <section className="card merge-queue" aria-label="Merge queue">
-          <div className="merge-panel-head">
-            <span className="merge-panel-title">Merge queue</span>
-            <span className="merge-queue-count">{workspace.queue.length} file{workspace.queue.length === 1 ? '' : 's'}</span>
-          </div>
-
-          {workspace.queue.length === 0 ? (
-            <StateView icon={FolderOpen} title="Add files from the folder on the left." compact />
-          ) : (
-            <ul className="merge-queue-list">
-              {workspace.queue.map((relative, index) => (
-                <QueueRow
-                  key={relative}
-                  relative={relative}
-                  index={index}
-                  onRemove={workspace.removeAt}
-                  onStep={workspace.step}
-                  disabled={workspace.isBusy}
-                  reorderProps={rowProps}
-                  dragging={activeId === relative}
-                  onKeyDown={handleRowKeyDown}
-                />
-              ))}
-            </ul>
           )}
 
+          {workspace.root && workspace.listing && workspace.listing.pdf_count > 0 && (
+            <div className="merge-sources-foot">
+              <span>{workspace.listing.pdf_count} PDF{workspace.listing.pdf_count === 1 ? '' : 's'} found</span>
+              <span>{workspace.queue.length} added</span>
+            </div>
+          )}
+        </section>
+
+        <div className="col-stack merge-queue" aria-label="Merge queue" role="region">
+          <section className="card card--flush">
+            <div className="card-head">
+              <span className="card-head-title">
+                <FileText size={16} className="card-head-icon" aria-hidden="true" /> Files to Merge
+                <span className="chip merge-queue-count">{workspace.queue.length} file{workspace.queue.length === 1 ? '' : 's'}</span>
+              </span>
+              {workspace.queue.length > 0 && <span className="card-head-actions">Drag ↑↓ to reorder</span>}
+            </div>
+
+            {workspace.queue.length === 0 ? (
+              <p className="empty-hint merge-queue-empty">Add files from the folder on the left.</p>
+            ) : (
+              <ul className="merge-queue-list">
+                {workspace.queue.map((relative, index) => (
+                  <QueueRow
+                    key={relative}
+                    relative={relative}
+                    index={index}
+                    onRemove={workspace.removeAt}
+                    onStep={workspace.step}
+                    disabled={workspace.isBusy}
+                    reorderProps={rowProps}
+                    dragging={activeId === relative}
+                    onKeyDown={handleRowKeyDown}
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+
           {workspace.problems && (
-            <div className="merge-preflight" role="alertdialog" aria-label="Files that cannot be merged">
+            <div className="card merge-preflight" role="alertdialog" aria-label="Files that cannot be merged">
               <p className="merge-preflight-title">
                 <AlertTriangle size={14} aria-hidden="true" /> {workspace.problems.length} file{workspace.problems.length === 1 ? '' : 's'} cannot be merged
               </p>
@@ -261,7 +337,7 @@ export function FolderWorkspace() {
                   </li>
                 ))}
               </ul>
-              <div className="merge-panel-actions">
+              <div className="form-actions">
                 <button type="button" className="btn btn-secondary btn-sm" onClick={workspace.cancelPreflight}>Cancel</button>
                 <button type="button" className="btn btn-primary btn-sm" id="merge-skip-and-merge" onClick={() => void workspace.skipAndMerge()}>
                   Skip these and merge
@@ -278,50 +354,61 @@ export function FolderWorkspace() {
           )}
 
           {workspace.result && (
-            <p className="merge-result" role="status">
-              Merged {workspace.result.merged} files{workspace.result.skipped ? `, skipped ${workspace.result.skipped}` : ''} · {workspace.result.totalPages} pages · <span className="merge-tree-name">{workspace.result.filename}</span>
-            </p>
+            <div className="card status-card status-card--ok">
+              <Check size={22} aria-hidden="true" />
+              <div className="status-card-copy">
+                <p className="merge-result" role="status">
+                  Merged {workspace.result.merged} files{workspace.result.skipped ? `, skipped ${workspace.result.skipped}` : ''} · {workspace.result.totalPages} pages · <span className="merge-tree-name">{workspace.result.filename}</span>
+                </p>
+              </div>
+            </div>
           )}
 
-          <div className="merge-queue-footer">
-            <label className="organize-field-label" htmlFor="merge-folder-output">Output name</label>
-            <input
-              id="merge-folder-output"
-              className="input"
-              type="text"
-              value={workspace.outputName}
-              onChange={(event) => workspace.setOutputName(event.target.value)}
-              disabled={workspace.isBusy}
-            />
-            <div className="merge-panel-actions">
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={workspace.clearQueue}
-                disabled={workspace.isBusy || workspace.queue.length === 0}
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                id="merge-folder-run"
-                onClick={() => void workspace.requestMerge()}
-                disabled={workspace.isBusy || workspace.queue.length < 2}
-                title={workspace.queue.length < 2 ? 'Add at least 2 files' : undefined}
-              >
-                {workspace.isBusy ? (
-                  <><Loader2 size={14} className="converter-spin" aria-hidden="true" /> Merging…</>
-                ) : (
-                  'Merge'
-                )}
-              </button>
+          <div className="card card--flush">
+            <div className="card-body">
+              <div className="field">
+                <label htmlFor="merge-folder-output">Output Filename</label>
+                <input
+                  id="merge-folder-output"
+                  className="input"
+                  type="text"
+                  value={workspace.outputName}
+                  onChange={(event) => workspace.setOutputName(event.target.value)}
+                  disabled={workspace.isBusy}
+                />
+                <p className="hint">The .pdf extension will be added automatically if omitted.</p>
+              </div>
             </div>
-            {workspace.queue.length < 2 && (
-              <p className="organize-help">Add at least 2 files.</p>
-            )}
           </div>
-        </section>
+
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={workspace.clearQueue}
+              disabled={workspace.isBusy || workspace.queue.length === 0}
+            >
+              <Trash2 size={15} aria-hidden="true" /> Clear
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              id="merge-folder-run"
+              onClick={() => void workspace.requestMerge()}
+              disabled={workspace.isBusy || workspace.queue.length < 2}
+              title={workspace.queue.length < 2 ? 'Add at least 2 files' : undefined}
+            >
+              {workspace.isBusy ? (
+                <><Loader2 size={15} className="spin" aria-hidden="true" /> Merging…</>
+              ) : (
+                <><Merge size={15} aria-hidden="true" /> Merge &amp; Download</>
+              )}
+            </button>
+          </div>
+          {workspace.queue.length < 2 && (
+            <p className="hint merge-queue-need">Add at least 2 files.</p>
+          )}
+        </div>
       </div>
     </div>
   );
