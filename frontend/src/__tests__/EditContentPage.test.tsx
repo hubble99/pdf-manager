@@ -190,6 +190,27 @@ describe('Edit Content page', () => {
     ));
   });
 
+  it('does not list whitespace-only text objects as choices', async () => {
+    const blankDiscovery = {
+      ...discovery,
+      textObjects: [
+        discovery.textObjects[0],
+        { ...discovery.textObjects[0], targetId: 'target-blank', nativeObjectIdentity: 'native-blank', text: '', unicodeScalarLength: 0 },
+        { ...discovery.textObjects[0], targetId: 'target-space', nativeObjectIdentity: 'native-space', text: '  ', unicodeScalarLength: 2 },
+      ],
+    };
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery: blankDiscovery }));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await screen.findByRole('heading', { name: 'Select text on the page' });
+    fireEvent.click(screen.getByRole('button', { name: 'Native text object' }));
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(options).toEqual(['Choose supported text…', 'Press A to continue']);
+    expect(screen.getByPlaceholderText('Find text on this page (1)')).toBeInTheDocument();
+  });
+
   it('opens text choices below the picker and shows V1 limits before editing', async () => {
     const { container } = renderPage();
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();

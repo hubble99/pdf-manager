@@ -117,10 +117,16 @@ export function EditContentPage() {
     () => discovery?.textObjects.filter((object) => object.pageIndex === pageIndex) ?? [],
     [discovery, pageIndex],
   );
+  // Whitespace-only objects (e.g. the empty spacing runs Word emits) paint nothing and
+  // are not meaningful edit targets; listing them in the picker only adds noise.
+  const pickableObjects = useMemo(
+    () => pageObjects.filter((object) => object.text.trim() !== ''),
+    [pageObjects],
+  );
   const filteredPageObjects = useMemo(() => {
     const query = pickerQuery.trim().toLocaleLowerCase();
-    return query ? pageObjects.filter((object) => object.text.toLocaleLowerCase().includes(query)) : pageObjects;
-  }, [pageObjects, pickerQuery]);
+    return query ? pickableObjects.filter((object) => object.text.toLocaleLowerCase().includes(query)) : pickableObjects;
+  }, [pickableObjects, pickerQuery]);
   const draftDirty = Boolean(selected && draft !== selected.text);
   const unsaved = draftDirty || Boolean(session?.dirty);
   const busy = phase !== 'idle';
@@ -636,7 +642,7 @@ export function EditContentPage() {
                   {selected && <span className="badge badge-info">Exact object</span>}
                 </div>
                 <EditContentLimits />
-                {pageObjects.length > 0 && (
+                {pickableObjects.length > 0 && (
                   <div className="edit-content-object-picker">
                     <span className="input-label">Native text object</span>
                     <button
@@ -668,7 +674,7 @@ export function EditContentPage() {
                           className="input"
                           type="search"
                           aria-label="Filter native text objects"
-                          placeholder={`Find text on this page (${pageObjects.length})`}
+                          placeholder={`Find text on this page (${pickableObjects.length})`}
                           value={pickerQuery}
                           onChange={(event) => setPickerQuery(event.target.value)}
                         />
@@ -687,7 +693,7 @@ export function EditContentPage() {
                           <option value="">Choose supported text…</option>
                           {filteredPageObjects.map((object) => (
                             <option key={object.targetId} value={object.targetId}>
-                              {object.text.trim() || 'Empty text object'}
+                              {object.text.trim()}
                             </option>
                           ))}
                         </select>
