@@ -96,6 +96,9 @@ def test_rehydration_preserves_worker_session_and_limits_admission(saved, monkey
 
         terminate = close
 
+        def discard_inspection_cache(self):
+            pass
+
     monkeypatch.setattr("features.edit_content.coordinator.ContentWorkerAdapter", Worker)
     registry = ContentSessionRegistry(storage_root=root, config_factory=lambda: object())
     restored = registry.get(SESSION)

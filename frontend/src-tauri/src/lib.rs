@@ -60,7 +60,9 @@ pub fn run() {
             "PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR",
             resource_dir.join("edit-content").to_string_lossy().into_owned(),
           )
-          .env("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN", lifecycle_token.0.clone());
+          .env("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN", lifecycle_token.0.clone())
+          // Lets the sidecar notice the app dying even when only the app process is killed.
+          .env("PDF_MANAGER_APP_PID", std::process::id().to_string());
         let (_rx, child) = sidecar
           .spawn()
           .expect("failed to spawn pdf-manager-backend sidecar");

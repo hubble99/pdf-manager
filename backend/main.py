@@ -3,6 +3,11 @@ PDF Manager Backend — FastAPI Application Entry Point
 """
 import sys
 
+# Must run before any bundled library asks platform.system() (see fast_platform).
+from fast_platform import install as _install_fast_platform
+
+_install_fast_platform()
+
 # The packaged read-only inspector must not initialize the web application,
 # create application directories, or depend on Content's runtime resources.
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--edit-content-inspector":
@@ -279,18 +284,25 @@ if __name__ == "__main__":
         # and needs to self-terminate.
         def monitor_parent():
             ppid = os.getppid()
+            # In one-file mode the parent is the PyInstaller bootloader, which the
+            # desktop app can outlive being killed; also watch the app itself.
+            watched = [ppid]
+            app_pid = os.environ.get("PDF_MANAGER_APP_PID", "")
+            if app_pid.isdigit() and int(app_pid) not in (0, os.getpid(), ppid):
+                watched.append(int(app_pid))
             if sys.platform == "win32":
                 import ctypes
                 kernel32 = ctypes.windll.kernel32
                 SYNCHRONIZE = 0x00100000
                 while True:
-                    process = kernel32.OpenProcess(SYNCHRONIZE, False, ppid)
-                    if process == 0:
-                        os._exit(0)
-                    if kernel32.WaitForSingleObject(process, 0) == 0:
+                    for watched_pid in watched:
+                        process = kernel32.OpenProcess(SYNCHRONIZE, False, watched_pid)
+                        if process == 0:
+                            os._exit(0)
+                        if kernel32.WaitForSingleObject(process, 0) == 0:
+                            kernel32.CloseHandle(process)
+                            os._exit(0)
                         kernel32.CloseHandle(process)
-                        os._exit(0)
-                    kernel32.CloseHandle(process)
                     time.sleep(2)
             else:
                 while True:
