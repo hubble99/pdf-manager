@@ -21,7 +21,9 @@ class UnprovenPreservation(ValueError):
     pass
 
 
-def semantic_value(value: Any, *, _active: frozenset = frozenset(), _depth: int = 0) -> Any:
+def semantic_value(
+    value: Any, *, _active: frozenset = frozenset(), _depth: int = 0, _page_self: tuple | None = None,
+) -> Any:
     """Resolve references; hash decoded bytes, retaining masks and dependencies.
 
     Cycles and excessive depth fail closed. Stream transport spelling is not
@@ -31,10 +33,15 @@ def semantic_value(value: Any, *, _active: frozenset = frozenset(), _depth: int 
         raise UnprovenPreservation("resource nesting exceeds the proof boundary")
     if isinstance(value, IndirectObject):
         key = (id(value.pdf), value.idnum, value.generation)
+        if _page_self is not None and key == _page_self:
+            # Annotations name their own page (/P, same-page destinations). That
+            # back-reference is identity of the page being hashed, not content.
+            return {"samePage": True}
         if key in _active:
             raise UnprovenPreservation("cyclic resource dependency")
-        return semantic_value(value.get_object(), _active=_active | {key}, _depth=_depth + 1)
-    descend = lambda child: semantic_value(child, _active=_active, _depth=_depth + 1)
+        return semantic_value(value.get_object(), _active=_active | {key}, _depth=_depth + 1,
+                              _page_self=_page_self)
+    descend = lambda child: semantic_value(child, _active=_active, _depth=_depth + 1, _page_self=_page_self)
     if value is None or isinstance(value, NullObject):
         return None
     if isinstance(value, BooleanObject):
@@ -62,8 +69,9 @@ def semantic_value(value: Any, *, _active: frozenset = frozenset(), _depth: int 
     raise UnprovenPreservation("unsupported resource value")
 
 
-def semantic_hash(value: Any) -> str:
-    canonical = json.dumps(semantic_value(value), sort_keys=True, separators=(",", ":"), allow_nan=False)
+def semantic_hash(value: Any, *, page_self: Any = None) -> str:
+    own = (id(page_self.pdf), page_self.idnum, page_self.generation) if page_self is not None else None
+    canonical = json.dumps(semantic_value(value, _page_self=own), sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -114,7 +122,7 @@ def image_resource_bindings(page: Any, resources: Any) -> list[dict[str, str]]:
     Encoded bytes identify the resource *within this file*, not across saves.
     Full semantic hashes (including masks/filters' decoded meaning) are what
     the native verifier compares across files. Inline images, forms, and
-    duplicate raw streams cannot establish that binding and fail closed.
+    streams with no stored bytes cannot establish that binding and fail closed.
     """
     resolved = resources.get_object() if resources is not None else DictionaryObject()
     if not isinstance(resolved, DictionaryObject):
@@ -125,7 +133,7 @@ def image_resource_bindings(page: Any, resources: Any) -> list[dict[str, str]]:
     mapping = resolved.get('/XObject', DictionaryObject()).get_object()
     if not isinstance(mapping, DictionaryObject):
         raise UnprovenPreservation('invalid image resource dictionary')
-    result, seen = [], set()
+    result = []
     for value in mapping.values():
         image = value.get_object()
         if not isinstance(image, StreamObject) or image.get('/Subtype') != '/Image':
@@ -136,8 +144,9 @@ def image_resource_bindings(page: Any, resources: Any) -> list[dict[str, str]]:
         if not isinstance(raw, bytes) or not raw or len(raw) > 64 * 1024 * 1024:
             raise UnprovenPreservation('unbounded or empty image stream')
         fingerprint = hashlib.sha256(raw).hexdigest()
-        if fingerprint in seen:
-            raise UnprovenPreservation('ambiguous image stream identity')
-        seen.add(fingerprint)
+        # Word repeats images (and the signature stamp's tiny masked bitmaps) under
+        # many names. Identical stored bytes may still mean different things (another
+        # palette or mask), so every use is listed; the native verifier separates
+        # ambiguous groups by the image PDFium actually renders.
         result.append({'rawSha256': fingerprint, 'semanticSha256': semantic_hash(value)})
-    return sorted(result, key=lambda entry: entry['rawSha256'])
+    return sorted(result, key=lambda entry: (entry['rawSha256'], entry['semanticSha256']))

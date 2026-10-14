@@ -114,7 +114,22 @@ fn without_empty_advance(original: &ObjectEvidence, changed: &ObjectEvidence) ->
 }
 
 /// A per-file bijection, never a resource-set-only image identity proof.
-fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, String>, &'static str> {
+/// Every use of one stored image stream. `all` keeps each resource's complete
+/// semantic identity (masks, palette, decoded data); `remaining` counts native
+/// image objects that have not yet claimed a use of this stream.
+struct ImageGroup {
+    all: Vec<String>,
+    remaining: usize,
+}
+
+impl ImageGroup {
+    /// True when every resource sharing these stored bytes means exactly the same thing.
+    fn is_unambiguous(&self) -> bool {
+        self.all.iter().all(|semantic| *semantic == self.all[0])
+    }
+}
+
+fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, ImageGroup>, &'static str> {
     let bindings = page["imageResourceBindings"].as_array().ok_or(INTEGRITY)?;
     let resources = if page["nativeMarkedOwnership"].is_array() { &page["markedContentProof"]["resources"] }
         else { &page["preservationResources"] };
@@ -124,18 +139,23 @@ fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, 
     }
     let hash = |value: &Value| value.as_str().filter(|s| s.len() == 64 &&
         s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).map(str::to_owned).ok_or(INTEGRITY);
-    let mut result = BTreeMap::new();
+    let mut groups = BTreeMap::<String, ImageGroup>::new();
+    let mut actual = Vec::new();
     for binding in bindings {
-        if result.insert(hash(&binding["rawSha256"])?, hash(&binding["semanticSha256"])?).is_some() {
-            return Err(INTEGRITY);
-        }
+        let (raw, semantic) = (hash(&binding["rawSha256"])?, hash(&binding["semanticSha256"])?);
+        actual.push(semantic.clone());
+        let group = groups.entry(raw).or_insert(ImageGroup { all: Vec::new(), remaining: 0 });
+        group.all.push(semantic);
+        group.remaining += 1;
+    }
+    for group in groups.values_mut() {
+        group.all.sort();
     }
     let mut expected = dependencies.iter().map(hash).collect::<Result<Vec<_>, _>>()?;
     expected.sort();
-    let mut actual = result.values().cloned().collect::<Vec<_>>();
     actual.sort();
     if actual != expected { return Err(INTEGRITY); }
-    Ok(result)
+    Ok(groups)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -432,9 +452,24 @@ pub fn capture(
                     let bytes = image.get_raw_image_data().map_err(|_| INTEGRITY)?;
                     if bytes.is_empty() || bytes.len() > 64 * 1024 * 1024 { return Err(INTEGRITY); }
                     let raw_hash = sha256_reader(&mut std::io::Cursor::new(bytes)).map_err(|_| INTEGRITY)?;
-                    // Consume each binding exactly once; duplicate native images
-                    // cannot stand in for a missing resource use.
-                    json!(bindings.remove(&raw_hash).ok_or(INTEGRITY)?)
+                    // Each native image consumes exactly one use of its stored stream;
+                    // duplicate native images cannot stand in for a missing resource use.
+                    let group = bindings.get_mut(&raw_hash).ok_or(INTEGRITY)?;
+                    if group.remaining == 0 { return Err(INTEGRITY); }
+                    group.remaining -= 1;
+                    if group.is_unambiguous() {
+                        json!(group.all[0])
+                    } else {
+                        // Identical stored bytes with different palettes or masks cannot be
+                        // told apart by name. The image as PDFium renders it, with its mask and
+                        // palette applied, binds this object to what it actually shows.
+                        let rendered = image.get_processed_image(&document).map_err(|_| INTEGRITY)?;
+                        if rendered.as_bytes().len() > 64 * 1024 * 1024 { return Err(INTEGRITY); }
+                        let mut material = format!("ambiguous-image/v1|{}|{}x{}|{:?}|", group.all.join(","),
+                            rendered.width(), rendered.height(), rendered.color()).into_bytes();
+                        material.extend_from_slice(rendered.as_bytes());
+                        json!(sha256_reader(&mut std::io::Cursor::new(material)).map_err(|_| INTEGRITY)?)
+                    }
                 } else { dependencies[0].clone() };
                 let bitmap = image.get_raw_image().map_err(|_| INTEGRITY)?;
                 let fingerprint = sha256_reader(&mut std::io::Cursor::new(bitmap.as_bytes()))
@@ -463,7 +498,7 @@ pub fn capture(
         }
         // Only same-byte native bindings may authorize this optional proof.
         bind_empty_paint(resource_page, &mut objects[page_objects_start..]);
-        if image_bindings.is_some_and(|bindings| !bindings.is_empty()) { return Err(INTEGRITY); }
+        if image_bindings.is_some_and(|bindings| bindings.values().any(|group| group.remaining != 0)) { return Err(INTEGRITY); }
     }
     drop(document);
     if file_hash(path)? != artifact_hash {
@@ -1148,19 +1183,18 @@ mod tests {
     }
 
     #[test]
-    fn image_binding_requires_complete_unique_raw_to_semantic_bijection() {
+    fn image_binding_requires_the_complete_resource_census() {
         let a = "a".repeat(64); let b = "b".repeat(64);
         let c = "c".repeat(64); let d = "d".repeat(64);
         let page = json!({"preservationResources": {"/XObject": [c, d]},
             "imageResourceBindings": [{"rawSha256": a, "semanticSha256": c},
                 {"rawSha256": b, "semanticSha256": d}]});
-        let mut valid = proven_image_bindings(&page, 2).unwrap();
-        assert_eq!(valid.remove(&a), Some(c));
-        assert!(valid.remove(&a).is_none());
-        assert_eq!(valid.remove(&b), Some(d));
-        assert!(valid.is_empty());
+        let valid = proven_image_bindings(&page, 2).unwrap();
+        assert_eq!(valid.len(), 2);
+        assert_eq!((valid[&a].all.clone(), valid[&a].remaining, valid[&a].is_unambiguous()), (vec![c.clone()], 1, true));
+        assert_eq!(valid[&b].all, vec![d.clone()]);
         assert!(proven_image_bindings(&page, 3).is_err());
-        for (field, value) in [("rawSha256", json!(a)), ("rawSha256", json!("z".repeat(64))),
+        for (field, value) in [("rawSha256", json!("z".repeat(64))),
             ("semanticSha256", json!("f".repeat(64))), ("semanticSha256", Value::Null)] {
             let mut bad = page.clone();
             bad["imageResourceBindings"][1][field] = value;
@@ -1169,6 +1203,29 @@ mod tests {
         let mut missing = page;
         missing["imageResourceBindings"] = Value::Null;
         assert!(proven_image_bindings(&missing, 2).is_err());
+    }
+
+    #[test]
+    fn repeated_stored_image_bytes_form_one_group_that_is_ambiguous_only_if_meanings_differ() {
+        let a = "a".repeat(64); let c = "c".repeat(64); let d = "d".repeat(64);
+        let same = json!({"preservationResources": {"/XObject": [c, c]},
+            "imageResourceBindings": [{"rawSha256": a, "semanticSha256": c},
+                {"rawSha256": a, "semanticSha256": c}]});
+        let bound = proven_image_bindings(&same, 2).unwrap();
+        assert_eq!(bound.len(), 1);
+        assert_eq!((bound[&a].remaining, bound[&a].is_unambiguous()), (2, true));
+        // Same stored stream, different palette/mask: still bindable, but the group
+        // is ambiguous so the verifier must add the rendered image to the identity.
+        let different = json!({"preservationResources": {"/XObject": [c, d]},
+            "imageResourceBindings": [{"rawSha256": a, "semanticSha256": d},
+                {"rawSha256": a, "semanticSha256": c}]});
+        let bound = proven_image_bindings(&different, 2).unwrap();
+        assert_eq!((bound[&a].all.clone(), bound[&a].is_unambiguous()), (vec![c.clone(), d.clone()], false));
+        // The semantic multiset must still match the resource census exactly.
+        let short = json!({"preservationResources": {"/XObject": [c, c]},
+            "imageResourceBindings": [{"rawSha256": a, "semanticSha256": c},
+                {"rawSha256": a, "semanticSha256": d}]});
+        assert!(proven_image_bindings(&short, 2).is_err());
     }
 
     #[test]

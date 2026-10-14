@@ -86,10 +86,12 @@ class ReadOnlyResourceInspector:
                         "preservationResources": optional_proof(resource_fingerprints, resources),
                         "imageResourceBindings": optional_proof(
                             lambda value: image_resource_bindings(reader.pages[page_index], value), resources),
-                        "pagePreservation": optional_proof(semantic_hash, DictionaryObject({
-                            key: value for key, value in reader.pages[page_index].items()
-                            if key not in {"/Type", "/Parent", "/Contents", "/Resources", "/MediaBox", "/CropBox", "/Rotate"}
-                        })),
+                        "pagePreservation": optional_proof(
+                            lambda value: semantic_hash(value, page_self=reader.pages[page_index].indirect_reference),
+                            DictionaryObject({
+                                key: value for key, value in reader.pages[page_index].items()
+                                if key not in {"/Type", "/Parent", "/Contents", "/Resources", "/MediaBox", "/CropBox", "/Rotate"}
+                            })),
                     }
                 )
             shared = tuple(

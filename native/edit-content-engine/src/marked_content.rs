@@ -99,8 +99,12 @@ fn solve(page: &Value, native: &[NativeObject]) -> Option<Value> {
         return None;
     }
     // The pinned parser caches one CPDF_Font per dictionary. With complete used
-    // resource/native censuses, singleton elimination proves a unique bijection.
-    // No arbitrary matching is returned when the constraints stop resolving.
+    // resource/native censuses, singleton elimination proves each binding it
+    // forces. When the constraints stop resolving (for example two fonts that
+    // are only ever used together inside one marked-content group), the forced
+    // bindings stay proven and the remaining handles get no font object at all:
+    // no arbitrary matching is ever returned, and the consumers of an unbound
+    // object fall back to their own stricter evidence.
     let mut assignments = BTreeMap::<usize, String>::new();
     let mut taken = BTreeSet::<String>::new();
     while assignments.len() < edges.len() {
@@ -118,7 +122,7 @@ fn solve(page: &Value, native: &[NativeObject]) -> Option<Value> {
             }
         }
         if singles.is_empty() {
-            return None;
+            break;
         }
         for (handle, id) in singles {
             if !taken.insert(id.clone()) {
@@ -326,10 +330,35 @@ mod tests {
     }
 
     #[test]
+    fn indistinguishable_fonts_stay_unbound_while_forced_bindings_stay_proven() {
+        let (mut page, native) = fixture();
+        // Both fonts now appear in the first group too, so the two native font
+        // handles are interchangeable: neither may be given a font object.
+        page["markedContentProof"]["groups"][0]["fonts"] = json!(["1:0", "2:0"]);
+        let result = solve(&page, &native).unwrap();
+        for binding in result.as_array().unwrap() {
+            assert!(binding["fontObject"].is_null());
+            assert!(binding["markedContentId"].is_i64());
+        }
+        // A third font that is only ever used alone is still proven, even while
+        // the other two cannot be told apart.
+        let mut page = page;
+        page["fonts"].as_array_mut().unwrap().push(
+            json!({"scope":"page", "fontObject":"3:0", "semanticSha256":"b".repeat(64)}));
+        page["markedContentProof"]["groups"].as_array_mut().unwrap().push(
+            json!({"mcid":12,"kind":1,"count":1,"fonts":["3:0"],"state":[1.0,1.0,"/Normal"]}));
+        let mut native = native;
+        native.push(NativeObject { kind: 1, mcid: 12, font: Some(7) });
+        let result = solve(&page, &native).unwrap();
+        let bound = result.as_array().unwrap();
+        assert!(bound[..3].iter().all(|binding| binding["fontObject"].is_null()));
+        assert_eq!(bound[3]["fontObject"], "3:0");
+    }
+
+    #[test]
     fn ambiguous_fonts_mixed_states_and_incomplete_censuses_reject() {
         let (page, native) = fixture();
         for (field, bad) in [
-            ("fonts", json!(["1:0", "2:0"])),
             ("state", Value::Null),
             ("state", json!([0.7, 1.0, "/Multiply"])),
             ("count", json!(2)),
