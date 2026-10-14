@@ -1,42 +1,20 @@
 # Changelog
 
-## 1.7.0 — 2026-10-14
+## 1.7.0 — 2026-10-14 · Cumulative release (1.3.0 → 1.7.0)
 
-- Rebuilt the interface around the design reference in `ui_improvement/pdf-manager-ui.html` using the existing React components and tokens. Every screen now shares one header bar, one card language, and one set of navigation roles (`--bg`, `--surface`, `--sc`, `--sch`, `--line`, `--text`, `--muted`, `--act`, `--pb`, `--hov`, `--sel`), and no backend behaviour changed.
-- Added **Light** as the default theme and kept **Dark**, **Dusty Rose**, and **Steel Blue**. A saved theme is preserved, and only the fallback changed. Settings > Appearance now offers all four. Document pages and QR/barcode images stay white in every theme.
-- Renamed **Edit Canvas** to **Canvas PDF** in the sidebar, Home card, page title, toolbar, and documentation. The `/edit-canvas` route and `edit-canvas` feature id are unchanged for compatibility.
-- Kept the **BETA** badge on Edit Content in the sidebar and on its Home card, with the tooltip “Beta: this feature is still unstable.”, and added a matching beta notice above the limits card before a file is opened.
-- Made the **whole file row draggable** in Merge PDF Quick and Folder modes, with a grab cursor, a hover background, an elevated lifted row, and a live insertion line. The number badges renumber while the row is in the air. The up/down buttons remain, and a focused row supports Alt+Up / Alt+Down.
-- Showed the real application version from `frontend/package.json` everywhere instead of hardcoding it, so the interface can no longer drift from the release version.
-- Made **Recent output files** session-only: the list lives in `sessionStorage` and clears when the app closes.
-- Made **Canvas PDF** and **Edit Content** responsive and overflow-safe: the canvas toolbar wraps instead of clipping, the workspace shares the available height, and long text wraps instead of overflowing.
-- Did not implement the reference's prototype simulations. Compress estimates, update checks, and download simulations were left out.
-- Replaced the donation placeholders with the **real bundled assets**: the QRIS and PayPal codes ship in `frontend/src/assets`, and `frontend/src/config/donation.ts` is the single source for the PayPal URL, the recipient name, and both asset paths. The Donation page shows `Recipient: Ramadhoni Nasri` for each method, the pre-payment check, and the guidance that PDF Manager never asks for payment details or for donations by email or chat. The PayPal link opens in the system browser only, the Tauri `opener:allow-open-url` scope allows exactly that one URL, and the page collects no card, account, or credential data. `donationAssets.test.ts` pins the URL, the recipient name, both image SHA-256 hashes, and the capability scope.
+> Versions 1.3.0 through 1.7.0 were built and verified but never published or
+> tagged. They ship together as one release, so this section covers the whole
+> unpublished range instead of only the last increment. User-facing highlights
+> are in [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
 
-## 1.6.0 — 2026-10-12
+**New workspaces**
 
-- Added **Home** as the entry point. Opening the app now shows what it is and what it can do, instead of dropping you into one tool.
-- Grouped the features by the task you are performing — **Organize** (Merge PDF, Split PDF, Organize PDF), **Convert** (PDF & Image), **Edit** (Edit Canvas, Edit Content, Edit Metadata), **Optimize** (Compress PDF), **Protect** (Protect PDF), and **Create** (QR & Barcode). The same groups appear on Home and in the sidebar, so the layout survives new tools that are not about PDFs.
-- Drove both the sidebar and the Home cards from **one feature registry**, so a feature is described once and adding one later means adding a single entry.
-- Renamed "Organize Pages" to **Organize PDF** so a feature no longer repeats its group's name.
-- Moved the application name and tagline into one place, and wrote the Home description about the product's job rather than about PDF alone.
-- Added a **Donation** page, reachable from the sidebar and from a small teaser on Home. It shows a QRIS code and a configurable international value, works entirely offline, and stores nothing. Both entry points are unobtrusive: no popups, banners, or reminders.
-- Applied the donation restrictions: the value may be an email address or a link, copying works either way, and opening is only possible for a valid `https` link, which the **backend holds** — it opens only that configured destination and refuses anything a caller supplies.
-
-## 1.5.0 — 2026-10-12
-
-
-- Added **Folder mode** to Merge PDF. Point it at a folder and browse its PDFs in a collapsible tree, then build an explicit ordered merge queue from what you choose. Folder mode never uploads anything: the desktop app passes the folder path and the backend reads the files directly.
-- Choosing a folder never fills the queue, and a queue never mixes uploaded files with folder files. Quick mode is unchanged and keeps failing the whole merge on a bad file.
-- Ordered the tree naturally (case-insensitive, digit runs compared as numbers, folders before files) and used that same order for the files added from a folder.
-- Added a check before merging that reports files which are missing, unreadable, damaged, or encrypted, so you can skip exactly those and merge the rest instead of losing the whole merge to one unusable document. The result reports how many files were merged and how many were skipped.
-- Read paths only inside the folder you chose, resolving them fully so parent references and links cannot escape it, and refused anything that is not a PDF.
-- Made Folder mode desktop-only, with the toggle disabled and explained when the desktop shell is not present.
-
-## 1.4.0 — 2026-10-12
-
-
-- Turned **Organize PDF** into a visual page-management workspace. The grid is now the working document itself: reorder by dragging, and rotate, mirror, duplicate, or delete any page or selection, so typed page numbers are no longer needed to keep positions correct.
+- Consolidated **PDF to Image** and **Image to PDF** into one **PDF & Image** feature. The conversion direction is detected from one uploaded PDF or an image batch, so the direction no longer has to be chosen manually. The previous `/pdf-to-image` and `/image-to-pdf` routes still open the consolidated workspace.
+- Added explicit PDF page selection with **All pages** and **Selected pages** modes. Selected pages accept a single page, ranges, and comma-separated combinations, stay synchronized with thumbnail checkboxes and the selected-page count, and disable conversion instead of silently falling back to all pages when the selection is empty or invalid.
+- Rejected mixed PDF/image batches, multiple PDFs, and unsupported files atomically, preserving the existing batch, its order, its adjustments, and its settings.
+- Added **A5** and **F4 (210 × 330 mm)** output page sizes for image-to-PDF, with the existing A4, A3, Letter, Legal, and original-image-size options retained. One page-size choice still applies to the whole batch, and per-image rotation and horizontal mirroring continue to apply per image.
+- Kept retained image source files usable when returning to the converter, discarded late responses from replaced or cleared input, and prevented duplicate or stale conversions from publishing results.
+- Turned **Organize PDF** into a visual page-management workspace. The grid is the working document itself: reorder by dragging, and rotate, mirror, duplicate, or delete any page or selection, so typed page numbers are no longer needed to keep positions correct.
 - Added **Insert PDF** and **Insert Image**. Pages from other PDFs are picked by range or in full, images keep their original size, and insertion position is resolved against the selected pages (or the document ends when nothing is selected). Pick order is preserved and duplicates are allowed.
 - Added bulk **Delete pages** by current grid position with a live count and highlighted cells, plus a **Sources** panel that lists every added file and can remove one together with its pages.
 - Added **Undo**, **Redo**, and **Reset**. One action is one undo step, and reset returns to the starting document.
@@ -46,17 +24,37 @@
 - Kept the page grid to a fixed three, four, or five columns depending on window width, so a wide window no longer produces a wall of narrow cells. Cell controls now sit inside the cell: the selection checkbox has its own zone instead of covering the page image, and the action buttons are centred in the cell without overflowing or being clipped.
 - Filtered the insert file dialogs by type and re-checked the chosen file by extension and content, so a file picked through "All files" that does not match the action is refused with a clear message instead of being uploaded.
 - Tidied the insert panel: pages and position sit side by side to keep the grid visible, the page expression field appears only when picking, and a single-page source no longer offers a page choice at all.
-- Folded the separate **Insert Content** feature into the workspace. Its HTTP endpoint and tests remain available; its sidebar entry and page are removed.
-- The existing `POST /api/v1/organize/` and `POST /api/v1/insert/` endpoints keep their routes and request fields.
+- Folded the separate **Insert Content** feature into the workspace. Its HTTP endpoint and tests remain available; its sidebar entry and page are removed. The existing `POST /api/v1/organize/` and `POST /api/v1/insert/` endpoints keep their routes and request fields.
+- Added **Folder mode** to Merge PDF. Point it at a folder and browse its PDFs in a collapsible tree, then build an explicit ordered merge queue from what you choose. Folder mode never uploads anything: the desktop app passes the folder path and the backend reads the files directly.
+- Choosing a folder never fills the queue, and a queue never mixes uploaded files with folder files. Quick mode is unchanged and keeps failing the whole merge on a bad file.
+- Ordered the tree naturally (case-insensitive, digit runs compared as numbers, folders before files) and used that same order for the files added from a folder.
+- Added a check before merging that reports files which are missing, unreadable, damaged, or encrypted, so you can skip exactly those and merge the rest instead of losing the whole merge to one unusable document. The result reports how many files were merged and how many were skipped.
+- Read paths only inside the folder you chose, resolving them fully so parent references and links cannot escape it, and refused anything that is not a PDF. Folder mode is desktop-only, with the toggle disabled and explained when the desktop shell is not present.
 
-## 1.3.0 — 2026-10-12
+**Home, navigation, and identity**
 
+- Added **Home** as the entry point. Opening the app now shows what it is and what it can do, instead of dropping you into one tool.
+- Grouped the features by the task you are performing — **Organize** (Merge PDF, Split PDF, Organize PDF), **Convert** (PDF & Image), **Edit** (Canvas PDF, Edit Content, Edit Metadata), **Optimize** (Compress PDF), **Protect** (Protect PDF), and **Create** (QR & Barcode). The same groups appear on Home and in the sidebar, so the layout survives new tools that are not about PDFs.
+- Drove both the sidebar and the Home cards from **one feature registry**, so a feature is described once and adding one later means adding a single entry.
+- Renamed "Organize Pages" to **Organize PDF** so a feature no longer repeats its group's name.
+- Moved the application name, tagline, and version into one place. The interface reads the running version from `frontend/package.json` instead of hardcoding it, so it cannot drift from the release version, and shows **PDF Manager** everywhere.
 
-- Consolidated **PDF to Image** and **Image to PDF** into one **PDF & Image** feature. The conversion direction is detected from one uploaded PDF or an image batch, so the direction no longer has to be chosen manually. The previous `/pdf-to-image` and `/image-to-pdf` routes still open the consolidated workspace.
-- Added explicit PDF page selection with **All pages** and **Selected pages** modes. Selected pages accept a single page, ranges, and comma-separated combinations, stay synchronized with thumbnail checkboxes and the selected-page count, and disable conversion instead of silently falling back to all pages when the selection is empty or invalid.
-- Rejected mixed PDF/image batches, multiple PDFs, and unsupported files atomically, preserving the existing batch, its order, its adjustments, and its settings.
-- Added **A5** and **F4 (210 × 330 mm)** output page sizes for image-to-PDF, with the existing A4, A3, Letter, Legal, and original-image-size options retained. One page-size choice still applies to the whole batch, and per-image rotation and horizontal mirroring continue to apply per image.
-- Kept retained image source files usable when returning to the converter, discarded late responses from replaced or cleared input, and prevented duplicate or stale conversions from publishing results.
+**Interface redesign (1.7.0)**
+
+- Rebuilt the interface around the design reference in `ui_improvement/pdf-manager-ui.html` using the existing React components and tokens. Every screen now shares one header bar, one card language, and one set of navigation roles (`--bg`, `--surface`, `--sc`, `--sch`, `--line`, `--text`, `--muted`, `--act`, `--pb`, `--hov`, `--sel`), and no backend behaviour changed.
+- Added **Light** as the default theme and kept **Dark**, **Dusty Rose**, and **Steel Blue**. A saved theme is preserved, and only the fallback changed. Settings > Appearance now offers all four, and document pages and QR/barcode images stay white in every theme.
+- Renamed **Edit Canvas** to **Canvas PDF** in the sidebar, Home card, page title, toolbar, and documentation. The `/edit-canvas` route and `edit-canvas` feature id are unchanged for compatibility.
+- Kept the **BETA** badge on Edit Content in the sidebar and on its Home card, with the tooltip "Beta: this feature is still unstable.", and added a matching beta notice above the limits card before a file is opened.
+- Made the **whole file row draggable** in Merge PDF Quick and Folder modes, with a grab cursor, a hover background, an elevated lifted row, and a live insertion line. The number badges renumber while the row is in the air. The up/down buttons remain, and a focused row supports Alt+Up / Alt+Down.
+- Made **Canvas PDF** and **Edit Content** responsive and overflow-safe: the canvas toolbar wraps instead of clipping, the workspace shares the available height, and long text wraps instead of overflowing.
+- Made **Recent output files** session-only: the list lives in `sessionStorage` and clears when the app closes.
+- Did not implement the reference's prototype simulations. Compress estimates, update checks, and download simulations were left out.
+
+**Donation**
+
+- Added a **Donation** page, reachable from the sidebar and from a small teaser on Home. It shows a QRIS code and an international PayPal option, works entirely offline, and stores nothing. Both entry points are unobtrusive: no popups, banners, or reminders.
+- Replaced the donation placeholders with the **real bundled assets**: the QRIS and PayPal codes ship in `frontend/src/assets`, and `frontend/src/config/donation.ts` is the single source for the PayPal URL, the recipient name, and both asset paths. The page shows `Recipient: Ramadhoni Nasri` for each method, the pre-payment check, and the guidance that PDF Manager never asks for payment details or for donations by email or chat.
+- Hardened the payment surface: the PayPal link opens in the system browser only, the Tauri `opener:allow-open-url` scope allows exactly that one URL, no URL is built from input, and the page collects no card, account, or credential data. `donationAssets.test.ts` pins the URL, the recipient name, both image SHA-256 hashes, and the capability scope. The earlier backend-held donation value is no longer read by the interface; the legacy `/api/v1/settings/donation` and `/api/v1/settings/open-donation` endpoints remain available.
 
 ## 1.2.4 — 2026-09-30
 

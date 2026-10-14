@@ -14,7 +14,6 @@
     "dialog:allow-confirm",
     "shell:allow-execute",
     "shell:allow-spawn",
-    "shell:allow-open",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
