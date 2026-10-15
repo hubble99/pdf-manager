@@ -127,7 +127,13 @@ def text_paint_slots(page, resources):
         elif op == b'Tm':
             require(in_text and not painted)
             matrix = [f32(v) for v in args]
-        elif op in (b'Td', b'TD', b'T*', b"'", b'"'):
+        elif op == b'Td':
+            # E-signature stamps (BSrE) are appended as ``BT <Tf> x y Td (text) Tj ET``.
+            # Directly after BT the text and line matrices are the identity, so Td is
+            # exactly a translation. Any Td after Tm/Td/a show keeps rejecting.
+            require(in_text and matrix is None and not painted and len(args) == 2)
+            matrix = [1.0, 0.0, 0.0, 1.0, f32(args[0]), f32(args[1])]
+        elif op in (b'TD', b'T*', b"'", b'"'):
             require(False)
         elif op in (b'BDC', b'BMC'):
             value = args[1] if op == b'BDC' else {}

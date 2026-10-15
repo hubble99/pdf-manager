@@ -34,7 +34,11 @@ fn bind_empty_paint(page: &Value, objects: &mut [ObjectEvidence]) -> Option<()> 
         let size = (obj.style["fontSize"].as_f64()? as f32).to_bits();
         let matches = slots.iter().enumerate().filter(|(_, slot)|
             slot["mcid"] == binding["markedContentId"] &&
-            slot["fontObject"] == binding["fontObject"] &&
+            // Fonts used only together inside one marked-content group cannot be told apart
+            // by the ownership solver and stay unbound (null). The slot's exact
+            // transform/size/MCID, unique on both sides, then names the font; an object
+            // the solver did bind must still agree with its slot.
+            (binding["fontObject"].is_null() || slot["fontObject"] == binding["fontObject"]) &&
             slot["matrixBits"] == json!(matrix) &&
             slot["fontSizeBits"] == json!(size)
         ).collect::<Vec<_>>();
@@ -974,6 +978,31 @@ mod tests {
         let mut second = objects[0].clone(); second.index = 1; objects.push(second);
         duplicate["nativeMarkedOwnership"].as_array_mut().unwrap().push(json!({"markedContentId":5,"fontObject":"8:0"}));
         assert!(bind_empty_paint(&duplicate,&mut objects).is_none());
+        for obj in objects { assert!(obj.style["emptyGlyphPaint"].is_null()); }
+    }
+
+    #[test]
+    fn unbound_font_is_named_by_a_unique_exact_slot_only() {
+        let (mut before, _) = fixture("word", "word", "ward");
+        let object = &mut before.objects[0];
+        object.text = Some("".into());
+        object.quad = vec![[10.0, 10.0]; 4];
+        object.style["font"] = json!({"embedded": true});
+        object.style["renderMode"] = json!("FilledUnstroked");
+        let slot = json!({"mcid":5,"fontObject":"8:0","emptyPaint":true,
+            "fontSizeBits":12_f32.to_bits(),"matrixBits":[1_f32.to_bits(),0,0,1_f32.to_bits(),10_f32.to_bits(),10_f32.to_bits()]});
+        let page = json!({"nativeMarkedOwnership":[{"markedContentId":5,"fontObject":null}],"textPaintSlots":[slot]});
+        let mut objects = before.objects.clone();
+        assert!(bind_empty_paint(&page, &mut objects).is_some());
+        assert_eq!(objects[0].style["emptyGlyphPaint"], "winansi-loca/v1");
+        // A second slot with the same transform makes the match ambiguous: no proof at all.
+        let mut ambiguous = page.clone();
+        let again = ambiguous["textPaintSlots"][0].clone();
+        ambiguous["textPaintSlots"].as_array_mut().unwrap().push(again);
+        let mut objects = before.objects.clone();
+        let mut second = objects[0].clone(); second.index = 1; objects.push(second);
+        ambiguous["nativeMarkedOwnership"].as_array_mut().unwrap().push(json!({"markedContentId":5,"fontObject":null}));
+        assert!(bind_empty_paint(&ambiguous, &mut objects).is_none());
         for obj in objects { assert!(obj.style["emptyGlyphPaint"].is_null()); }
     }
 

@@ -162,3 +162,30 @@ def test_standard_space_slots_name_their_proof_and_embedded_slots_keep_theirs():
     unproven = standard_font_page(base='/WingdingsRegular')
     slots = text_paint_slots(unproven, unproven['/Resources'])
     assert not any(s['emptyPaint'] for s in slots) and all(s['asciiCodes'] is None for s in slots)
+
+
+def _page_with_content(contents: bytes):
+    page = standard_font_page()
+    stream = DecodedStreamObject()
+    stream.set_data(contents)
+    page[NameObject('/Contents')] = stream
+    return page
+
+
+def test_signature_stamp_td_blocks_keep_the_census_and_misuse_still_rejects():
+    # BSrE stamps append ``BT x y Td (text) Tj ET`` blocks to an otherwise Tm-based page.
+    stamp = b'BT 464 65 Td (Dokumen) Tj ET\n'
+    page = _page_with_content(b'BT /A 12 Tf 1 0 0 1 30 100 Tm (AA) Tj ET\n/A 6 Tf ' + stamp)
+    slots = text_paint_slots(page, page['/Resources'])
+    assert [s['asciiCodes'] for s in slots] == [[65, 65], [68, 111, 107, 117, 109, 101, 110]]
+    assert slots[1]['mcid'] == -1
+    assert slots[1]['matrixBits'] == slots[0]['matrixBits'][:4] + [
+        __import__('struct').unpack('<I', __import__('struct').pack('<f', 464.0))[0],
+        __import__('struct').unpack('<I', __import__('struct').pack('<f', 65.0))[0]]
+    # A Td after Tm, a second Td, a Td after a show, TD and T* are outside the proof.
+    for bad in (b'BT /A 6 Tf 1 0 0 1 3 4 Tm 5 6 Td (A) Tj ET', b'BT /A 6 Tf 1 2 Td 3 4 Td (A) Tj ET',
+                b'BT /A 6 Tf (A) Tj 1 2 Td ET', b'BT /A 6 Tf 1 2 TD (A) Tj ET', b'BT /A 6 Tf T* (A) Tj ET',
+                b'/A 6 Tf 1 2 Td (A) Tj'):
+        broken = _page_with_content(bad)
+        with pytest.raises(Exception):
+            text_paint_slots(broken, broken['/Resources'])
