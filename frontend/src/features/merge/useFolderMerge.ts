@@ -5,8 +5,8 @@ import { openOutputFolder } from '../../utils/tauriDialog';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { chooseFolderDialog, isTauri } from '../../utils/tauriDialog';
 import {
-  CHOOSE_FOLDER_AGAIN, inspectFiles, listFolder, mergeFolderFiles, registerFolder, releaseFolder,
-  type FolderFileNode, type FolderListing, type MergeProblem, type RegisteredRoot,
+  CHOOSE_FOLDER_AGAIN, describeFiles, inspectFiles, listFolder, mergeFolderFiles, registerFolder, releaseFolder,
+  type FileInfo, type FolderFileNode, type FolderListing, type MergeProblem, type RegisteredRoot,
 } from './api';
 
 export interface FolderMergeState {
@@ -15,6 +15,8 @@ export interface FolderMergeState {
   listing: FolderListing | null;
   expanded: Set<string>;
   queue: string[];
+  /** Size and page count of queued files, filled in as they are read. */
+  fileInfo: Record<string, FileInfo>;
   outputName: string;
   isBusy: boolean;
   error: string | null;
@@ -61,6 +63,7 @@ export function useFolderMerge(): FolderMergeState {
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [queue, setQueue] = useState<string[]>([]);
+  const [fileInfo, setFileInfo] = useState<Record<string, FileInfo>>({});
   const [outputName, setOutputName] = useState('merged_output.pdf');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +86,7 @@ export function useFolderMerge(): FolderMergeState {
     setListing(null);
     setExpanded(new Set());
     setQueue([]);
+    setFileInfo({});
     setProblems(null);
     setResult(null);
   }, []);
@@ -131,6 +135,7 @@ export function useFolderMerge(): FolderMergeState {
       if (!mountedRef.current) return;
       setRoot(registered);
       setQueue([]);
+      setFileInfo({});
       setResult(null);
       await loadListing(registered.rootId);
     } catch (thrown) {
@@ -282,6 +287,32 @@ export function useFolderMerge(): FolderMergeState {
 
   const isQueued = useCallback((relativePath: string) => queue.includes(relativePath), [queue]);
 
+  // Properties of queued files, read once per file so reordering costs nothing.
+  const requestedInfo = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!root) {
+      requestedInfo.current = new Set();
+      return;
+    }
+    const missing = queue.filter((path) => !requestedInfo.current.has(path));
+    if (missing.length === 0) return;
+    missing.forEach((path) => requestedInfo.current.add(path));
+    const rootId = root.rootId;
+    describeFiles(rootId, missing)
+      .then((described) => {
+        if (!mountedRef.current || rootIdRef.current !== rootId) return;
+        setFileInfo((previous) => {
+          const next = { ...previous };
+          for (const info of described) next[info.path] = info;
+          return next;
+        });
+      })
+      .catch(() => {
+        // Properties are a convenience; let a later change retry them.
+        missing.forEach((path) => requestedInfo.current.delete(path));
+      });
+  }, [queue, root]);
+
   const orderedQueue = useMemo(() => queue, [queue]);
 
   return {
@@ -290,6 +321,7 @@ export function useFolderMerge(): FolderMergeState {
     listing,
     expanded,
     queue: orderedQueue,
+    fileInfo,
     outputName,
     isBusy,
     error,

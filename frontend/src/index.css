@@ -3172,6 +3172,14 @@ select.input {
   font-size: 11px;
 }
 
+.merge-queue-meta {
+  min-height: 14px;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .merge-queue-index {
   font-variant-numeric: tabular-nums;
 }
@@ -4972,6 +4980,17 @@ select.input {
 .page-body > .form-col {
   margin-top: 0;
   margin-bottom: 0;
+}
+
+/* Upload-only screens: the drop zone sits in the vertical middle of the page body. */
+.page-body:has(> .form-col--center) {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-body > .form-col.form-col--center {
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 /* Two-column form layout (QR & Barcode, and other settings + preview screens). */

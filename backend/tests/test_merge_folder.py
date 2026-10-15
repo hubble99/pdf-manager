@@ -199,6 +199,19 @@ async def test_register_list_inspect_and_merge(folder: Path):
         problems = inspected.json()["data"]["problems"]
         assert len(problems) == 2
 
+        described = await api.post("/api/v1/merge/folder/info/", json={
+            "root_id": root_id,
+            "files": ["a.pdf", "Q1/locked.pdf", "broken.pdf"],
+        })
+        assert described.status_code == 200, described.text
+        files = described.json()["data"]["files"]
+        assert [entry["path"] for entry in files] == ["a.pdf", "Q1/locked.pdf", "broken.pdf"]
+        assert files[0]["pages"] >= 1
+        assert files[0]["size_bytes"] == (folder / "a.pdf").stat().st_size
+        # Password-protected and damaged files report a size but no page count.
+        assert files[1]["pages"] is None and files[1]["size_bytes"] > 0
+        assert files[2]["pages"] is None
+
         merged = await api.post("/api/v1/merge/folder/merge/", json={
             "root_id": root_id,
             "files": ["a.pdf", "Q1/locked.pdf", "b.pdf"],

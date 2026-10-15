@@ -198,7 +198,7 @@ export function ExtractPage() {
 
       <div className="page-body">
         {!file ? (
-          <div className="form-col">
+          <div className="form-col form-col--center">
             <div
               id="extract-drop-zone"
               className={`drop-zone${isDragOver ? ' drag-over' : ''}`}

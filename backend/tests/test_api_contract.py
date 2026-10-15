@@ -11,6 +11,7 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/merge/folder/roots/"),
     ("POST", "/api/v1/merge/folder/roots/{root_id}/list/"),
     ("POST", "/api/v1/merge/folder/inspect/"),
+    ("POST", "/api/v1/merge/folder/info/"),
     ("POST", "/api/v1/merge/folder/merge/"),
     ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/extract/"),
@@ -127,6 +128,11 @@ REQUEST_BODY_CONTRACTS = {
         "defaults": {},
     },
     ("POST", "/api/v1/merge/folder/inspect/"): {
+        "media_type": "application/json",
+        "required": {"root_id", "files"},
+        "defaults": {},
+    },
+    ("POST", "/api/v1/merge/folder/info/"): {
         "media_type": "application/json",
         "required": {"root_id", "files"},
         "defaults": {},
@@ -396,7 +402,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.7.0"
+    assert body["data"]["version"] == "1.8.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 
@@ -407,6 +413,8 @@ async def test_health_response_and_exposed_headers_are_stable():
     assert {
         "content-disposition",
         "x-file-size",
+        "x-merged-files",
         "x-output-file",
+        "x-skipped-files",
         "x-total-pages",
     } <= exposed

@@ -70,8 +70,9 @@ function EditContentLimits() {
   return (
     <aside className="edit-content-limits" aria-label="Edit Content V1 limits">
       <strong>Edit Content V1 limits</strong>
-      <p>Replace or delete existing selectable text in one supported text object. Longer replacements work only when they fit without reflow.</p>
-      <p>Scans, outlined text, new lines, font changes, and text split across objects are not supported. Text can be replaced, deleted, or extended inside the selected object. Uncertain PDFs may still be rejected during verification.</p>
+      <p>Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.</p>
+      <p>These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.</p>
+      <p>Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.</p>
     </aside>
   );
 }
@@ -775,7 +776,7 @@ export function EditContentPage() {
                     <p className="edit-content-hint">Typing changes this draft only. The PDF is regenerated once when you Apply or Save.</p>
                   </>
                 ) : (
-                  <StateView icon={FilePenLine} title="No text selected" description="Scanned, outlined, Type 3, split, or uncertain text remains view-only." />
+                  <StateView icon={FilePenLine} title="No text selected" description="Scanned, outlined, Type 3, split, hidden, or uncertain text remains view-only." />
                 )}
               </div>
 

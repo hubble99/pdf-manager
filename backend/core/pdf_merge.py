@@ -83,6 +83,26 @@ def inspect_documents(input_paths: list[Path]) -> tuple[list[Path], list[MergePr
     return usable, problems
 
 
+def describe_documents(input_paths: list[Path]) -> list[tuple[int, int | None]]:
+    """Size in bytes and page count for each path; the count is None when it cannot be read."""
+    described: list[tuple[int, int | None]] = []
+    for path in input_paths:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            described.append((0, None))
+            continue
+        pages: int | None = None
+        try:
+            with fitz.open(str(path)) as document:
+                if not document.is_encrypted:
+                    pages = document.page_count
+        except Exception:
+            pages = None
+        described.append((size, pages))
+    return described
+
+
 def _output_path(output_filename: str) -> Path:
     safe_name = sanitize_filename(output_filename, "pdf")
     return settings.OUTPUT_DIR / safe_name

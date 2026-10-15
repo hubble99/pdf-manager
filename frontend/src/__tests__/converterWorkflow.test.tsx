@@ -53,7 +53,15 @@ function renderConverter() {
   );
 }
 
+/** The tab is where the user states the direction, so images are added from Images to PDF. */
+function chooseTabFor(files: File[]) {
+  const wantsImages = files.some((file) => file.type.startsWith('image/'));
+  const tab = screen.queryByRole('tab', { name: wantsImages ? 'Images to PDF' : 'PDF to Images' });
+  if (tab && !tab.hasAttribute('disabled')) fireEvent.click(tab);
+}
+
 async function addFiles(files: File[]) {
+  chooseTabFor(files);
   const input = document.getElementById('converter-file-input') as HTMLInputElement;
   fireEvent.change(input, { target: { files } });
   await waitFor(() => expect(postMock).toHaveBeenCalled());
@@ -132,6 +140,7 @@ describe('unified converter workspace', () => {
   it('derives image direction and shows only image controls', async () => {
     renderConverter();
     const input = document.getElementById('converter-file-input') as HTMLInputElement;
+    chooseTabFor([image(), image('second.jpg', 'image/jpeg')]);
     fireEvent.change(input, { target: { files: [image(), image('second.jpg', 'image/jpeg')] } });
 
     await screen.findByText('2 files');
@@ -254,12 +263,13 @@ describe('unified converter workspace', () => {
   it('rejects a conflicting addition without losing the existing image batch', async () => {
     renderConverter();
     const input = document.getElementById('converter-file-input') as HTMLInputElement;
+    chooseTabFor([image('keep.png')]);
     fireEvent.change(input, { target: { files: [image('keep.png')] } });
     await screen.findByText('1 file');
 
     fireEvent.change(input, { target: { files: [pdf('other.pdf')] } });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/cannot share a batch/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/This tab takes images/i);
     expect(screen.getByText('1 file')).toBeInTheDocument();
     expect(within(screen.getByLabelText('Images to Convert')).getByText('keep.png')).toBeInTheDocument();
   });
@@ -285,7 +295,7 @@ describe('unified converter workspace', () => {
     expect(screen.queryByText(/Add more images/i)).not.toBeInTheDocument();
     expect(document.getElementById('converter-replace-file')).toBeInTheDocument();
     fireEvent.click(document.getElementById('converter-remove-file') as HTMLButtonElement);
-    expect(await screen.findByText('No files yet')).toBeInTheDocument();
+    expect(await screen.findByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
   });
 
   it('prevents duplicate submissions while a conversion is running', async () => {
@@ -329,12 +339,12 @@ describe('unified converter workspace', () => {
     await waitFor(() => expect(document.getElementById('converter-replace-file')).toBeInTheDocument());
 
     fireEvent.click(document.getElementById('converter-clear') as HTMLButtonElement);
-    expect(await screen.findByText('No files yet')).toBeInTheDocument();
+    expect(await screen.findByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
 
     resolveInfo(pdfInfoResponse(9));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(screen.getByText('No files yet')).toBeInTheDocument();
+    expect(screen.getByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
     expect(screen.queryByText(/Total: 9 pages/)).not.toBeInTheDocument();
     expect(convertButton()).toBeNull();
   });
@@ -382,6 +392,7 @@ describe('unified converter workspace', () => {
   it('aligns image request arrays with the displayed order and per-image transforms', async () => {
     renderConverter();
     const input = document.getElementById('converter-file-input') as HTMLInputElement;
+    chooseTabFor([image('first.png'), image('second.png')]);
     fireEvent.change(input, { target: { files: [image('first.png'), image('second.png')] } });
     await screen.findByText('2 files');
 
@@ -405,6 +416,7 @@ describe('unified converter workspace', () => {
   it('sends A5/F4 preset values from the single batch page-size control', async () => {
     renderConverter();
     const input = document.getElementById('converter-file-input') as HTMLInputElement;
+    chooseTabFor([image()]);
     fireEvent.change(input, { target: { files: [image()] } });
     await screen.findByText('1 file');
 
@@ -438,6 +450,7 @@ describe('unified converter workspace', () => {
 
     render(<Harness />);
     const input = document.getElementById('converter-file-input') as HTMLInputElement;
+    chooseTabFor([image('keep.png')]);
     fireEvent.change(input, { target: { files: [image('keep.png')] } });
     await screen.findByText('1 file');
     expect(document.querySelector('.converter-image-pick img')).toHaveAttribute('src', 'blob:mock-preview');

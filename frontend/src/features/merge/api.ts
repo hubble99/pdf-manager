@@ -63,6 +63,21 @@ export async function inspectFiles(rootId: string, files: string[]): Promise<Mer
   return response.data.data.problems;
 }
 
+export interface FileInfo {
+  path: string;
+  size_bytes: number;
+  /** null when the file cannot be read (damaged or password-protected). */
+  pages: number | null;
+}
+
+export async function describeFiles(rootId: string, files: string[]): Promise<FileInfo[]> {
+  const response = await apiClient.post<{ status: string; data: { files: FileInfo[] } }>(
+    '/api/v1/merge/folder/info/',
+    { root_id: rootId, files },
+  );
+  return response.data.data.files;
+}
+
 export async function releaseFolder(rootId: string): Promise<void> {
   await apiClient.delete(`/api/v1/merge/folder/roots/${rootId}`);
 }

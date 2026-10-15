@@ -1,7 +1,7 @@
-# PDF Manager 1.7.0 — Release Notes
+# PDF Manager 1.8.0 — Release Notes
 
 **Release type:** cumulative. This release publishes everything built since
-1.2.4 together: **1.3.0, 1.4.0, 1.5.0, 1.6.0, and 1.7.0**. Those versions were
+1.2.4 together: **1.3.0 through 1.8.0**. Those versions were
 built and verified but never published or tagged, so they ship as one version
 with one changelog. The detailed entry is in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -9,6 +9,12 @@ with one changelog. The detailed entry is in [`CHANGELOG.md`](CHANGELOG.md).
 files are never uploaded.
 
 ## Highlights
+
+### 1.8.0 changes
+- **Edit Content** now works on signature-stamped government PDFs, and hidden text layers (for example a letterhead image with a transparent text layer) are shown as view-only instead of being silently edited.
+- **PDF & Image** has two tabs, PDF to Images and Images to PDF, each with its own uploader.
+- **Merge PDF** folder mode shows page count and size per file, reports the merged count correctly, and offers Open Folder. Edit Content also offers Open Folder after saving.
+- Upload areas are centered vertically on every tool.
 
 ### A visual system instead of per-screen styling
 The whole interface was rebuilt around one layout language: a shared header bar,

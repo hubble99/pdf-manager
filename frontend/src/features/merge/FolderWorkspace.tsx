@@ -6,7 +6,19 @@ import { useRowReorder } from '../../hooks/useRowReorder';
 import type { RowReorderHandlers } from '../../hooks/useRowReorder';
 import { openOutputFolder } from '../../utils/tauriDialog';
 import { useFolderMerge } from './useFolderMerge';
-import type { FolderFileNode } from './api';
+import type { FileInfo, FolderFileNode } from './api';
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function describeInfo(info: FileInfo | undefined): string {
+  if (!info) return '\u00a0';
+  const size = formatBytes(info.size_bytes);
+  return info.pages === null ? size : `${info.pages} page${info.pages === 1 ? '' : 's'} · ${size}`;
+}
 
 /** Every folder path in a listing, so one control can open or close the whole tree. */
 function folderPaths(node: FolderFileNode): string[] {
@@ -101,9 +113,10 @@ function AddTag({ added }: { added: boolean }) {
 }
 
 function QueueRow({
-  relative, index, onRemove, onStep, disabled, reorderProps, dragging, onKeyDown,
+  relative, info, index, onRemove, onStep, disabled, reorderProps, dragging, onKeyDown,
 }: {
   relative: string;
+  info: FileInfo | undefined;
   index: number;
   onRemove: (index: number) => void;
   onStep: (index: number, direction: -1 | 1) => void;
@@ -132,6 +145,7 @@ function QueueRow({
         <span className="merge-queue-name">{name}</span>
         {/* Always shown, so rows never change height and duplicate names stay clear. */}
         <span className="merge-queue-folder">{folder || '\u00a0'}</span>
+        <span className="merge-queue-meta">{describeInfo(info)}</span>
       </span>
       <span className="chip merge-queue-index">#{index + 1}</span>
       <span className="merge-queue-actions">
@@ -311,6 +325,7 @@ export function FolderWorkspace() {
                   <QueueRow
                     key={relative}
                     relative={relative}
+                    info={workspace.fileInfo[relative]}
                     index={index}
                     onRemove={workspace.removeAt}
                     onStep={workspace.step}

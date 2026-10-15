@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -29,28 +29,33 @@ function FlipIcon() {
   );
 }
 
-const HEADER_COPY = {
-  empty: {
-    title: 'PDF & Image',
-    description: 'Add one PDF to export pages as images, or add images to build a PDF',
-  },
+type ConverterTab = 'pdf' | 'images';
+
+const TAB_COPY: Record<ConverterTab, { label: string; description: string; accept: string }> = {
   pdf: {
-    title: 'PDF & Image',
+    label: 'PDF to Images',
     description: 'Export the pages you choose from one PDF as images',
+    accept: '.pdf',
   },
   images: {
-    title: 'PDF & Image',
+    label: 'Images to PDF',
     description: 'Combine one or more images into a single PDF document',
+    accept: '.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff',
   },
-} as const;
+};
 
 export function ConverterPage() {
   const converter = useConverterWorkflow();
   const {
     kind, pdfFile, images, batchError, error, result, isConverting,
     pdfInfoState, selection, selectionMode, selectionDraft, pdfBlockReason,
-    format, dpi, pdfOutputName, pageSize, imageOutputName, accept,
+    format, dpi, pdfOutputName, pageSize, imageOutputName,
   } = converter;
+
+  // The tab chooses the direction while nothing is loaded; loaded files decide it after that.
+  const [chosenTab, setChosenTab] = useState<ConverterTab>('pdf');
+  const activeTab: ConverterTab = kind === 'empty' ? chosenTab : kind;
+  const accept = TAB_COPY[activeTab].accept;
 
   const inputRef = useRef<HTMLInputElement>(null);
   const replaceIntentRef = useRef(false);
@@ -70,7 +75,7 @@ export function ConverterPage() {
       converter.replaceFiles(incoming);
       return;
     }
-    converter.addFiles(incoming);
+    converter.addFiles(incoming, activeTab);
   };
 
   const selectionEditable = selectionMode === 'selected' && pdfInfoState === 'ready' && !isConverting;
@@ -91,7 +96,7 @@ export function ConverterPage() {
     onDragOver: (event: React.DragEvent) => event.preventDefault(),
     onDrop: (event: React.DragEvent) => {
       event.preventDefault();
-      converter.addFiles(Array.from(event.dataTransfer.files));
+      converter.addFiles(Array.from(event.dataTransfer.files), activeTab);
     },
   };
 
@@ -185,35 +190,71 @@ export function ConverterPage() {
     <div className="feature-page">
       <PageHeader
         icon={FileImage}
-        title={HEADER_COPY[kind].title}
-        description={HEADER_COPY[kind].description}
+        title="PDF & Image"
+        description={TAB_COPY[activeTab].description}
       />
+
+      <div className="tabs" role="tablist" aria-label="Conversion direction">
+        {(['pdf', 'images'] as const).map((tab) => {
+          const locked = kind !== 'empty' && kind !== tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              id={`converter-tab-${tab}`}
+              aria-selected={activeTab === tab}
+              className={`tab${activeTab === tab ? ' active' : ''}`}
+              onClick={() => { converter.dismissBatchError(); setChosenTab(tab); }}
+              disabled={locked || isConverting}
+              title={locked ? 'Clear the current files to switch direction' : undefined}
+            >
+              {TAB_COPY[tab].label}
+            </button>
+          );
+        })}
+      </div>
 
       <div className="page-body">
         {fileInput}
 
-        {/* ── Nothing added yet ─────────────────────────────────────────────── */}
+        {/* ── Nothing added yet: each tab has its own uploader ──────────────── */}
         {kind === 'empty' && (
-          <div className="form-col">
+          <div className="form-col form-col--center">
             <div
               id="converter-drop-zone"
               className="drop-zone"
-              aria-label="Drop one PDF or image files here, or press Enter to browse"
+              aria-label={activeTab === 'pdf'
+                ? 'Drop a PDF here, or press Enter to browse'
+                : 'Drop images here, or press Enter to browse'}
               {...dropProps}
             >
               <Upload className="drop-zone-icon" aria-hidden="true" />
-              <p className="drop-zone-title">Drop a PDF or images here</p>
-              <p className="drop-zone-sub">or click to browse · One PDF, or JPG / PNG / WEBP images</p>
-              <div className="converter-badges">
-                <span className="badge badge-neutral">PDF → Images</span>
-                <span className="badge badge-neutral">Images → PDF</span>
-              </div>
+              {activeTab === 'pdf' ? (
+                <>
+                  <p className="drop-zone-title">Drop a PDF here</p>
+                  <p className="drop-zone-sub">or click to browse · One file at a time</p>
+                  <span className="badge badge-neutral">PDF</span>
+                </>
+              ) : (
+                <>
+                  <p className="drop-zone-title">Drop images here</p>
+                  <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
+                  <div className="converter-badges">
+                    <span className="badge badge-neutral">PNG</span>
+                    <span className="badge badge-neutral">JPG</span>
+                    <span className="badge badge-neutral">WebP</span>
+                  </div>
+                </>
+              )}
             </div>
             {batchError && (
               <p className="converter-message converter-message--error" role="alert">{batchError}</p>
             )}
             <p className="empty-hint">
-              <strong>No files yet</strong>. The conversion direction is detected from what you add.
+              {activeTab === 'pdf'
+                ? 'Every page will appear here so you can choose which ones to convert.'
+                : 'Add images, put them in order, and save them as one PDF.'}
             </p>
           </div>
         )}

@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.8.0 — 2026-10-15 · Cumulative release (1.3.0 → 1.8.0)
+
+> 1.8.0 is the first published release since 1.2.4, so it carries everything in
+> the 1.7.0 section below plus the changes here.
+
+**Edit Content**
+
+- Fixed edits on signature-stamped (BSrE) PDFs: text drawn with a bare `Td` position and text whose font is bound by an unnamed slot can now be verified, so replacements on such government documents are accepted instead of rejected.
+- Text that is invisible (fully transparent, or a hidden text layer over a scanned/Word-exported image such as a letterhead) is now **view-only** with a clear explanation. Previously an edit could be "accepted" on the hidden layer while the visible page did not change.
+- Selecting text on the page no longer fills the object list with empty or whitespace-only runs; a single match is selected directly.
+- Added **Open Folder** after saving (toast and result card), like the other tools.
+- Updated the in-app limits text to describe view-only text (scanned, outlined, Type 3, split, hidden), verification, and signed PDFs.
+
+**Merge PDF**
+
+- Fixed the folder-mode toast that reported "0 files merged": the result headers were not exposed to the desktop app's webview.
+- Folder mode no longer merges twice in strict mode.
+- The folder queue now shows each file's page count and size, like Quick mode.
+- PDFs inside subfolders are indented deeper than PDFs at the chosen folder's root.
+- Added **Open Folder** after a folder merge.
+
+**PDF & Image**
+
+- The workspace now has two tabs, **PDF to Images** and **Images to PDF**, each with its own uploader. A file added on the wrong tab is refused with a pointer to the other one. The old shared uploader and automatic direction detection are gone.
+
+**Layout**
+
+- Upload drop zones on Split, Organize, PDF & Image, Edit Metadata, Compress, and Protect are now centered vertically.
+
 ## 1.7.0 — 2026-10-14 · Cumulative release (1.3.0 → 1.7.0)
 
 > Versions 1.3.0 through 1.7.0 were built and verified but never published or

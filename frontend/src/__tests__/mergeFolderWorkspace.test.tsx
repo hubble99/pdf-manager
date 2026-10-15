@@ -6,10 +6,11 @@ import { ToastProvider } from '../context/ToastContext';
 import { ToastContainer } from '../components/ToastContainer';
 import { MergePage } from '../pages/MergePage';
 
-const { registerMock, listMock, inspectMock, mergeMock, releaseMock, downloadMock, tauriState } = vi.hoisted(() => ({
+const { registerMock, listMock, inspectMock, describeMock, mergeMock, releaseMock, downloadMock, tauriState } = vi.hoisted(() => ({
   registerMock: vi.fn(),
   listMock: vi.fn(),
   inspectMock: vi.fn(),
+  describeMock: vi.fn(),
   mergeMock: vi.fn(),
   releaseMock: vi.fn(),
   downloadMock: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('../features/merge/api', async (importOriginal) => {
     registerFolder: registerMock,
     listFolder: listMock,
     inspectFiles: inspectMock,
+    describeFiles: describeMock,
     mergeFolderFiles: mergeMock,
     releaseFolder: releaseMock,
   };
@@ -95,6 +97,7 @@ describe('merge folder mode', () => {
   beforeEach(() => {
     registerMock.mockReset(); listMock.mockReset(); inspectMock.mockReset();
     mergeMock.mockReset(); releaseMock.mockReset(); downloadMock.mockReset();
+    describeMock.mockReset(); describeMock.mockResolvedValue([]);
     tauriState.available = true;
     tauriState.chosen = 'C:/Docs/Reports';
 
@@ -211,6 +214,24 @@ describe('merge folder mode', () => {
     expect(folders).toHaveLength(2);
     expect(folders[0]).toBe('Q1/');
     expect(folders[1]?.trim()).toBe('');
+  });
+
+  it('shows page count and size on queued files, like quick mode', async () => {
+    describeMock.mockImplementation(async (_root: string, files: string[]) =>
+      files.map((path) => (
+        path === 'summary.pdf'
+          ? { path, size_bytes: 2048, pages: 1 }
+          : { path, size_bytes: 1536000, pages: 12 }
+      )));
+    await openFolderMode();
+    await openFolderRow('Q1', 'report-jan.pdf');
+    fireEvent.click(screen.getByRole('button', { name: /Add report-jan\.pdf/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add summary\.pdf/i }));
+
+    await waitFor(() => {
+      const meta = [...document.querySelectorAll('.merge-queue-meta')].map((n) => n.textContent);
+      expect(meta).toEqual(['12 pages · 1.46 MB', '1 page · 2.0 KB']);
+    });
   });
 
   it('merges directly when nothing is wrong', async () => {

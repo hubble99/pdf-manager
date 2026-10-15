@@ -197,7 +197,7 @@ export function MetadataPage() {
 
       {/* Body */}
       <div className="page-body">
-        <div className="form-col">
+        <div className={`form-col${file ? '' : ' form-col--center'}`}>
 
           {/* Drop zone */}
           {!file ? (

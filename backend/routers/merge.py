@@ -95,7 +95,7 @@ import os
 
 from core.folder_scan import scan_folder
 from core.path_safety import PathSafetyError, resolve_within_root
-from core.pdf_merge import MergeProblem, inspect_documents, merge_documents
+from core.pdf_merge import MergeProblem, describe_documents, inspect_documents, merge_documents
 from features.merge.folders import FolderError, registry
 from models.common import SuccessResponse
 
@@ -188,6 +188,22 @@ async def inspect_folder_files(request: InspectRequest):
             ],
         },
         message="Files inspected.",
+    )
+
+
+@router.post("/folder/info/")
+async def describe_folder_files(request: InspectRequest):
+    """Size and page count of queued files, shown beside each row like Quick mode."""
+    handle = _root_or_422(request.root_id)
+    resolved = _resolve_all(handle.path, request.files)
+    return SuccessResponse(
+        data={
+            "files": [
+                {"path": relative, "size_bytes": size, "pages": pages}
+                for relative, (size, pages) in zip(request.files, describe_documents(resolved))
+            ],
+        },
+        message="Files described.",
     )
 
 

@@ -224,7 +224,7 @@ export function ProtectPage() {
 
       {/* Body */}
       <div className="page-body">
-        <div className="form-col">
+        <div className={`form-col${file ? '' : ' form-col--center'}`}>
 
           {/* Mode tabs */}
           <div role="tablist" aria-label="Protect mode" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

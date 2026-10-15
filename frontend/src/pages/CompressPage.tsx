@@ -196,7 +196,7 @@ export function CompressPage() {
       />
 
       <div className="page-body">
-        <div className="form-col">
+        <div className={`form-col${file ? '' : ' form-col--center'}`}>
 
           {!file ? (
             <>

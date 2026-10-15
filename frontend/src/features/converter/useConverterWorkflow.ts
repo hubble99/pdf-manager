@@ -7,7 +7,7 @@ import { getFilenameFromHeaders, triggerBlobDownload } from '../../utils/downloa
 import { openOutputFolder } from '../../utils/tauriDialog';
 import type { PdfInfoResult } from '../../types';
 import {
-  addConverterFiles, converterKind,
+  addConverterFiles, classifyConverterFile, converterKind,
   type ConverterImage, type ConverterInput, type ConverterKind,
 } from './batch';
 import { formatBytes, nextRotation } from './options';
@@ -53,10 +53,12 @@ export interface ConverterWorkflow {
   zoom: number;
 
   accept: string;
-  addFiles: (files: File[]) => void;
+  /** `expected` is the tab the files were added on; a mismatch is reported, not guessed. */
+  addFiles: (files: File[], expected?: 'pdf' | 'images') => void;
   replaceFiles: (files: File[]) => void;
   clear: () => void;
   dismissError: () => void;
+  dismissBatchError: () => void;
   setSelectionMode: (mode: 'all' | 'selected') => void;
   setSelectionDraft: (draft: string) => void;
   togglePageSelection: (page: number) => void;
@@ -165,9 +167,23 @@ export function useConverterWorkflow(): ConverterWorkflow {
     setResult(null);
   }, [setFileData, startNewDocument]);
 
-  const addFiles = useCallback((incoming: File[]) => {
+  const addFiles = useCallback((incoming: File[], expected?: 'pdf' | 'images') => {
     if (convertingRef.current) return;
     setBatchError(null);
+    if (expected && incoming.length > 0) {
+      const wrongTab = incoming.every((file) => {
+        const detected = classifyConverterFile(file);
+        return detected !== null && detected !== expected;
+      });
+      if (wrongTab) {
+        const message = expected === 'pdf'
+          ? 'This tab takes one PDF. To combine images into a PDF, use the Images to PDF tab.'
+          : 'This tab takes images. To export PDF pages as images, use the PDF to Images tab.';
+        setBatchError(message);
+        showToast({ type: 'error', title: 'Files not added', message });
+        return;
+      }
+    }
     const addition = addConverterFiles(input, incoming);
     if (addition.error) {
       setBatchError(addition.error);
@@ -403,6 +419,7 @@ export function useConverterWorkflow(): ConverterWorkflow {
     replaceFiles,
     clear,
     dismissError: () => setError(null),
+    dismissBatchError: () => setBatchError(null),
     setSelectionMode,
     setSelectionDraft,
     togglePageSelection,

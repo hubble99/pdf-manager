@@ -82,7 +82,7 @@ export function OrganizePage() {
         />
 
         {!workspace.hasDocument ? (
-          <div className="form-col">
+          <div className="form-col form-col--center">
             <div
               id="organize-drop-zone"
               className="drop-zone"
