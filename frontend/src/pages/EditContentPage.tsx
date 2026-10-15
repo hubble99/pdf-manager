@@ -457,8 +457,16 @@ export function EditContentPage() {
         const target = pageObjects.find((object) => object.targetId === hit.targetId);
         if (target) requestAction({ kind: 'select', target });
       } else if (hit.outcome === 'ambiguous') {
-        setAmbiguous(pageObjects.filter((object) => hit.candidateTargetIds?.includes(object.targetId)));
-        setNotice('Several native text objects overlap here. Choose the exact object from the list.');
+        // Whitespace-only objects paint nothing; they are never a choice worth offering.
+        const candidates = pickableObjects.filter((object) => hit.candidateTargetIds?.includes(object.targetId));
+        if (candidates.length === 1) {
+          requestAction({ kind: 'select', target: candidates[0] });
+        } else if (candidates.length === 0) {
+          requestAction({ kind: 'deselect' });
+        } else {
+          setAmbiguous(candidates);
+          setNotice('Several native text objects overlap here. Choose the exact object from the list.');
+        }
       } else if (hit.outcome === 'viewOnly') {
         setNotice(explainGuard(hit.reason));
       } else if (hit.outcome === 'none') {
@@ -471,7 +479,7 @@ export function EditContentPage() {
     } finally {
       setPhase('idle');
     }
-  }, [busy, currentPage, pageIndex, pageObjects, requestAction, session]);
+  }, [busy, currentPage, pageIndex, pageObjects, pickableObjects, requestAction, session]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {

@@ -115,6 +115,15 @@ describe('merge folder mode', () => {
     expect(screen.getByText('Folder mode requires the desktop app')).toBeInTheDocument();
   });
 
+  it('indents PDFs inside a folder deeper than PDFs at the root of the chosen folder', async () => {
+    await openFolderMode();
+    await openFolderRow('Q1', 'report-jan.pdf');
+    const indent = (name: string) => parseFloat(
+      (screen.getByRole('button', { name: new RegExp(`Add ${name}`, 'i') }) as HTMLElement).style.paddingLeft || '32');
+    // Root PDFs use the stylesheet default (aligned with top-level folders); folder PDFs sit deeper.
+    expect(indent('report-jan.pdf')).toBeGreaterThan(indent('summary.pdf'));
+  });
+
   it('keeps quick mode state when switching modes', async () => {
     renderPage();
     // Folder mode adds a second page body, so identify Quick's by its drop zone.

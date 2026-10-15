@@ -71,7 +71,7 @@ function FolderRow({
                 <button
                   type="button"
                   className={`merge-tree-file${already ? ' merge-tree-file--queued' : ''}`}
-                  style={{ paddingLeft: (depth + 1) * 18 + 14 }}
+                  style={{ paddingLeft: (depth + 1) * 18 + 32 }}
                   onClick={() => onToggle(`file:${relative}`)}
                   disabled={already}
                   aria-label={already ? `${name} is already queued` : `Add ${name}`}

@@ -211,6 +211,29 @@ describe('Edit Content page', () => {
     expect(screen.getByPlaceholderText('Find text on this page (1)')).toBeInTheDocument();
   });
 
+  it('ignores whitespace-only objects when a click overlaps several objects', async () => {
+    const overlapDiscovery = {
+      ...discovery,
+      textObjects: [
+        discovery.textObjects[0],
+        { ...discovery.textObjects[0], targetId: 'target-blank', nativeObjectIdentity: 'native-blank', text: '', unicodeScalarLength: 0 },
+      ],
+    };
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery: overlapDiscovery }));
+    vi.mocked(contentApi.hitTestContentObject).mockResolvedValue(accepted('hit-request', {
+      hitTest: { outcome: 'ambiguous' as const, candidateTargetIds: ['target-0', 'target-blank'], mutationCommandCreated: false as const },
+    }) as never);
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(await screen.findByTestId('edit-content-page'));
+    // The one real object is selected outright; no "Choose the exact object" list appears.
+    expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
+    expect(screen.queryByText('Choose the exact object')).not.toBeInTheDocument();
+    expect(screen.queryByText('Empty text object')).not.toBeInTheDocument();
+  });
+
   it('opens text choices below the picker and shows V1 limits before editing', async () => {
     const { container } = renderPage();
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
