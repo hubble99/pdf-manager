@@ -222,35 +222,34 @@ export function ProtectPage() {
         description="Add or remove AES-256 password protection from PDF files"
       />
 
+      <div className="tabs" role="tablist" aria-label="Protect mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'add'}
+          className={`tab${mode === 'add' ? ' active' : ''}`}
+          onClick={() => { setMode('add'); setResult(null); }}
+          id="protect-tab-add"
+        >
+          <Lock size={15} />
+          Add Password
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'remove'}
+          className={`tab${mode === 'remove' ? ' active' : ''}`}
+          onClick={() => { setMode('remove'); setResult(null); }}
+          id="protect-tab-remove"
+        >
+          <LockOpen size={15} />
+          Remove Password
+        </button>
+      </div>
+
       {/* Body */}
       <div className="page-body">
         <div className={`form-col${file ? '' : ' form-col--center'}`}>
-
-          {/* Mode tabs */}
-          <div role="tablist" aria-label="Protect mode" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === 'add'}
-              className={`tab${mode === 'add' ? ' active' : ''}`}
-              onClick={() => { setMode('add'); setResult(null); }}
-              id="protect-tab-add"
-            >
-              <Lock size={15} />
-              Add Password
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === 'remove'}
-              className={`tab${mode === 'remove' ? ' active' : ''}`}
-              onClick={() => { setMode('remove'); setResult(null); }}
-              id="protect-tab-remove"
-            >
-              <LockOpen size={15} />
-              Remove Password
-            </button>
-          </div>
 
           {/* Drop zone */}
           {!file ? (
