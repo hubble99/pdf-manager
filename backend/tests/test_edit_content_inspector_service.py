@@ -40,6 +40,14 @@ def _ask(endpoint: str, request: dict) -> dict:
     return json.loads(data)
 
 
+@pytest.fixture(autouse=True)
+def _service_can_import_backend(monkeypatch):
+    # The service is launched as ``python -m features...``; that only resolves when the
+    # backend directory is importable, whatever directory pytest was started from.
+    existing = os.environ.get("PYTHONPATH")
+    monkeypatch.setenv("PYTHONPATH", str(BACKEND) + (os.pathsep + existing if existing else ""))
+
+
 def _real_manager() -> InspectorServiceManager:
     manager = InspectorServiceManager(service_command(False, sys.executable))
     return manager
