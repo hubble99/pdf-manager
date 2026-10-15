@@ -9,6 +9,7 @@ import {
   Download,
   FilePenLine,
   FileText,
+  FolderOpen,
   Loader2,
   Redo2,
   RotateCcw,
@@ -25,6 +26,7 @@ import { PageHeader, StateView } from '../components/ui';
 import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { triggerBlobDownload } from '../utils/downloadHelper';
+import { openOutputFolder } from '../utils/tauriDialog';
 import {
   applyContentDraft,
   cancelContentRequest,
@@ -102,6 +104,7 @@ export function EditContentPage() {
   const [cancelRequested, setCancelRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [savedName, setSavedName] = useState<string | null>(null);
   const [ambiguous, setAmbiguous] = useState<NativeTextObjectDescriptor[]>([]);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -117,10 +120,10 @@ export function EditContentPage() {
     () => discovery?.textObjects.filter((object) => object.pageIndex === pageIndex) ?? [],
     [discovery, pageIndex],
   );
-  // Whitespace-only objects (e.g. the empty spacing runs Word emits) paint nothing and
-  // are not meaningful edit targets; listing them in the picker only adds noise.
+  // Whitespace-only and view-only objects (e.g. the empty spacing runs Word emits, hidden text
+  // layers) are not meaningful edit targets; listing them only adds noise.
   const pickableObjects = useMemo(
-    () => pageObjects.filter((object) => object.text.trim() !== ''),
+    () => pageObjects.filter((object) => object.editable && object.text.trim() !== ''),
     [pageObjects],
   );
   const filteredPageObjects = useMemo(() => {
@@ -325,6 +328,7 @@ export function EditContentPage() {
         }
       }
       setFile(null);
+      setSavedName(null);
       setSession(null);
       setDiscovery(null);
       setRender(null);
@@ -412,10 +416,18 @@ export function EditContentPage() {
       setSession(reply.result.state);
       if (edit) await refreshAcceptedCheckpoint(reply.result.state);
       setNotice('Verified output published.');
-      showToast({ type: 'success', title: 'PDF saved', message: 'A verified app-owned output is ready.' });
       try {
         const blob = await downloadContentOutput(session.sessionId, reply.result.outputId);
-        triggerBlobDownload(blob, `${file?.name.replace(/\.pdf$/i, '') || 'document'}-edited.pdf`);
+        const outputName = `${file?.name.replace(/\.pdf$/i, '') || 'document'}-edited.pdf`;
+        triggerBlobDownload(blob, outputName);
+        setSavedName(outputName);
+        showToast({
+          type: 'success',
+          title: 'PDF saved',
+          message: outputName,
+          action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+          duration: 8000,
+        });
       } catch {
         showToast({
           type: 'info',
@@ -462,7 +474,10 @@ export function EditContentPage() {
         if (candidates.length === 1) {
           requestAction({ kind: 'select', target: candidates[0] });
         } else if (candidates.length === 0) {
-          requestAction({ kind: 'deselect' });
+          const hidden = pageObjects.some((object) => hit.candidateTargetIds?.includes(object.targetId)
+            && object.viewOnlyReason === 'INVISIBLE_TEXT' && object.text.trim() !== '');
+          if (hidden) setNotice(explainGuard('INVISIBLE_TEXT'));
+          else requestAction({ kind: 'deselect' });
         } else {
           setAmbiguous(candidates);
           setNotice('Several native text objects overlap here. Choose the exact object from the list.');
@@ -626,6 +641,18 @@ export function EditContentPage() {
 
               {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</div>}
               {notice && !error && <div className="status-banner status-banner--info" role="status"><Check size={16} aria-hidden="true" />{notice}</div>}
+
+              {savedName && !unsaved && (
+                <div className="card status-card status-card--ok" id="edit-content-saved">
+                  <Check size={22} aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <p className="merge-result" role="status">Saved <span className="merge-tree-name">{savedName}</span></p>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" id="edit-content-open-folder-btn" onClick={() => openOutputFolder()} title="Open download folder">
+                    <FolderOpen size={14} aria-hidden="true" /> Open Folder
+                  </button>
+                </div>
+              )}
 
               {ambiguous.length > 0 && (
                 <div className="edit-content-section">

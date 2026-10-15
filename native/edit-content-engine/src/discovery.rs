@@ -229,20 +229,31 @@ fn describe_text_object(
         .and_then(Value::as_str)
         .map(str::to_owned);
     let type3 = resource_subtype.as_deref() == Some("/Type3");
+    let fill = text
+        .fill_color()
+        .map_err(|_| "native fill color could not be inspected".to_string())?;
+    let stroke = text
+        .stroke_color()
+        .map_err(|_| "native stroke color could not be inspected".to_string())?;
+    let render_mode = format!("{:?}", text.render_mode());
+    // Text that paints nothing (an OCR or accessibility layer over an image, ca 0) is not
+    // what the reader sees: editing it would report success and change nothing visible.
+    let invisible = paints_nothing(&render_mode, fill.alpha(), stroke.alpha());
     let view_only_reason = if type3 {
         Some("REJECTED_TYPE3".to_string())
+    } else if invisible {
+        Some(INVISIBLE_TEXT.to_string())
     } else if has_clip_path {
         Some("REJECTED_UNSUPPORTED_STRUCTURE".to_string())
     } else {
         None
     };
-    let render_mode = format!("{:?}", text.render_mode());
     let record: TargetRecord = registry.register(
         page_index,
         object_path.clone(),
         native_text.clone(),
         rotated_quad,
-        !type3 && !has_clip_path,
+        !type3 && !has_clip_path && !invisible,
         view_only_reason.clone(),
     );
     registry.attach_evidence(
@@ -258,12 +269,6 @@ fn describe_text_object(
             has_clip_path,
         },
     );
-    let fill = text
-        .fill_color()
-        .map_err(|_| "native fill color could not be inspected".to_string())?;
-    let stroke = text
-        .stroke_color()
-        .map_err(|_| "native stroke color could not be inspected".to_string())?;
     let matrix = text
         .matrix()
         .map_err(|_| "native text matrix could not be inspected".to_string())?;
@@ -306,9 +311,24 @@ fn describe_text_object(
             kind: "page".into(),
             object_path,
         },
-        editable: !type3,
+        editable: !type3 && !invisible,
         view_only_reason,
     })
+}
+
+/// View-only reason for text that paints nothing; also reported to the UI by hit tests.
+pub const INVISIBLE_TEXT: &str = "INVISIBLE_TEXT";
+
+/// Whether a text object's paint is empty: invisible render mode, or every painted channel
+/// (fill, stroke or both, as the render mode says) fully transparent. Clip modes are left alone.
+pub(crate) fn paints_nothing(render_mode: &str, fill_alpha: u8, stroke_alpha: u8) -> bool {
+    match render_mode {
+        "Invisible" => true,
+        "FilledUnstroked" => fill_alpha == 0,
+        "StrokedUnfilled" => stroke_alpha == 0,
+        "FilledThenStroked" => fill_alpha == 0 && stroke_alpha == 0,
+        _ => false,
+    }
 }
 
 fn color(value: PdfColor) -> NativeColor {
@@ -413,5 +433,22 @@ mod tests {
             matching_font(&inspection, 1, "Demo Font", "Demo Font"),
             None
         );
+    }
+}
+
+#[cfg(test)]
+mod invisible_tests {
+    use super::paints_nothing;
+
+    #[test]
+    fn only_text_with_no_visible_paint_is_invisible() {
+        assert!(paints_nothing("Invisible", 255, 255));
+        assert!(paints_nothing("FilledUnstroked", 0, 255));
+        assert!(!paints_nothing("FilledUnstroked", 255, 0));
+        assert!(paints_nothing("StrokedUnfilled", 255, 0));
+        assert!(!paints_nothing("StrokedUnfilled", 0, 255));
+        assert!(paints_nothing("FilledThenStroked", 0, 0));
+        assert!(!paints_nothing("FilledThenStroked", 0, 1));
+        assert!(!paints_nothing("FilledClipped", 0, 0), "clip modes are not judged here");
     }
 }

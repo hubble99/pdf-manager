@@ -224,6 +224,7 @@ describe('merge folder mode', () => {
     expect(mergeMock.mock.calls[0][3]).toBe(false);
     expect(downloadMock).toHaveBeenCalled();
     expect(await screen.findByText(/Merged 4 files/)).toBeInTheDocument();
+    expect(document.getElementById('merge-folder-open-folder-btn')).not.toBeNull();
   });
 
   it('reports problems and merges only the files the user keeps', async () => {

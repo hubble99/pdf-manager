@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { triggerBlobDownload } from '../../utils/downloadHelper';
+import { openOutputFolder } from '../../utils/tauriDialog';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { chooseFolderDialog, isTauri } from '../../utils/tauriDialog';
 import {
@@ -231,6 +232,8 @@ export function useFolderMerge(): FolderMergeState {
         type: 'success',
         title: 'Merge complete',
         message: `${merged.merged} files merged${merged.skipped ? `, ${merged.skipped} skipped` : ''}`,
+        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        duration: 8000,
       });
     } catch (thrown) {
       if (!mountedRef.current) return;

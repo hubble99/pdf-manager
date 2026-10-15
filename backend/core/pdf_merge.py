@@ -103,7 +103,13 @@ def merge_documents(
         raise MergeError("At least 2 PDF files are required to merge.")
 
     if not skip_invalid:
-        merge_pdfs(input_paths, output_filename)
+        # Strict mode raises on the first unusable file and otherwise has already
+        # written the complete output; merging again would only repeat the work.
+        out_path, total_pages, size_bytes = merge_pdfs(input_paths, output_filename)
+        return MergeOutcome(
+            output_path=out_path, total_pages=total_pages, size_bytes=size_bytes,
+            merged=len(input_paths), skipped=[],
+        )
 
     usable, skipped = inspect_documents(input_paths)
     if len(usable) < 2:

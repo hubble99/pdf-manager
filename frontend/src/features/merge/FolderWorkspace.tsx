@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { useRowReorder } from '../../hooks/useRowReorder';
 import type { RowReorderHandlers } from '../../hooks/useRowReorder';
+import { openOutputFolder } from '../../utils/tauriDialog';
 import { useFolderMerge } from './useFolderMerge';
 import type { FolderFileNode } from './api';
 
@@ -361,6 +362,15 @@ export function FolderWorkspace() {
                   Merged {workspace.result.merged} files{workspace.result.skipped ? `, skipped ${workspace.result.skipped}` : ''} · {workspace.result.totalPages} pages · <span className="merge-tree-name">{workspace.result.filename}</span>
                 </p>
               </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                id="merge-folder-open-folder-btn"
+                onClick={() => openOutputFolder()}
+                title="Open download folder"
+              >
+                <FolderOpen size={14} aria-hidden="true" /> Open Folder
+              </button>
             </div>
           )}
 

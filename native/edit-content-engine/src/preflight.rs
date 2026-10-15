@@ -166,6 +166,9 @@ pub fn evaluate_preflight(
     if record.view_only_reason.as_deref() == Some("REJECTED_TYPE3") {
         type3.push("REJECTED_TYPE3".to_string());
         detail("TYPE3_FONT");
+    } else if record.view_only_reason.as_deref() == Some("INVISIBLE_TEXT") {
+        unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
+        detail("INVISIBLE_TEXT");
     } else if !record.editable {
         unsupported.push("REJECTED_UNSUPPORTED_STRUCTURE".to_string());
         detail("OBJECT_NOT_EDITABLE");

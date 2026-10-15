@@ -211,6 +211,25 @@ describe('Edit Content page', () => {
     expect(screen.getByPlaceholderText('Find text on this page (1)')).toBeInTheDocument();
   });
 
+  it('offers Open Folder once the verified PDF has been saved', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:saved');
+    URL.revokeObjectURL = vi.fn();
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
+      state: { ...state, dirty: true, canUndo: true, acceptedRevision: 1 }, discovery,
+    }));
+    vi.mocked(contentApi.saveContentSession).mockResolvedValue(accepted('save-request', {
+      state: { ...state, dirty: false, acceptedRevision: 1 }, outputId: 'output-1', clearDraft: true,
+    }, 1) as never);
+    vi.mocked(contentApi.downloadContentOutput).mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Save verified PDF/i }));
+    expect(await screen.findByText(/source-edited\.pdf/)).toBeInTheDocument();
+    expect(document.getElementById('edit-content-open-folder-btn')).not.toBeNull();
+  });
+
   it('ignores whitespace-only objects when a click overlaps several objects', async () => {
     const overlapDiscovery = {
       ...discovery,
@@ -232,6 +251,26 @@ describe('Edit Content page', () => {
     expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
     expect(screen.queryByText('Choose the exact object')).not.toBeInTheDocument();
     expect(screen.queryByText('Empty text object')).not.toBeInTheDocument();
+  });
+
+  it('explains hidden text layers instead of silently ignoring the click', async () => {
+    const hiddenDiscovery = {
+      ...discovery,
+      textObjects: [
+        { ...discovery.textObjects[0], targetId: 'target-hidden', text: 'Gedung E Jalan Harsono', editable: false, viewOnlyReason: 'INVISIBLE_TEXT' },
+        { ...discovery.textObjects[0], targetId: 'target-blank', nativeObjectIdentity: 'native-blank', text: '', unicodeScalarLength: 0, editable: false, viewOnlyReason: 'INVISIBLE_TEXT' },
+      ],
+    };
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery: hiddenDiscovery }));
+    vi.mocked(contentApi.hitTestContentObject).mockResolvedValue(accepted('hit-request', {
+      hitTest: { outcome: 'ambiguous' as const, candidateTargetIds: ['target-hidden', 'target-blank'], mutationCommandCreated: false as const },
+    }) as never);
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(await screen.findByTestId('edit-content-page'));
+    expect(await screen.findByText(/invisible \(a hidden layer over an image\)/)).toBeInTheDocument();
   });
 
   it('opens text choices below the picker and shows V1 limits before editing', async () => {

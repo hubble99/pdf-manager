@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentReply, NativePageDescriptor } from '../features/edit-content/types';
 import {
   buildEditCommand,
+  explainGuard,
   explainPreflight,
   formatMissingCharacters,
   isCurrentReply,
@@ -106,5 +107,12 @@ describe('Edit Content workflow contracts', () => {
     expect(projectNativePoint({ x: 10, y: 190 }, page, 440, 340)).toEqual({ x: 0, y: 0 });
     expect(projectNativePoint({ x: 230, y: 20 }, page, 440, 340)).toEqual({ x: 440, y: 340 });
     expect(projectNativePoint({ x: 10, y: 20 }, { ...page, rotation: 90 }, 340, 440)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+
+describe('invisible text', () => {
+  it('explains that hidden text layers are view-only', () => {
+    expect(explainGuard('INVISIBLE_TEXT')).toMatch(/invisible/i);
   });
 });
