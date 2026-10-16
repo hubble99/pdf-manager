@@ -133,7 +133,7 @@ describe('organize workspace', () => {
   it('shows every page of the opened document with live position numbers', async () => {
     await openDocument(5);
     expect(positions()).toEqual(['1', '2', '3', '4', '5']);
-    expect(screen.getByText(/5 pages/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Main PDF')).getByText(/5 pages/)).toBeInTheDocument();
   });
 
   it('loads thumbnails in bounded batches and shows progress, then hides it', async () => {
@@ -450,18 +450,16 @@ describe('organize workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Sources/ }));
     const panel = within(screen.getByLabelText('Sources'));
-    // Only the main document remains, and the released file is gone.
+    // The released file is gone; the main document lives in the header bar.
     expect(panel.queryByText(/photo\.png/)).not.toBeInTheDocument();
-    expect(panel.getByText(/doc\.pdf/)).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Main PDF')).getByText(/doc\.pdf/)).toBeInTheDocument();
   });
 
   it('removing the document the workspace started from clears it back to the drop zone', async () => {
     await openDocument(3);
-    fireEvent.click(screen.getByRole('button', { name: /^Sources/ }));
-    const panel = within(screen.getByLabelText('Sources'));
-
-    fireEvent.click(panel.getByRole('button', { name: /Remove doc\.pdf/i }));
-    fireEvent.click(panel.getByRole('button', { name: /^Confirm$/ }));
+    fireEvent.click(document.getElementById('organize-close-document') as HTMLButtonElement);
+    const confirm = document.getElementById('organize-close-confirm');
+    if (confirm) fireEvent.click(confirm);
 
     expect(document.querySelectorAll('.organize-cell')).toHaveLength(0);
     expect(screen.getByLabelText('Drop a PDF here or press Enter to browse')).toBeInTheDocument();

@@ -453,7 +453,7 @@ describe('unified converter workspace', () => {
     chooseTabFor([image('keep.png')]);
     fireEvent.change(input, { target: { files: [image('keep.png')] } });
     await screen.findByText('1 file');
-    expect(document.querySelector('.converter-image-pick img')).toHaveAttribute('src', 'blob:mock-preview');
+    expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview');
     const createdAfterAdd = createObjectURL.mock.calls.length;
     const revokedAfterAdd = revokeObjectURL.mock.calls.length;
 
@@ -464,7 +464,7 @@ describe('unified converter workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'toggle-view' }));
     await screen.findByText('1 file');
-    expect(document.querySelector('.converter-image-pick img')).toHaveAttribute('src', 'blob:mock-preview');
+    expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview');
     expect(createObjectURL.mock.calls.length).toBeGreaterThan(createdAfterAdd);
     expect(revokeObjectURL.mock.calls.length).toBe(revokedAfterLeave);
   });

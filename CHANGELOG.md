@@ -29,6 +29,42 @@
 
 - Upload drop zones on Split, Organize, PDF & Image, Edit Metadata, Compress, and Protect are now centered vertically.
 
+**Reordering**
+
+- Fixed mouse drag-and-drop in Merge (Quick and Folder mode): the desktop webview swallowed in-page HTML5 drag events, so only the arrow buttons worked. Reordering now uses pointer-based dragging (the same engine as Organize), with Alt+Arrow and earlier/later buttons kept for the keyboard.
+- Quick Merge is now a grid of cards: the first page of each PDF as preview, the file name wrapped below, size and page count, and a **Duplicate** badge on later copies of the same file (still allowed, just flagged).
+- Images to PDF uses the same card grid, with a left image panel and right controls like PDF to Images.
+- Long file names now wrap in the Merge folder tree and queue.
+
+**Naming**
+
+- Protect (encrypt and unlock) and Edit Content now use the output name you type exactly; the default (`<name>_protected`, `<name>_unlocked`, `<name>-edited`) only applies when the field is empty. Edit Content gained an Output filename field and a **Save and download** button.
+- PDF to Images ZIP no longer appends `_images` to a name you typed.
+
+**Compress**
+
+- Fixed black areas after compression on PDFs with transparent images: the soft mask was lost when an image was re-encoded. Stencil masks, indexed, CMYK, separation and other unsafe image types are now left untouched.
+- Added a **Low quality** preset; the four presets are equal-width and centered.
+
+**Images to PDF**
+
+- Landscape images now get a landscape page on fixed paper sizes (A4 landscape and so on) instead of being shrunk onto a portrait page.
+
+**Organize**
+
+- The opened PDF is shown in a header bar with a red X; closing it also discards the inserted sources. The Sources panel has its own close button.
+- Adding the same PDF or image to Sources twice is refused with a pointer to the existing source.
+
+**QR & Barcode**
+
+- A bare domain such as `example.com` is saved as `https://example.com`, so phones open it as a link instead of a web search.
+
+**Other**
+
+- Settings → Change folder now opens the folder picker.
+- Split, Compress and Protect: **Change file** opens the file picker directly, and a red bin button clears the file.
+- Mode tabs no longer stay fixed while a long page scrolls.
+
 **Removed**
 
 - **Edit Metadata** is removed: the page, its route, the Home card and sidebar item, and the `/api/v1/metadata/` endpoint with its PDF metadata writer. The tool changed only title, author, subject, and keywords, which did not justify its place in the final v1 scope. The Edit group now holds Canvas PDF and Edit Content.
