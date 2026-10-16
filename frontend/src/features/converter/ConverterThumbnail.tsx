@@ -19,12 +19,16 @@ export function ConverterThumbnail({ file, rotation, flipH, alt = '' }: Converte
     return () => URL.revokeObjectURL(url);
   }, [url]);
 
+  const turned = rotation % 180 !== 0;
+
   return (
-    <img
-      src={url}
-      alt={alt}
-      draggable={false}
-      style={{ transform: `rotate(${rotation}deg) ${flipH ? 'scaleX(-1)' : ''}` }}
-    />
+    <span className={`conv-thumb${turned ? ' conv-thumb--turned' : ''}`}>
+      <img
+        src={url}
+        alt={alt}
+        draggable={false}
+        style={{ transform: `rotate(${rotation}deg) ${flipH ? 'scaleX(-1)' : ''}` }}
+      />
+    </span>
   );
 }

@@ -240,42 +240,43 @@ export function MergePage() {
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="page-body" hidden={mode === 'folder'}>
-        <div className="form-col">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleFileInput}
+          id="merge-file-input"
+        />
 
-          {/* Drop zone */}
-          <div
-            id="merge-drop-zone"
-            className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={handleClick}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-            aria-label="Drop PDF files here or click to browse"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              multiple
-              style={{ display: 'none' }}
-              onChange={handleFileInput}
-              id="merge-file-input"
-            />
-            <Upload className="drop-zone-icon" />
-            <p className="drop-zone-title">Drop PDF files here</p>
-            <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <span className="badge badge-neutral">PDF</span>
-              <span className="badge badge-neutral">Multiple files</span>
+        {files.length === 0 ? (
+          <div className="form-col form-col--center">
+            <div
+              id="merge-drop-zone"
+              className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={handleClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+              aria-label="Drop PDF files here or click to browse"
+            >
+              <Upload className="drop-zone-icon" />
+              <p className="drop-zone-title">Drop PDF files here</p>
+              <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <span className="badge badge-neutral">PDF</span>
+                <span className="badge badge-neutral">Multiple files</span>
+              </div>
             </div>
           </div>
-
-          {/* File list */}
-          {files.length > 0 && (
-            <div className="card">
+        ) : (
+          <div className="merge-quick-split">
+            {/* Left: previews in merge order */}
+            <div className="card merge-quick-files">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
                 <FileText size={16} color="var(--accent)" />
                 <span style={{ fontWeight: 600, fontSize: 14 }}>Files to Merge</span>
@@ -318,98 +319,104 @@ export function MergePage() {
                 })}
               />
             </div>
-          )}
 
-          {files.length === 0 && (
-            <div className="card" style={{ textAlign: 'center', padding: '32px 20px' }}>
-              <FileText size={32} style={{ color: 'var(--outline)', margin: '0 auto 12px' }} />
-              <p className="text-muted text-body-sm">No files added yet. Drop PDFs above to get started.</p>
-            </div>
-          )}
-
-          {/* Output filename */}
-          <div className="card">
-            <label className="input-label" htmlFor="merge-output-name">Output Filename</label>
-            <input
-              id="merge-output-name"
-              className="input"
-              type="text"
-              value={outputName}
-              onChange={(e) => setOutputName(e.target.value)}
-              placeholder="merged_output.pdf"
-            />
-            <p className="text-muted text-body-sm" style={{ marginTop: 6 }}>
-              The .pdf extension will be added automatically if omitted.
-            </p>
-          </div>
-
-          {/* Result card — download was triggered automatically */}
-          {result && (
-            <div
-              className="card"
-              style={{
-                background: 'var(--success-container)',
-                border: '1px solid var(--success)',
-                display: 'flex', alignItems: 'center', gap: 16,
-              }}
-            >
-              <CheckCircle size={28} color="var(--success)" style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
-                  Download started automatically
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
-                  <Filename name={result.filename} /> · {result.totalPages} pages · {formatBytes(result.sizeBytes)}
-                </div>
-              </div>
-              <button
-                className="btn btn-ghost btn-sm"
-                id="merge-open-folder-btn"
-                onClick={() => openOutputFolder()}
-                title="Open download folder"
+            {/* Right: add more, output name, actions */}
+            <div className="col-stack merge-quick-side">
+              <div
+                id="merge-drop-zone"
+                className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleClick}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+                aria-label="Drop PDF files here or click to browse"
               >
-                <FolderOpen size={14} />
-                Open Folder
-              </button>
-            </div>
-          )}
+                <Upload className="drop-zone-icon" />
+                <p className="drop-zone-title">Add more PDFs</p>
+                <p className="drop-zone-sub">Drop here or click to browse</p>
+              </div>
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-            <button
-              className="btn btn-secondary"
-              id="merge-clear-btn"
-              onClick={clearAll}
-              disabled={files.length === 0 || isLoading}
-            >
-              <Trash2 size={15} />
-              Clear All
-            </button>
-            <button
-              className="btn btn-primary"
-              id="merge-run-btn"
-              onClick={handleMerge}
-              disabled={files.length < 2 || isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
-                  Merging…
-                </>
-              ) : (
-                <>
-                  <Merge size={15} />
-                  Merge & Download
-                </>
+              <div className="card">
+                <label className="input-label" htmlFor="merge-output-name">Output Filename</label>
+                <input
+                  id="merge-output-name"
+                  className="input"
+                  type="text"
+                  value={outputName}
+                  onChange={(e) => setOutputName(e.target.value)}
+                  placeholder="merged_output.pdf"
+                />
+                <p className="text-muted text-body-sm" style={{ marginTop: 6 }}>
+                  The .pdf extension will be added automatically if omitted.
+                </p>
+              </div>
+
+              {result && (
+                <div
+                  className="card"
+                  style={{
+                    background: 'var(--success-container)',
+                    border: '1px solid var(--success)',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                  }}
+                >
+                  <CheckCircle size={24} color="var(--success)" style={{ flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
+                      Download started automatically
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
+                      <Filename name={result.filename} /> · {result.totalPages} pages · {formatBytes(result.sizeBytes)}
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    id="merge-open-folder-btn"
+                    onClick={() => openOutputFolder()}
+                    title="Open download folder"
+                  >
+                    <FolderOpen size={14} />
+                    Open Folder
+                  </button>
+                </div>
               )}
-            </button>
+
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-secondary"
+                  id="merge-clear-btn"
+                  onClick={clearAll}
+                  disabled={isLoading}
+                >
+                  <Trash2 size={15} />
+                  Clear All
+                </button>
+                <button
+                  className="btn btn-primary"
+                  id="merge-run-btn"
+                  onClick={handleMerge}
+                  disabled={files.length < 2 || isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      Merging…
+                    </>
+                  ) : (
+                    <>
+                      <Merge size={15} />
+                      Merge & Download
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
-
-        </div>
+        )}
       </div>
-
-      
-
     </div>
   );
 }

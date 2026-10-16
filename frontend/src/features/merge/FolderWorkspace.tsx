@@ -204,7 +204,7 @@ export function FolderWorkspace() {
 
   return (
     <div className="page-body">
-      <div className="form-col form-col--wide form-col--two merge-folder-grid">
+      <div className={`form-col form-col--wide form-col--two merge-folder-grid${workspace.root ? '' : ' merge-folder-grid--initial'}`}>
         <section className="card card--flush merge-sources" aria-label="Sources">
           <div className="card-head">
             <span className="card-head-title">

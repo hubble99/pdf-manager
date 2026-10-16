@@ -552,6 +552,16 @@ export function EditContentPage() {
             <span className={`badge ${unsaved ? 'badge-warning' : 'badge-success'}`}>
               {unsaved ? 'Unsaved changes' : 'Saved checkpoint'}
             </span>
+            <input
+              id="edit-content-output-name"
+              className="input edit-content-header-name"
+              type="text"
+              aria-label="Output filename"
+              title="Output filename. The .pdf extension is added automatically; the original file is never overwritten."
+              value={outputName}
+              onChange={(event) => setOutputName(event.target.value)}
+              placeholder={`${defaultStem}-edited`}
+            />
             <button className="btn btn-primary" onClick={() => void saveSession()} disabled={busy} id="edit-content-save">
               <Save size={16} aria-hidden="true" /> Save and download
             </button>
@@ -620,19 +630,6 @@ export function EditContentPage() {
                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'leave' })} aria-label="Close PDF">
                   <X size={15} aria-hidden="true" />
                 </button>
-              </div>
-
-              <div className="edit-content-output-name">
-                <label className="input-label" htmlFor="edit-content-output-name">Output filename</label>
-                <input
-                  id="edit-content-output-name"
-                  className="input"
-                  type="text"
-                  value={outputName}
-                  onChange={(event) => setOutputName(event.target.value)}
-                  placeholder={`${defaultStem}-edited`}
-                />
-                <p className="edit-content-hint">The .pdf extension is added automatically. The original file is never overwritten.</p>
               </div>
 
               {pending && (

@@ -3787,7 +3787,7 @@ select.input {
 }
 
 .feature-page:has(> .tabs) > .page-body {
-  flex: none;
+  flex: 1 0 auto;
   overflow: visible;
 }
 
@@ -4734,6 +4734,7 @@ select.input {
 }
 
 .sort-card-body {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
@@ -5094,20 +5095,46 @@ select.input {
   padding: 20px 16px 40px;
 }
 
-.page-body > .form-col {
-  margin-top: 0;
-  margin-bottom: 0;
-}
-
-/* Upload-only screens: the drop zone sits in the vertical middle of the page body. */
-.page-body:has(> .form-col--center) {
+/* Content that is shorter than the page sits in the vertical middle (upload screens and
+   short forms alike); auto margins collapse to zero when it overflows, so tall content
+   still scrolls from the top. Mode tabs live outside the page body and stay on top. */
+.page-body:has(> .form-col),
+.page-body:has(> .merge-quick-split) {
   display: flex;
   flex-direction: column;
 }
 
-.page-body > .form-col.form-col--center {
+.page-body > .form-col,
+.page-body > .merge-quick-split {
   margin-top: auto;
   margin-bottom: auto;
+}
+
+/* Quick Merge with files: previews on the left, output name and actions on the right. */
+.merge-quick-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+  max-width: 1240px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 16px;
+}
+
+.merge-quick-side {
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 900px) {
+  .merge-quick-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .merge-quick-side {
+    position: static;
+  }
 }
 
 /* Two-column form layout (QR & Barcode, and other settings + preview screens). */
@@ -5530,11 +5557,10 @@ select.input {
   }
 }
 
-/* Edit Content: output filename under the file row. */
-.edit-content-output-name {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* Edit Content: output filename sits next to Save and download in the header. */
+.edit-content-header-name {
+  width: 240px;
+  max-width: 100%;
 }
 
 /* Images to PDF: the card is also a drop target for more images. */
@@ -5573,4 +5599,44 @@ select.input {
 
 .organize-document-bar-spacer {
   flex: 1;
+}
+
+/* Image previews fit their card at any rotation: the wrapper is a size container, and a
+   quarter-turned image swaps its box so the rotated result still sits inside the card. */
+.conv-thumb {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.conv-thumb img {
+  width: 90cqw;
+  height: 90cqh;
+  object-fit: contain;
+  transition: transform 160ms ease-out;
+}
+
+.conv-thumb--turned img {
+  width: 90cqh;
+  height: 90cqw;
+}
+
+/* Merge Folder before a folder is chosen: the empty states sit in the middle of their cards. */
+.merge-folder-grid--initial .merge-sources {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+}
+
+.merge-folder-grid--initial .merge-folder-empty {
+  margin: auto 16px;
+}
+
+.merge-folder-grid--initial .merge-queue-empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  margin: 0;
 }

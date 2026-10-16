@@ -29,6 +29,14 @@
 
 - Upload drop zones on Split, Organize, PDF & Image, Edit Metadata, Compress, and Protect are now centered vertically.
 
+**Layout (second UAT pass)**
+
+- Quick Merge with files is now two panels: previews on the left, and Add more PDFs, Output Filename, Clear All and Merge & Download on the right, so long lists need less scrolling. The empty state is just the centered drop zone.
+- Content shorter than the page now sits in the vertical middle on every tool (upload screens and loaded forms alike); content that is taller still scrolls from the top. Mode tabs stay at the top. This also centers the PDF & Image uploader, which was stuck at the top.
+- Merge Folder: the empty Folder and Files to Merge cards center their content before a folder is chosen.
+- Images to PDF previews now fit their card at any rotation, so landscape or rotated images are no longer cropped.
+- Edit Content: the Output filename field now sits in the header next to **Save and download**, where it is visible without scrolling the control panel.
+
 **Reordering**
 
 - Fixed mouse drag-and-drop in Merge (Quick and Folder mode): the desktop webview swallowed in-page HTML5 drag events, so only the arrow buttons worked. Reordering now uses pointer-based dragging (the same engine as Organize), with Alt+Arrow and earlier/later buttons kept for the keyboard.
