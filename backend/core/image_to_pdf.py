@@ -45,6 +45,8 @@ def images_to_pdf(
     Args:
         image_paths: List of paths to the source images.
         page_size: One of 'a4', 'a3', 'a5', 'letter', 'legal', 'f4', or 'match_image'.
+            A fixed size is used in portrait for portrait and square images and in
+            landscape for images that are wider than tall.
         output_filename: Name of the output PDF.
 
     Returns:
@@ -107,6 +109,10 @@ def images_to_pdf(
                     rect = fitz.Rect(0, 0, page_w, page_h)
                 else:
                     page_w, page_h = PAGE_SIZES[page_size]
+                    # A landscape image gets the landscape version of the chosen size,
+                    # so A4 stays A4 and the picture is not shrunk onto a portrait page.
+                    if img_w > img_h:
+                        page_w, page_h = page_h, page_w
                     # Letterbox (fit) to preserve aspect ratio
                     scale = min(page_w / img_w, page_h / img_h)
 

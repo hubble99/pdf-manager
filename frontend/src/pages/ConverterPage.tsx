@@ -1,7 +1,5 @@
 import { useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
   CheckCircle,
   FileImage,
   FileText,
@@ -11,10 +9,10 @@ import {
   RotateCw,
   Trash2,
   Upload,
-  X,
 } from 'lucide-react';
 import { Filename } from '../components/Filename';
 import { PageThumbGrid } from '../components/preview';
+import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
 import { PageHeader } from '../components/ui';
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
@@ -452,20 +450,9 @@ export function ConverterPage() {
           </div>
         )}
 
-        {/* ── Images: order them, pick a page size ──────────────────────────── */}
+        {/* ── Images: previews on the left, page size and output on the right ── */}
         {kind === 'images' && (
-          <div className="form-col">
-            <div
-              id="converter-drop-zone"
-              className="drop-zone drop-zone--compact"
-              aria-label="Add more images, or press Enter to browse"
-              {...dropProps}
-            >
-              <Upload className="drop-zone-icon" aria-hidden="true" />
-              <p className="drop-zone-title">Add more images</p>
-              <p className="drop-zone-sub">JPG, JPEG, PNG, WEBP, BMP and TIFF can be mixed</p>
-            </div>
-
+          <div className="form-col form-col--split">
             <div className="card card--flush">
               <div className="card-head">
                 <span className="card-head-title">
@@ -475,80 +462,69 @@ export function ConverterPage() {
                     {images.length} file{images.length === 1 ? '' : 's'}
                   </span>
                 </span>
-                <span className="card-head-actions">Use ↑ ↓ to reorder</span>
+                <span className="card-head-actions">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => openPicker('add')}
+                    disabled={isConverting}
+                    id="converter-add-images"
+                  >
+                    Add images
+                  </button>
+                </span>
               </div>
-              <div className="file-list" aria-labelledby="converter-images-label">
-                {images.map((entry, index) => (
-                  <div key={entry.id} className="file-item">
-                    <div className="converter-image-pick">
-                      <ConverterThumbnail
-                        file={entry.file}
-                        rotation={entry.rotation}
-                        flipH={entry.flipH}
-                      />
-                      <span className="badge badge-neutral converter-image-index">#{index + 1}</span>
-                    </div>
-                    <div className="file-item-info">
-                      <Filename name={entry.file.name} className="file-item-name" />
-                      <div className="file-item-meta">{formatBytes(entry.file.size)}</div>
-                    </div>
-                    <div className="file-item-actions">
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => converter.rotateImage(entry.id)}
-                        disabled={isConverting}
-                        aria-label={`Rotate ${entry.file.name} 90 degrees`}
-                        title="Rotate 90°"
-                      >
-                        <RotateCw size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => converter.flipImage(entry.id)}
-                        disabled={isConverting}
-                        aria-label={`Mirror ${entry.file.name} horizontally`}
-                        title="Mirror horizontally"
-                      >
-                        <FlipIcon />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => converter.moveImage(entry.id, 'up')}
-                        disabled={isConverting || index === 0}
-                        aria-label={`Move ${entry.file.name} up`}
-                        id={`converter-move-up-${index}`}
-                      >
-                        <ArrowUp size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => converter.moveImage(entry.id, 'down')}
-                        disabled={isConverting || index === images.length - 1}
-                        aria-label={`Move ${entry.file.name} down`}
-                        id={`converter-move-down-${index}`}
-                      >
-                        <ArrowDown size={14} aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-icon btn-sm converter-danger"
-                        onClick={() => converter.removeImage(entry.id)}
-                        disabled={isConverting}
-                        aria-label={`Remove ${entry.file.name}`}
-                        id={`converter-remove-${index}`}
-                      >
-                        <X size={14} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div
+                className="converter-image-drop"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  converter.addFiles(Array.from(event.dataTransfer.files), activeTab);
+                }}
+              >
+                <SortableCardGrid
+                  idPrefix="converter"
+                  ariaLabel="Images to Convert"
+                  disabled={isConverting}
+                  onReorder={converter.reorderImages}
+                  onRemove={converter.removeImage}
+                  cards={images.map((entry) => ({
+                    id: entry.id,
+                    title: entry.file.name,
+                    thumbnail: (
+                      <ConverterThumbnail file={entry.file} rotation={entry.rotation} flipH={entry.flipH} />
+                    ),
+                    meta: <span>{formatBytes(entry.file.size)}</span>,
+                    actions: (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-sm"
+                          onClick={() => converter.rotateImage(entry.id)}
+                          disabled={isConverting}
+                          aria-label={`Rotate ${entry.file.name} 90 degrees`}
+                          title="Rotate 90°"
+                        >
+                          <RotateCw size={14} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-icon btn-sm"
+                          onClick={() => converter.flipImage(entry.id)}
+                          disabled={isConverting}
+                          aria-label={`Mirror ${entry.file.name} horizontally`}
+                          title="Mirror horizontally"
+                        >
+                          <FlipIcon />
+                        </button>
+                      </>
+                    ),
+                  }))}
+                />
               </div>
             </div>
 
+            <div className="col-stack">
             <div className="card card--flush">
               <div className="card-head">
                 <span className="card-head-title" id="converter-page-size-label">
@@ -598,6 +574,7 @@ export function ConverterPage() {
 
             {outcome}
             {actions}
+            </div>
           </div>
         )}
       </div>

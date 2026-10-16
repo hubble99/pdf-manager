@@ -11,7 +11,7 @@ import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PageThumbGrid } from '../components/preview';
-import { PageHeader } from '../components/ui';
+import { ChangeFileControls, PageHeader } from '../components/ui';
 import { parsePageRange } from '../utils/pageRange';
 import { formatPageNumbers } from '../features/converter/pageSelection';
 import { useToast } from '../hooks/useToast';
@@ -159,6 +159,17 @@ export function ExtractPage() {
     }
   };
 
+  /** Picking another file starts clean: no page selection or name from the previous one. */
+  const changeFile = (f: File) => {
+    if (!f.name.toLowerCase().endsWith('.pdf')) {
+      void loadFile(f);
+      return;
+    }
+    setPageRanges('');
+    setOutputFilename('extracted');
+    void loadFile(f);
+  };
+
   const clearFile = () => {
     setFile(null);
     setPdfInfo(null);
@@ -245,15 +256,13 @@ export function ExtractPage() {
                       <button type="button" className="link-btn" onClick={clearPages}>Clear</button>
                     </>
                   )}
-                  <button
-                    type="button"
-                    className="link-btn"
-                    id="extract-remove-file"
-                    onClick={clearFile}
+                  <ChangeFileControls
+                    accept=".pdf"
+                    idPrefix="extract"
+                    onPick={changeFile}
+                    onClear={clearFile}
                     disabled={isLoading}
-                  >
-                    Change file
-                  </button>
+                  />
                 </span>
               </div>
               {totalPages > 0 ? (

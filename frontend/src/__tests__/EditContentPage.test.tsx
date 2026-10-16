@@ -225,7 +225,7 @@ describe('Edit Content page', () => {
     fireEvent.change(container.querySelector('input[type="file"]')!, {
       target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /Save verified PDF/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save and download/i }));
     expect(await screen.findByText(/source-edited\.pdf/)).toBeInTheDocument();
     expect(document.getElementById('edit-content-open-folder-btn')).not.toBeNull();
   });

@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
-  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FolderOpen, Layers, ListTree, Loader2,
+  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Layers, ListTree, Loader2,
   RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipHorizontal2, Upload, X,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
@@ -19,6 +19,7 @@ export function OrganizePage() {
   const mainInputRef = useRef<HTMLInputElement>(null);
   const insertInputRef = useRef<HTMLInputElement>(null);
   const outputNameRef = useRef<HTMLInputElement>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   // The dialog is filtered per action, and the file is checked again afterwards
   // because the picker can be switched to "All files".
@@ -38,6 +39,7 @@ export function OrganizePage() {
     await workspace.beginInsertFile(file);
   };
 
+  const mainSource = workspace.sources.find((source) => source.id === workspace.mainSourceId) ?? null;
   const progress = workspace.thumbnailsTotal > 0 && workspace.thumbnailsLoaded < workspace.thumbnailsTotal;
   const highlighted = workspace.panel === 'delete'
     ? new Set(workspace.deletePreview.positions)
@@ -114,6 +116,46 @@ export function OrganizePage() {
           </div>
         ) : (
           <div className="organize-workspace">
+            {mainSource && (
+              <div className="organize-document-bar" aria-label="Main PDF">
+                <FileText size={16} aria-hidden="true" />
+                <Filename name={mainSource.name} className="file-item-name" />
+                <span className="chip">{mainSource.pageCount} page{mainSource.pageCount === 1 ? '' : 's'}</span>
+                <span className="organize-document-bar-spacer" />
+                {confirmingClose ? (
+                  <span className="organize-source-confirm" role="alert">
+                    <span className="organize-help">Close this PDF and discard your changes?</span>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      id="organize-close-confirm"
+                      onClick={() => { setConfirmingClose(false); workspace.closeDocument(); }}
+                    >
+                      Close PDF
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmingClose(false)}>
+                      Keep
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-icon btn-sm organize-danger"
+                    id="organize-close-document"
+                    onClick={() => {
+                      if (workspace.canUndo || workspace.sources.length > 1) setConfirmingClose(true);
+                      else workspace.closeDocument();
+                    }}
+                    disabled={workspace.isBusy}
+                    aria-label="Close PDF"
+                    title="Close this PDF and everything inserted into it"
+                  >
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="organize-toolbar" role="toolbar" aria-label="Document actions">
               <div className="organize-toolbar-group">
                 <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-pdf" onClick={() => openInsertPicker(PDF_ACCEPT)} disabled={workspace.isBusy}>
@@ -127,7 +169,7 @@ export function OrganizePage() {
                 </button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => workspace.openPanel('sources')} disabled={workspace.isBusy}>
                   <ListTree size={14} aria-hidden="true" /> Sources
-                  <span className="organize-count">{workspace.sources.length}</span>
+                  <span className="organize-count">{Math.max(0, workspace.sources.length - 1)}</span>
                 </button>
               </div>
 
@@ -231,9 +273,11 @@ export function OrganizePage() {
             {workspace.panel === 'sources' && (
               <SourcesPanel
                 sources={workspace.sources}
+                mainSourceId={workspace.mainSourceId}
                 disabled={workspace.isBusy}
                 onReinsert={workspace.beginInsertFromSource}
                 onRemove={workspace.removeSource}
+                onClose={workspace.closePanel}
               />
             )}
 

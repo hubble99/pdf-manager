@@ -124,9 +124,8 @@ async def remove_password_endpoint(
             raise HTTPException(status_code=422, detail="Incorrect password. Please provide the correct user password.")
 
         # Save without encryption
-        stem = Path(output_filename).stem if output_filename else Path(file.filename).stem
-        unlocked_stem = stem if stem.lower().endswith("_unlocked") else f"{stem}_unlocked"
-        out_name = sanitize_filename(unlocked_stem, "pdf")
+        # A name the caller supplied is used exactly; the suffix is only the default.
+        out_name = sanitize_filename(output_filename or f"{Path(file.filename).stem}_unlocked", "pdf")
         out_path = settings.OUTPUT_DIR / out_name
 
         try:

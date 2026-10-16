@@ -12,6 +12,7 @@ import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
 import { PageHeader } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
+import { normalizeQrContent } from '../utils/qrContent';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ export function QrBarcodePage() {
   
   const generatePreview = useCallback(async (isUserAction = false, signal?: AbortSignal) => {
     const isQr = activeTab === 'qr';
-    const content = isQr ? debouncedQrContent : debouncedBarcodeContent;
+    const content = isQr ? normalizeQrContent(debouncedQrContent) : debouncedBarcodeContent;
 
     const requestId = ++requestIdRef.current;
 
@@ -315,6 +316,11 @@ export function QrBarcodePage() {
                       placeholder="Enter URL, text, or data..."
                       rows={5}
                     />
+                    {normalizeQrContent(qrContent) !== qrContent && (
+                      <p className="text-muted text-body-sm" style={{ marginTop: 6 }} id="qr-link-note">
+                        Saved as <strong>{normalizeQrContent(qrContent).trim()}</strong> so phones open it as a link.
+                      </p>
+                    )}
                   </div>
                 </div>
 

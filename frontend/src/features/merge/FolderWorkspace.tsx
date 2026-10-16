@@ -2,8 +2,10 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, FileText, Folder, FolderOpen,
   Loader2, Merge, Plus, RefreshCw, Trash2, X,
 } from 'lucide-react';
-import { useRowReorder } from '../../hooks/useRowReorder';
-import type { RowReorderHandlers } from '../../hooks/useRowReorder';
+import type { KeyboardEvent } from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { SortableArea } from '../../components/sortable/SortableArea';
 import { openOutputFolder } from '../../utils/tauriDialog';
 import { useFolderMerge } from './useFolderMerge';
 import type { FileInfo, FolderFileNode } from './api';
@@ -113,7 +115,7 @@ function AddTag({ added }: { added: boolean }) {
 }
 
 function QueueRow({
-  relative, info, index, onRemove, onStep, disabled, reorderProps, dragging, onKeyDown,
+  relative, info, index, onRemove, onStep, disabled, onKeyDown,
 }: {
   relative: string;
   info: FileInfo | undefined;
@@ -121,24 +123,33 @@ function QueueRow({
   onRemove: (index: number) => void;
   onStep: (index: number, direction: -1 | 1) => void;
   disabled: boolean;
-  reorderProps: (id: string) => RowReorderHandlers;
-  dragging: boolean;
-  onKeyDown: (event: React.KeyboardEvent<HTMLLIElement>, index: number) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLLIElement>, index: number) => void;
 }) {
+  const {
+    attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging,
+  } = useSortable({ id: relative, disabled });
+  const dragKeyDown = listeners?.onKeyDown as ((event: KeyboardEvent) => void) | undefined;
   const name = relative.split('/').pop() ?? relative;
   const folder = relative.includes('/') ? `${relative.slice(0, relative.lastIndexOf('/'))}/` : '';
 
   return (
     <li
+      ref={(node) => { setNodeRef(node); setActivatorNodeRef(node); }}
       className={[
         'merge-queue-row',
         'merge-queue-row--draggable',
-        dragging ? 'merge-queue-row--dragging' : '',
+        isDragging ? 'merge-queue-row--dragging' : '',
       ].filter(Boolean).join(' ')}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       tabIndex={0}
-      onKeyDown={(event) => onKeyDown(event, index)}
+      aria-roledescription="sortable"
+      aria-describedby={attributes['aria-describedby']}
       title="Drag to reorder, or press Alt+Up / Alt+Down"
-      {...(disabled ? {} : reorderProps(relative))}
+      {...(disabled ? {} : listeners)}
+      onKeyDown={(event) => {
+        if (event.altKey) onKeyDown(event, index);
+        else if (!disabled) dragKeyDown?.(event);
+      }}
     >
       <span className="pdf-badge" aria-hidden="true">PDF</span>
       <span className="merge-queue-copy">
@@ -165,9 +176,7 @@ function QueueRow({
 
 export function FolderWorkspace() {
   const workspace = useFolderMerge();
-  const { activeId, rowProps } = useRowReorder((fromId, toId) => {
-    workspace.moveAt(workspace.queue.indexOf(fromId), workspace.queue.indexOf(toId));
-  });
+  const reorderQueue = (from: number, to: number) => workspace.moveAt(from, to);
 
   /** Keyboard alternative for a focused queue row. */
   const handleRowKeyDown = (
@@ -320,6 +329,7 @@ export function FolderWorkspace() {
             {workspace.queue.length === 0 ? (
               <p className="empty-hint merge-queue-empty">Add files from the folder on the left.</p>
             ) : (
+              <SortableArea ids={workspace.queue} onReorder={reorderQueue} layout="list">
               <ul className="merge-queue-list">
                 {workspace.queue.map((relative, index) => (
                   <QueueRow
@@ -330,12 +340,11 @@ export function FolderWorkspace() {
                     onRemove={workspace.removeAt}
                     onStep={workspace.step}
                     disabled={workspace.isBusy}
-                    reorderProps={rowProps}
-                    dragging={activeId === relative}
                     onKeyDown={handleRowKeyDown}
                   />
                 ))}
               </ul>
+              </SortableArea>
             )}
           </section>
 

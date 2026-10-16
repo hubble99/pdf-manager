@@ -259,26 +259,44 @@ export function DeletePagesPanel({
 }
 
 interface SourcesPanelProps {
+  /** Every source of the document; the main PDF is shown in the header, not here. */
   sources: SourceHandle[];
+  mainSourceId: string | null;
   disabled: boolean;
   onReinsert: (sourceId: string) => void;
   onRemove: (sourceId: string) => void;
+  onClose: () => void;
 }
 
-export function SourcesPanel({ sources, disabled, onReinsert, onRemove }: SourcesPanelProps) {
+export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRemove, onClose }: SourcesPanelProps) {
   const [confirming, setConfirming] = useState<string | null>(null);
+  // The letters match the badge on the grid cells, so they keep the position the
+  // file has among all sources even though the main PDF is not listed.
+  const inserted = sources
+    .map((source, index) => ({ source, index }))
+    .filter(({ source }) => source.id !== mainSourceId);
 
   return (
     <section className="card organize-panel" aria-label="Sources">
       <div className="organize-panel-head">
         <span className="organize-panel-title">Sources</span>
+        <button
+          type="button"
+          className="btn btn-ghost btn-icon btn-sm"
+          onClick={onClose}
+          aria-label="Close Sources"
+          title="Close"
+          id="organize-sources-close"
+        >
+          <X size={14} aria-hidden="true" />
+        </button>
       </div>
 
-      {sources.length === 0 ? (
-        <p className="organize-help">No files yet.</p>
+      {inserted.length === 0 ? (
+        <p className="organize-help">No inserted files yet. Files you insert are listed here.</p>
       ) : (
         <ul className="organize-source-list">
-          {sources.map((source, index) => (
+          {inserted.map(({ source, index }) => (
             <li key={source.id} className="organize-source-row">
               <span className="organize-cell-source" aria-hidden="true">
                 {sourceLetter(index)}

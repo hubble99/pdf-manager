@@ -21,6 +21,8 @@ export interface SourceHandle {
   pageCount: number;
   /** Ids from the backend document registry, one per uploaded file. */
   documentId: string;
+  /** Name and size of the file the user picked; used to refuse the same file twice. */
+  fingerprint?: string;
 }
 
 export interface OrganizeSnapshot {

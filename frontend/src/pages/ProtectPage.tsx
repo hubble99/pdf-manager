@@ -10,17 +10,15 @@ import {
   Loader2,
   Shield,
   Upload,
-  X,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { addHistoryEntry } from '../utils/historyStore';
-import { PageHeader } from '../components/ui';
+import { ChangeFileControls, PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
-import { appendFilenameSuffix } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,6 +44,7 @@ function formatBytes(bytes: number): string {
 export function ProtectPage() {
   const { showToast } = useToast();
   const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('protect');
+  const fileStem = file ? file.name.replace(/\.pdf$/i, '') : 'document';
 
   // Tab
   const [mode, setMode] = useState<TabMode>('add');
@@ -84,7 +83,7 @@ export function ProtectPage() {
       setUserPw('');
       setOwnerPw('');
       setRemovePw('');
-      setOutputName(f.name.replace(/\.pdf$/i, ''));
+      setOutputName('');
       setAllowPrint(true);
       setAllowCopy(true);
       setAllowModify(true);
@@ -118,7 +117,8 @@ export function ProtectPage() {
     formData.append('file', file);
     formData.append('user_pw', userPw);
     formData.append('owner_pw', ownerPw);
-    formData.append('output_filename', appendFilenameSuffix(outputName || file.name, 'protected'));
+    // The name typed here is used exactly; the default only applies to an empty field.
+    formData.append('output_filename', outputName.trim() || `${fileStem}_protected`);
     formData.append('allow_print', String(allowPrint));
     formData.append('allow_copy', String(allowCopy));
     formData.append('allow_modify', String(allowModify));
@@ -172,7 +172,7 @@ export function ProtectPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('user_pw', removePw);
-    formData.append('output_filename', outputName || file.name);
+    formData.append('output_filename', `${fileStem}_unlocked`);
 
     try {
       const response = await apiClient.post('/api/v1/protect/remove', formData, { responseType: 'blob' });
@@ -286,13 +286,13 @@ export function ProtectPage() {
                   <span>{formatBytes(file.size)}</span>
                 </div>
               </div>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                onClick={clearFile}
-                style={{ color: 'var(--error)' }}
-              >
-                <X size={15} />
-              </button>
+              <ChangeFileControls
+                accept=".pdf"
+                idPrefix="protect"
+                onPick={loadFile}
+                onClear={clearFile}
+                disabled={isLoading}
+              />
             </div>
           )}
 
@@ -349,7 +349,7 @@ export function ProtectPage() {
                     type="text"
                     value={outputName}
                     onChange={(e) => setOutputName(e.target.value)}
-                    placeholder="e.g. my_document (protected_ prefix added automatically)"
+                    placeholder={`${fileStem}_protected`}
                   />
                 </div>
                 <div style={{ marginTop: 8 }}>

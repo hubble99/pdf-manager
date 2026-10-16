@@ -73,6 +73,7 @@ export interface ConverterWorkflow {
   rotateImage: (id: string) => void;
   flipImage: (id: string) => void;
   moveImage: (id: string, direction: 'up' | 'down') => void;
+  reorderImages: (from: number, to: number) => void;
   removeImage: (id: string) => void;
   convert: () => Promise<void>;
 }
@@ -268,6 +269,16 @@ export function useConverterWorkflow(): ConverterWorkflow {
     });
   }, [mutateImages]);
 
+  const reorderImages = useCallback((from: number, to: number) => {
+    mutateImages((entries) => {
+      if (from < 0 || to < 0 || from >= entries.length || to >= entries.length || from === to) return entries;
+      const next = [...entries];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, [mutateImages]);
+
   const removeImage = useCallback((id: string) => {
     mutateImages((entries) => entries.filter((entry) => entry.id !== id));
   }, [mutateImages]);
@@ -434,6 +445,7 @@ export function useConverterWorkflow(): ConverterWorkflow {
     rotateImage,
     flipImage,
     moveImage,
+    reorderImages,
     removeImage,
     convert,
   };

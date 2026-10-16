@@ -74,6 +74,8 @@ export interface OrganizeWorkspace {
   deletePreview: { positions: number[]; error: string | null };
 
   openFile: (file: File) => Promise<void>;
+  /** Closes the main PDF together with everything inserted into it. */
+  closeDocument: () => void;
   beginInsertFile: (file: File) => Promise<void>;
   beginInsertFromSource: (sourceId: string) => void;
   setInsertMode: (mode: InsertMode) => void;
@@ -104,6 +106,10 @@ export interface OrganizeWorkspace {
   redo: () => void;
   reset: () => void;
   save: (outputFilename: string) => Promise<void>;
+}
+
+function fileFingerprint(file: File): string {
+  return `${file.name.toLowerCase()}|${file.size}`;
 }
 
 /**
@@ -253,7 +259,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     try {
       const uploaded = await uploadDocument(file);
       if (!mountedRef.current) return;
-      const source: SourceHandle = { id: uploaded.documentId, ...uploaded };
+      const source: SourceHandle = { id: uploaded.documentId, ...uploaded, fingerprint: fileFingerprint(file) };
       const pages = Array.from({ length: uploaded.pageCount }, (_, index) =>
         createPageRef(source.id, index + 1));
       setState({ pages, sources: [source], past: [], future: [] });
@@ -272,13 +278,28 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
 
   const beginInsertFile = useCallback(async (file: File) => {
     if (busyRef.current || state.pages.length === 0) return;
+
+    // The same file is never added twice, so Sources never holds duplicates.
+    const fingerprint = fileFingerprint(file);
+    const existing = state.sources.find((entry) => entry.fingerprint === fingerprint);
+    if (existing || insertPendingSource?.fingerprint === fingerprint) {
+      const isMain = existing?.id === mainSourceId;
+      const message = isMain
+        ? `${file.name} is the PDF you opened. Use Duplicate on a page to repeat its pages.`
+        : `${file.name} is already in Sources. Use + next to it there to insert pages from it again.`;
+      setError(message);
+      showToast({ type: 'error', title: 'File already added', message });
+      if (!isMain) setPanel('sources');
+      return;
+    }
+
     setError(null);
     setIsBusy(true);
     busyRef.current = true;
     try {
       const uploaded = await uploadDocument(file);
       if (!mountedRef.current) return;
-      const source: SourceHandle = { id: uploaded.documentId, ...uploaded };
+      const source: SourceHandle = { id: uploaded.documentId, ...uploaded, fingerprint };
       setInsertPendingSource(source);
       setInsertSource(source);
       setInsertMode('all');
@@ -295,7 +316,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }
-  }, [selection, showToast, state.pages.length]);
+  }, [insertPendingSource, mainSourceId, selection, showToast, state.pages.length, state.sources]);
 
   const beginInsertFromSource = useCallback((sourceId: string) => {
     const source = state.sources.find((entry) => entry.id === sourceId);
@@ -504,7 +525,30 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     commit((snapshot) => ({ pages: movePage(snapshot.pages, from, to), sources: snapshot.sources }));
   }, [commit]);
 
-  // ── reset and save ────────────────────────────────────────────────────────
+  // ── close, reset and save ─────────────────────────────────────────────────
+  const closeDocument = useCallback(() => {
+    if (busyRef.current) return;
+    // Everything inserted belongs to this document, so every handle goes with it.
+    for (const source of state.sources) {
+      void releaseDocument(source.documentId).catch(() => {});
+    }
+    if (insertPendingSource) void releaseDocument(insertPendingSource.documentId).catch(() => {});
+    thumbnailUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    thumbnailUrlsRef.current.clear();
+    loadedSourcesRef.current.clear();
+    setThumbnails({});
+    setState(EMPTY_STATE);
+    setMainSourceId(null);
+    setSelection(new Set());
+    setAnchor(null);
+    setPanel('none');
+    setInsertPendingSource(null);
+    setInsertSource(null);
+    setDeleteInput('');
+    setResult(null);
+    setError(null);
+  }, [insertPendingSource, state.sources]);
+
   const reset = useCallback(() => {
     const main = state.sources.find((entry) => entry.id === mainSourceId);
     if (!main) return;
@@ -606,6 +650,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     deletePreview,
 
     openFile,
+    closeDocument,
     beginInsertFile,
     beginInsertFromSource,
     setInsertMode,

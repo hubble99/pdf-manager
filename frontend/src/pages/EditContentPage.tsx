@@ -26,6 +26,7 @@ import { PageHeader, StateView } from '../components/ui';
 import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { triggerBlobDownload } from '../utils/downloadHelper';
+import { buildOutputFilename } from '../utils/filenamePolicy';
 import { openOutputFolder } from '../utils/tauriDialog';
 import {
   applyContentDraft,
@@ -106,6 +107,7 @@ export function EditContentPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  const [outputName, setOutputName] = useState('');
   const [ambiguous, setAmbiguous] = useState<NativeTextObjectDescriptor[]>([]);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -132,6 +134,7 @@ export function EditContentPage() {
     return query ? pickableObjects.filter((object) => object.text.toLocaleLowerCase().includes(query)) : pickableObjects;
   }, [pickableObjects, pickerQuery]);
   const draftDirty = Boolean(selected && draft !== selected.text);
+  const defaultStem = file?.name.replace(/\.pdf$/i, '') || 'document';
   const unsaved = draftDirty || Boolean(session?.dirty);
   const busy = phase !== 'idle';
   const sessionId = session?.sessionId;
@@ -330,6 +333,7 @@ export function EditContentPage() {
       }
       setFile(null);
       setSavedName(null);
+      setOutputName('');
       setSession(null);
       setDiscovery(null);
       setRender(null);
@@ -419,13 +423,13 @@ export function EditContentPage() {
       setNotice('Verified output published.');
       try {
         const blob = await downloadContentOutput(session.sessionId, reply.result.outputId);
-        const outputName = `${file?.name.replace(/\.pdf$/i, '') || 'document'}-edited.pdf`;
-        triggerBlobDownload(blob, outputName);
-        setSavedName(outputName);
+        const finalName = buildOutputFilename(outputName.trim() || `${defaultStem}-edited`, 'pdf');
+        triggerBlobDownload(blob, finalName);
+        setSavedName(finalName);
         showToast({
           type: 'success',
           title: 'PDF saved',
-          message: outputName,
+          message: finalName,
           action: { label: 'Open Folder', onClick: () => openOutputFolder() },
           duration: 8000,
         });
@@ -446,7 +450,7 @@ export function EditContentPage() {
       setCancelRequested(false);
       setPhase('idle');
     }
-  }, [draft, draftDirty, executePending, file, refreshAcceptedCheckpoint, selected, session, showToast]);
+  }, [defaultStem, draft, draftDirty, executePending, outputName, refreshAcceptedCheckpoint, selected, session, showToast]);
 
   const handleViewportPoint = useCallback(async (point: Point, viewportSize: Point) => {
     if (!session || !currentPage || busy) return;
@@ -549,7 +553,7 @@ export function EditContentPage() {
               {unsaved ? 'Unsaved changes' : 'Saved checkpoint'}
             </span>
             <button className="btn btn-primary" onClick={() => void saveSession()} disabled={busy} id="edit-content-save">
-              <Save size={16} aria-hidden="true" /> Save verified PDF
+              <Save size={16} aria-hidden="true" /> Save and download
             </button>
           </>
         ) : undefined}
@@ -616,6 +620,19 @@ export function EditContentPage() {
                 <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'leave' })} aria-label="Close PDF">
                   <X size={15} aria-hidden="true" />
                 </button>
+              </div>
+
+              <div className="edit-content-output-name">
+                <label className="input-label" htmlFor="edit-content-output-name">Output filename</label>
+                <input
+                  id="edit-content-output-name"
+                  className="input"
+                  type="text"
+                  value={outputName}
+                  onChange={(event) => setOutputName(event.target.value)}
+                  placeholder={`${defaultStem}-edited`}
+                />
+                <p className="edit-content-hint">The .pdf extension is added automatically. The original file is never overwritten.</p>
               </div>
 
               {pending && (

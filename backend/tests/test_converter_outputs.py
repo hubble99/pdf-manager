@@ -77,7 +77,9 @@ def test_paper_size_applies_to_entire_batch(tmp_path, asymmetric_image, page_siz
     with fitz.open(result) as document:
         assert document.page_count == 2
         for page, source_size in zip(document, [(120, 80), (80, 140)]):
-            assert (page.rect.width, page.rect.height) == pytest.approx(dimensions, abs=0.01)
+            # Portrait images sit on the portrait page, landscape images on the same size turned sideways.
+            expected = dimensions if source_size[0] <= source_size[1] else dimensions[::-1]
+            assert (page.rect.width, page.rect.height) == pytest.approx(expected, abs=0.01)
             bounds = fitz.Rect(page.get_image_info()[0]["bbox"])
             assert bounds.width / bounds.height == pytest.approx(source_size[0] / source_size[1], abs=0.001)
             assert bounds.x0 == pytest.approx((page.rect.width - bounds.width) / 2, abs=0.01)
@@ -117,6 +119,23 @@ def test_reordered_images_keep_their_transforms(tmp_path, asymmetric_image):
         assert render_page(document[0]).getpixel((20, 20)) == pytest.approx((0, 255, 255), abs=12)
         with Image.open(asymmetric_image) as source:
             assert_sample_colors(render_page(document[1]), ImageOps.mirror(source))
+
+
+def test_landscape_image_gets_landscape_paper(asymmetric_image):
+    result, _, _ = images_to_pdf([asymmetric_image], page_size="a4")
+    with fitz.open(result) as document:
+        page = document[0]
+        assert (page.rect.width, page.rect.height) == pytest.approx((842, 595), abs=0.01)
+        bounds = fitz.Rect(page.get_image_info()[0]["bbox"])
+        assert bounds.width == pytest.approx(page.rect.width, abs=0.5) or bounds.height == pytest.approx(page.rect.height, abs=0.5)
+
+
+def test_square_image_stays_on_portrait_paper(tmp_path):
+    path = tmp_path / "square.png"
+    Image.new("RGB", (100, 100), "white").save(path)
+    result, _, _ = images_to_pdf([path], page_size="a4")
+    with fitz.open(result) as document:
+        assert (document[0].rect.width, document[0].rect.height) == pytest.approx((595, 842), abs=0.01)
 
 
 def test_image_rotation_does_not_rotate_fixed_paper(asymmetric_image):

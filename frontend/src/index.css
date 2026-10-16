@@ -3010,9 +3010,9 @@ select.input {
 .merge-tree-file .merge-tree-name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: left;
 }
 
 .merge-tree-name {
@@ -3155,9 +3155,8 @@ select.input {
 }
 
 .merge-queue-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   font-size: 13px;
   font-weight: 600;
 }
@@ -3165,9 +3164,8 @@ select.input {
 .merge-queue-folder {
   min-height: 14px;
   margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   color: var(--muted);
   font-size: 11px;
 }
@@ -3774,6 +3772,27 @@ select.input {
   align-items: center;
   gap: 6px;
   padding: 14px 28px 0;
+}
+
+/* Mode tabs scroll away with the content instead of staying pinned above it,
+   where they collided with the controls below. The page header stays put. */
+.feature-page:has(> .tabs) {
+  overflow-y: auto;
+}
+
+.feature-page:has(> .tabs) > .page-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.feature-page:has(> .tabs) > .page-body {
+  flex: none;
+  overflow: visible;
+}
+
+.feature-page:has(> .tabs) .merge-sources {
+  top: 76px;
 }
 
 .tab {
@@ -4658,31 +4677,127 @@ select.input {
   overflow-wrap: anywhere;
 }
 
-/* ── Merge drag-to-reorder ─────────────────────────────────────────────────── */
-.file-item--draggable {
-  cursor: grab;
+/* ── Sortable cards and rows (Merge, Images to PDF) ────────────────────────── */
+.sort-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 20px 16px;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
 }
 
-.file-item--draggable:active {
+.sort-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sort-card--dragging {
+  z-index: 3;
+  opacity: 0.9;
+}
+
+.sort-card--dragging .sort-card-body {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-lg);
+}
+
+.sort-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.sort-card-index {
+  font-variant-numeric: tabular-nums;
+}
+
+.sort-card-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--warning-container);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sort-card-remove {
+  margin-left: auto;
+  color: var(--error);
+}
+
+.sort-card-body {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1 / 1.18;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  cursor: grab;
+  touch-action: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.sort-card-body:hover {
+  border-color: var(--bd2);
+}
+
+.sort-card-body:active {
   cursor: grabbing;
 }
 
-.file-item--dragging {
-  opacity: 0.55;
-  box-shadow: var(--shadow-lg);
-  background: var(--sel);
-  border-radius: var(--radius-md);
+.sort-card-body:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.sort-card-body img {
+  /* Documents stay white in every theme. */
+  background: #fff;
+}
+
+/* The full name wraps; nothing is cut off. */
+.sort-card-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.sort-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sort-card-steps {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.merge-queue-row--dragging {
   position: relative;
   z-index: 2;
-}
-
-/* Thin insertion line showing where the lifted row will land. */
-.file-item--drop-before {
-  box-shadow: inset 0 2px 0 0 var(--primary);
-}
-
-.file-item--drop-after {
-  box-shadow: inset 0 -2px 0 0 var(--primary);
+  background: var(--sel);
+  box-shadow: var(--shadow-lg);
 }
 
 .merge-queue-row--draggable {
@@ -5413,4 +5528,49 @@ select.input {
   .donation-info {
     align-items: stretch;
   }
+}
+
+/* Edit Content: output filename under the file row. */
+.edit-content-output-name {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Images to PDF: the card is also a drop target for more images. */
+.converter-image-drop {
+  padding: 16px;
+}
+
+/* A segmented control whose options share the full width equally. */
+.seg--equal {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  width: 100%;
+}
+
+.seg--equal > button {
+  text-align: center;
+  justify-content: center;
+}
+
+/* Organize PDF: the main document sits in a bar above the toolbar. */
+.organize-document-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.organize-document-bar .file-item-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.organize-document-bar-spacer {
+  flex: 1;
 }

@@ -64,7 +64,7 @@ async def pdf_to_image_endpoint(
         
         # Calculate final download filename — pass extension WITHOUT dot as second arg
         if is_zip:
-            final_filename = sanitize_filename(f"{clean_name}_images", "zip")
+            final_filename = sanitize_filename(clean_name, "zip")
         else:
             final_filename = sanitize_filename(clean_name, format.lower())
 

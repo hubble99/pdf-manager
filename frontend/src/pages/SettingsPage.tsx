@@ -17,7 +17,7 @@ import apiClient from '../api/client';
 import { getHistory, clearHistory, removeHistoryEntry } from '../utils/historyStore';
 import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
-import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
+import { chooseFolderDialog, isTauri, openOutputFolder } from '../utils/tauriDialog';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import { THEME_OPTIONS, THEME_SWATCH } from '../context/ThemeContext.context';
@@ -71,8 +71,8 @@ export function SettingsPage() {
       showToast({ type: 'info', title: 'Browser mode', message: 'Native folder picker is only available in the desktop app.' });
       return;
     }
-    const paths = await openFilePicker({ multiple: false, title: 'Select output folder' });
-    if (paths?.[0]) setOutDir(paths[0]);
+    const folder = await chooseFolderDialog({ title: 'Select output folder' });
+    if (folder) setOutDir(folder);
   };
 
   const handleResetOutDir = () => {

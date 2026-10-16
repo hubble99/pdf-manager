@@ -1,7 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
   CheckCircle,
   FileText,
   FolderOpen,
@@ -9,7 +7,6 @@ import {
   Merge,
   Trash2,
   Upload,
-  X,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
@@ -18,7 +15,7 @@ import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
-import { useRowReorder } from '../hooks/useRowReorder';
+import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
 import { FolderWorkspace } from '../features/merge/FolderWorkspace';
 import { isTauri } from '../utils/tauriDialog';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -113,26 +110,11 @@ export function MergePage() {
     setResult(null);
   };
 
-  const moveFile = (id: string, direction: 'up' | 'down') => {
+  /** Moves a file to a new position; used by dragging, the arrow buttons, and Alt+Arrow. */
+  const reorderFiles = useCallback((from: number, to: number) => {
     setFiles((prev) => {
       if (!prev) return [];
-      const idx = prev.findIndex((f) => f.id === id);
-      if (idx === -1) return prev;
-      const newArr = [...prev];
-      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= newArr.length) return prev;
-      [newArr[idx], newArr[swapIdx]] = [newArr[swapIdx], newArr[idx]];
-      return newArr;
-    });
-  };
-
-  /** Moves the lifted row onto another row's position while the drag is live. */
-  const reorderFiles = useCallback((fromId: string, toId: string) => {
-    setFiles((prev) => {
-      if (!prev) return [];
-      const from = prev.findIndex((f) => f.id === fromId);
-      const to = prev.findIndex((f) => f.id === toId);
-      if (from === -1 || to === -1 || from === to) return prev;
+      if (from < 0 || to < 0 || from >= prev.length || to >= prev.length || from === to) return prev;
       const next = [...prev];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
@@ -140,22 +122,17 @@ export function MergePage() {
     });
   }, [setFiles]);
 
-  const { activeId: draggingFileId, rowProps } = useRowReorder(reorderFiles);
-
-  /** The keyboard alternative to dragging: Alt+Up / Alt+Down on a focused row. */
-  const handleRowKeyDown = (
-    event: React.KeyboardEvent<HTMLDivElement>,
-    id: string,
-  ) => {
-    if (!event.altKey) return;
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      moveFile(id, 'up');
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      moveFile(id, 'down');
-    }
-  };
+  /** Files that repeat an earlier file's name and size are marked, not blocked. */
+  const duplicateOf = new Map<string, number>();
+  {
+    const firstSeen = new Map<string, number>();
+    files.forEach((entry, idx) => {
+      const key = `${entry.file.name.toLowerCase()}|${entry.file.size}`;
+      const first = firstSeen.get(key);
+      if (first === undefined) firstSeen.set(key, idx);
+      else duplicateOf.set(entry.id, first);
+    });
+  }
 
   // ── Drag & drop ─────────────────────────────────────────────────────────────
   const handleDragOver = (e: React.DragEvent) => {
@@ -299,76 +276,47 @@ export function MergePage() {
           {/* File list */}
           {files.length > 0 && (
             <div className="card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
                 <FileText size={16} color="var(--accent)" />
                 <span style={{ fontWeight: 600, fontSize: 14 }}>Files to Merge</span>
                 <span className="badge badge-info">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+                {duplicateOf.size > 0 && (
+                  <span className="badge badge-warning" id="merge-duplicate-note">
+                    {duplicateOf.size} duplicate{duplicateOf.size !== 1 ? 's' : ''} added
+                  </span>
+                )}
                 <span style={{ flex: 1 }} />
-                <span className="text-muted" style={{ fontSize: 12 }}>Drag ↑↓ to reorder</span>
+                <span className="text-muted" style={{ fontSize: 12 }}>Drag the previews to reorder</span>
               </div>
-              <div className="file-list">
-                {files.map((entry, idx) => {
-                  const isDragging = draggingFileId === entry.id;
-                  return (
-                  <div
-                    key={entry.id}
-                    className={[
-                      'file-item',
-                      'file-item--draggable',
-                      isDragging ? 'file-item--dragging file-item--drop-before' : '',
-                    ].filter(Boolean).join(' ')}
-                    tabIndex={0}
-                    onKeyDown={(event) => handleRowKeyDown(event, entry.id)}
-                    title="Drag to reorder, or press Alt+Up / Alt+Down"
-                    aria-label={`Position ${idx + 1}: ${entry.file.name}`}
-                    {...rowProps(entry.id)}
-                  >
-                    <PdfThumbnail file={entry.file} />
-                    <div className="file-item-info">
-                      <Filename name={entry.file.name} className="file-item-name" />
-                      <div className="file-item-meta" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <SortableCardGrid
+                idPrefix="merge"
+                ariaLabel="Files to merge, in merge order"
+                disabled={isLoading}
+                onReorder={reorderFiles}
+                onRemove={removeFile}
+                cards={files.map((entry) => {
+                  const first = duplicateOf.get(entry.id);
+                  return {
+                    id: entry.id,
+                    title: entry.file.name,
+                    thumbnail: (
+                      <PdfThumbnail
+                        file={entry.file}
+                        style={{ width: '66%', height: '86%', border: '1px solid var(--line)', borderRadius: 3, background: '#fff' }}
+                      />
+                    ),
+                    meta: (
+                      <>
                         <span>{formatBytes(entry.file.size)}</span>
-                        {entry.pages !== undefined && (
-                          <span className="badge badge-info" style={{ fontSize: 10 }}>
-                            {entry.pages} pages
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <span className="badge badge-neutral" style={{ marginRight: 8 }}>#{idx + 1}</span>
-                    <div className="file-item-actions">
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => moveFile(entry.id, 'up')}
-                        disabled={idx === 0}
-                        aria-label="Move up"
-                        id={`merge-move-up-${idx}`}
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => moveFile(entry.id, 'down')}
-                        disabled={idx === files.length - 1}
-                        aria-label="Move down"
-                        id={`merge-move-down-${idx}`}
-                      >
-                        <ArrowDown size={14} />
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={() => removeFile(entry.id)}
-                        aria-label="Remove file"
-                        id={`merge-remove-${idx}`}
-                        style={{ color: 'var(--error)' }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  );
+                        {entry.pages !== undefined && <span>{entry.pages} page{entry.pages !== 1 ? 's' : ''}</span>}
+                      </>
+                    ),
+                    warning: first === undefined
+                      ? undefined
+                      : `Same name and size as #${first + 1}. It is still included in the merge.`,
+                  };
                 })}
-              </div>
+              />
             </div>
           )}
 

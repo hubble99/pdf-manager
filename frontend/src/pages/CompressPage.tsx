@@ -12,7 +12,7 @@ import {
 import apiClient from '../api/client';
 import { API_BASE_URL } from '../api/config';
 import { Filename } from '../components/Filename';
-import { PageHeader } from '../components/ui';
+import { ChangeFileControls, PageHeader } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
@@ -40,16 +40,16 @@ function formatBytes(bytes: number): string {
 
 
 function qualityLabel(q: number): string {
-  if (q >= 85) return 'High Quality';
-  if (q >= 65) return 'Balanced';
-  if (q >= 40) return 'Compact';
-  return 'Maximum Compression';
+  if (q >= 75) return 'High quality';
+  if (q >= 50) return 'Balanced';
+  if (q >= 35) return 'Low quality';
+  return 'Maximum compression';
 }
 
 function qualityColor(q: number): string {
-  if (q >= 85) return 'var(--success)';
-  if (q >= 65) return 'var(--info)';
-  if (q >= 40) return 'var(--warning)';
+  if (q >= 75) return 'var(--success)';
+  if (q >= 50) return 'var(--info)';
+  if (q >= 35) return 'var(--warning)';
   return 'var(--error)';
 }
 
@@ -183,6 +183,7 @@ export function CompressPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
   const preset = [
     { value: 25, label: 'Maximum' },
+    { value: 40, label: 'Low quality' },
     { value: 55, label: 'Balanced' },
     { value: 80, label: 'High quality' },
   ];
@@ -238,15 +239,13 @@ export function CompressPage() {
                     <span className="chip">{formatBytes(file.size)}</span>
                   </span>
                   <span className="card-head-actions">
-                    <button
-                      type="button"
-                      className="link-btn"
-                      id="compress-remove-file"
-                      onClick={clearFile}
+                    <ChangeFileControls
+                      accept=".pdf"
+                      idPrefix="compress"
+                      onPick={loadFile}
+                      onClear={clearFile}
                       disabled={isLoading}
-                    >
-                      Change file
-                    </button>
+                    />
                   </span>
                 </div>
               </div>
@@ -281,7 +280,7 @@ export function CompressPage() {
                     <b>{quality}</b>
                     <span>Better quality</span>
                   </div>
-                  <div className="seg" role="group" aria-label="Quality preset">
+                  <div className="seg seg--equal" role="group" aria-label="Quality preset">
                     {preset.map((item) => (
                       <button
                         key={item.value}

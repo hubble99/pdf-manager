@@ -7,6 +7,7 @@ Returns the compressed PDF path plus before/after metadata.
 """
 import io
 import logging
+import re
 from pathlib import Path
 from typing import Generator
 
@@ -199,54 +200,100 @@ def compress_pdf_with_progress(
     }
 
 
+# Anything in an image dictionary that the JPEG re-encode below cannot carry over
+# faithfully. Such images are left exactly as they are: they are rare in practice
+# and a wrong re-encode shows up as black or inverted objects.
+_UNSAFE_IMAGE_KEYS = re.compile(
+    r"/(?:ImageMask|Mask|Decode|Indexed|Separation|DeviceN|DeviceCMYK|Lab"
+    r"|JBIG2Decode|CCITTFaxDecode)(?![A-Za-z0-9])"
+)
+# ImageMask: stencil shapes. Mask: colour-key or stencil mask. Decode: inverted or
+# remapped samples. Indexed/Separation/DeviceN/DeviceCMYK/Lab: colour spaces that
+# need a real conversion. JBIG2/CCITT: 1-bit scans. "/SMask" (the soft mask) is a
+# different key and is handled separately.
+
+
+def _is_safe_to_recompress(doc: fitz.Document, xref: int) -> bool:
+    """True when the image is an ordinary 8-bit RGB or grey picture."""
+    try:
+        description = doc.xref_object(xref, compressed=False)
+    except Exception:
+        return False
+    if _UNSAFE_IMAGE_KEYS.search(description):
+        return False
+    bits = doc.xref_get_key(xref, "BitsPerComponent")
+    return bits[0] == "int" and bits[1] == "8"
+
+
+def _soft_mask_xref(doc: fitz.Document, xref: int) -> int | None:
+    """The xref of the image's soft mask (its transparency), if it has one."""
+    kind, value = doc.xref_get_key(xref, "SMask")
+    if kind != "xref":
+        return None
+    try:
+        return int(value.split()[0])
+    except (ValueError, IndexError):
+        return None
+
+
 def _recompress_image(page: fitz.Page, xref: int, quality: int) -> int:
     """
     Re-encode a single image xref at the given JPEG quality.
-    Returns 1 if the image was re-encoded, 0 if skipped.
+    Returns 1 if the image was re-encoded, 0 if it was left as it was.
+
+    The picture itself is re-encoded; its transparency (soft mask) is kept and
+    re-attached afterwards. `Page.replace_image` swaps in a brand new image
+    object, so without that step a transparent logo or shadow would turn into
+    an opaque box filled with whatever colour sat under the transparency.
     """
     doc = page.parent
-    
-    # Extract raw image data
+
+    if not _is_safe_to_recompress(doc, xref):
+        return 0
+    soft_mask = _soft_mask_xref(doc, xref)
+
     img_dict = doc.extract_image(xref)
     if img_dict is None:
         return 0
 
+    # Only plain grey (1) or RGB (3) samples; a 4-component image is CMYK.
+    if img_dict.get("colorspace") not in (1, 3):
+        return 0
+
     img_bytes = img_dict.get("image")
-    colorspace = img_dict.get("colorspace", 3)  # 3 = RGB, 1 = Gray
     width = img_dict.get("width", 0)
     height = img_dict.get("height", 0)
 
     if not img_bytes or width == 0 or height == 0:
         return 0
 
-    # Open with Pillow
     try:
         pil_img = Image.open(io.BytesIO(img_bytes))
+        pil_img.load()
     except Exception:
         return 0
 
-    # Convert to a JPEG-compatible mode
-    # JPEG supports: RGB, L (grayscale). CMYK technically allowed but causes issues with PyMuPDF.
-    if pil_img.mode == "RGBA":
+    # JPEG holds RGB or grey only. Flatten anything else that reached this point;
+    # the mask is carried separately, so no colour is lost to alpha here.
+    if pil_img.mode in ("RGBA", "LA", "P"):
         pil_img = pil_img.convert("RGB")
-    elif pil_img.mode == "P":
-        pil_img = pil_img.convert("RGB")
-    elif pil_img.mode == "CMYK":
-        pil_img = pil_img.convert("RGB")  # Fix: CMYK → RGB before JPEG encode
     elif pil_img.mode not in ("RGB", "L"):
         return 0
 
-    # Re-encode to JPEG
     buf = io.BytesIO()
     pil_img.save(buf, format="JPEG", quality=quality, optimize=True)
     new_bytes = buf.getvalue()
 
-    # Only replace if the new encoding is actually smaller
-    if len(new_bytes) >= len(img_bytes):
+    # Only replace when the result is smaller than what the file stores today.
+    try:
+        stored_size = len(doc.xref_stream_raw(xref))
+    except Exception:
+        stored_size = len(img_bytes)
+    if len(new_bytes) >= stored_size:
         return 0
 
-    # Replace the image cleanly using page.replace_image, 
-    # which securely updates Filter, ColorSpace and BBox dictionaries.
     page.replace_image(xref, stream=new_bytes)
+    if soft_mask is not None:
+        doc.xref_set_key(xref, "SMask", f"{soft_mask} 0 R")
 
     return 1

@@ -402,7 +402,7 @@ describe('unified converter workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Rotate second.png 90 degrees/i }));
     fireEvent.click(screen.getByRole('button', { name: /Mirror second.png horizontally/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Move second.png up/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Move second.png earlier/i }));
 
     fireEvent.click(convertButton());
     await waitFor(() => expect(postMock).toHaveBeenCalledWith('/api/v1/image-to-pdf/', expect.any(FormData), expect.anything()));
