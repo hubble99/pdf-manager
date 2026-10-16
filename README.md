@@ -36,7 +36,6 @@
 | 🗂️ **Organize Pages** | Rearrange, delete, or rotate PDF pages |
 | ✏️ **Canvas PDF** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
 | 🖊️ **Edit Content** | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
-| 🏷️ **Edit Metadata** | Edit title, author, subject, and other PDF properties |
 | 🔒 **Protect/Unlock PDF** | Protect PDFs with a password or remove existing passwords |
 
 > **All processing runs 100% offline on your machine. Your files are never sent to the internet. Temporary files are automatically cleaned up.**

@@ -9,7 +9,7 @@
  * tools that are not about PDFs fit the same structure without regrouping.
  */
 import {
-  FileImage, FilePenLine, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield, Tag,
+  FileImage, FilePenLine, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../types';
@@ -73,10 +73,6 @@ export const FEATURES: FeatureEntry[] = [
     id: 'edit-content', name: 'Edit Content', group: 'edit', icon: FilePenLine,
     description: 'Correct existing text in a PDF, verified before it is saved.', route: '/edit-content',
     beta: true,
-  },
-  {
-    id: 'metadata', name: 'Edit Metadata', group: 'edit', icon: Tag,
-    description: 'Change the title, author, subject, and keywords.', route: '/metadata',
   },
   {
     id: 'compress', name: 'Compress PDF', group: 'optimize', icon: Minimize2,

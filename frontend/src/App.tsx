@@ -12,7 +12,6 @@ import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OrganizePage } from './pages/OrganizePage';
-import { MetadataPage } from './pages/MetadataPage';
 import { ProtectPage } from './pages/ProtectPage';
 import { checkHealth } from './api/client';
 import { SplashScreen } from './components/SplashScreen';
@@ -148,7 +147,6 @@ export default function App() {
                 <Route path="/pdf-to-image"  element={<Navigate to="/converter" replace />} />
                 <Route path="/image-to-pdf"  element={<Navigate to="/converter" replace />} />
                 <Route path="/organize"      element={<OrganizePage />} />
-                <Route path="/metadata"      element={<MetadataPage />} />
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />
                 <Route

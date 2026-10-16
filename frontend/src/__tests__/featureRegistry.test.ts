@@ -6,7 +6,7 @@ import {
 
 const expectedFeatureIds = [
   'merge', 'extract', 'organize', 'converter', 'edit-canvas',
-  'edit-content', 'metadata', 'compress', 'protect', 'qr-barcode',
+  'edit-content', 'compress', 'protect', 'qr-barcode',
 ].sort();
 
 describe('feature registry', () => {

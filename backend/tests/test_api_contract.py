@@ -35,7 +35,6 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
     ("DELETE", "/api/v1/organize/documents/{document_id}"),
     ("POST", "/api/v1/organize/assemble/"),
-    ("POST", "/api/v1/metadata/"),
     ("POST", "/api/v1/protect/"),
     ("POST", "/api/v1/protect/remove"),
     ("POST", "/api/v1/preview/"),
@@ -171,11 +170,6 @@ REQUEST_BODY_CONTRACTS = {
         "media_type": "multipart/form-data",
         "required": {"file", "pages_config"},
         "defaults": {"output_filename": "organized.pdf"},
-    },
-    ("POST", "/api/v1/metadata/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {"title": "", "author": "", "subject": "", "keywords": ""},
     },
     ("POST", "/api/v1/protect/"): {
         "media_type": "multipart/form-data",

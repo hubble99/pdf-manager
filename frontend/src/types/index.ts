@@ -11,7 +11,6 @@ export type NavItemId =
   | 'edit-canvas'
   | 'edit-content'
   | 'organize'
-  | 'metadata'
   | 'protect'
   | 'settings';
 

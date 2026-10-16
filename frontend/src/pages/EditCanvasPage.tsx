@@ -1247,9 +1247,6 @@ export function EditCanvasPage() {
             <FileEdit size={18} />
             <span>Canvas PDF</span>
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--canvas-panel-border)] text-[var(--canvas-text-muted)] font-semibold">
-            BETA
-          </span>
         </div>
 
         {/* Compact File Info & Upload Trigger */}

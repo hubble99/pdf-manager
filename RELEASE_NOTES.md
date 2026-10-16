@@ -20,7 +20,7 @@ files are never uploaded.
 The whole interface was rebuilt around one layout language: a shared header bar,
 one card style, one navigation model, and one set of colour roles that every
 theme maps onto. Every screen — Home, Merge, Split, Organize, PDF & Image,
-Canvas PDF, Edit Content, Edit Metadata, Compress, Protect, QR & Barcode,
+Canvas PDF, Edit Content, Compress, Protect, QR & Barcode,
 Donation, and Settings — now looks and behaves like the same application.
 
 ### Four themes, Light by default

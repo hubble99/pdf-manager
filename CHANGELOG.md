@@ -29,6 +29,14 @@
 
 - Upload drop zones on Split, Organize, PDF & Image, Edit Metadata, Compress, and Protect are now centered vertically.
 
+**Removed**
+
+- **Edit Metadata** is removed: the page, its route, the Home card and sidebar item, and the `/api/v1/metadata/` endpoint with its PDF metadata writer. The tool changed only title, author, subject, and keywords, which did not justify its place in the final v1 scope. The Edit group now holds Canvas PDF and Edit Content.
+
+**Canvas PDF**
+
+- Removed the stray BETA chip from the Canvas PDF header. Only Edit Content carries the Beta marker.
+
 ## 1.7.0 — 2026-10-14 · Cumulative release (1.3.0 → 1.7.0)
 
 > Versions 1.3.0 through 1.7.0 were built and verified but never published or
