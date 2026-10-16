@@ -33,7 +33,7 @@ def test_synthetic_weights_get_progressively_heavier():
 
 def test_synthetic_weight_stays_real_selectable_text():
     document, page = _page_with(fontWeight=500, fontFaceWeight=400, syntheticStrokeEm=0.02)
-    assert page.get_text().strip() == "Weight Hamburg"
+    assert page.get_text().replace("\u00a0", " ").strip() == "Weight Hamburg"
     document.close()
 
 
@@ -56,7 +56,7 @@ def test_synthetic_weight_follows_rotation_like_regular_text():
 
 def test_missing_synthetic_fields_keep_the_old_behaviour():
     document, page = _page_with(fontWeight=400)
-    assert page.get_text().strip() == "Weight Hamburg"
+    assert page.get_text().replace("\u00a0", " ").strip() == "Weight Hamburg"
     document.close()
 
 
@@ -72,5 +72,5 @@ def test_embedded_font_is_used_for_synthetic_weight(monkeypatch, tmp_path):
     document.save(out)
     document.close()
     with fitz.open(out) as saved:
-        assert saved[0].get_text().strip() == "Weight Hamburg"
+        assert saved[0].get_text().replace("\u00a0", " ").strip() == "Weight Hamburg"
         assert any("Liberation" in font[3] for font in saved[0].get_fonts())
