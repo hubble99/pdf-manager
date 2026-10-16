@@ -137,6 +137,7 @@
   --canvas-text-muted:          #505f76;
   --canvas-accent:              #0b4ea6;
   --canvas-on-accent:           #ffffff;
+  --canvas-on-active:           #0b4ea6;
   --canvas-danger:              #ba1a1a;
   --canvas-selection-fill:      rgba(11, 78, 166, 0.18);
   --canvas-selection-border:    #0b4ea6;
@@ -194,7 +195,7 @@
 
   /* Semantic — accent for interactive elements */
   --accent:                   #4a9eff;
-  --on-accent:                #ffffff;
+  --on-accent:                #04203d;
   --accent-dim:               rgba(74, 158, 255, 0.12);
   --accent-hover:             rgba(74, 158, 255, 0.08);
 
@@ -234,7 +235,8 @@
   --canvas-text-primary:        #e8e8f0;
   --canvas-text-muted:          #9898b8;
   --canvas-accent:              #4a9eff;
-  --canvas-on-accent:           #ffffff;
+  --canvas-on-accent:           #04203d;
+  --canvas-on-active:           #04203d;
   --canvas-danger:              #ffb4ab;
   --canvas-selection-fill:      rgba(74, 158, 255, 0.2);
   --canvas-selection-border:    #4a9eff;
@@ -255,7 +257,7 @@
 
   /* On-surface (Text) */
   --on-surface:               #5C3333; /* Main text */
-  --on-surface-variant:       #9E7070; /* Muted text, Icons */
+  --on-surface-variant:       #7A4D4D; /* Muted text, Icons */
   --inverse-surface:          #313030;
   --inverse-on-surface:       #F8DADA;
 
@@ -276,7 +278,7 @@
   --accent-hover:             rgba(92, 51, 51, 0.08); /* Accent hover */
 
   /* Secondary */
-  --secondary:                #9E7070;
+  --secondary:                #7A4D4D;
   --on-secondary:             #FFFFFF;
   --secondary-container:      #F0CECE;
 
@@ -305,9 +307,10 @@
   --canvas-input-bg:          #FFF5F5;
   --canvas-input-border:      #C49898;
   --canvas-text-primary:      #5C3333;
-  --canvas-text-muted:        #9E7070;
+  --canvas-text-muted:        #7A4D4D;
   --canvas-accent:            #5C3333;
   --canvas-on-accent:         #FFFFFF;
+  --canvas-on-active:         #FFFFFF;
   --canvas-danger:            #C45A5A;
   --canvas-selection-fill:    rgba(92, 51, 51, 0.18);
   --canvas-selection-border:  #5C3333;
@@ -328,7 +331,7 @@
 
   /* On-surface (Text) */
   --on-surface:               #395886; /* Main text */
-  --on-surface-variant:       #628ECB; /* Muted text, Icons */
+  --on-surface-variant:       #2E5487; /* Muted text, Icons */
   --inverse-surface:          #313030;
   --inverse-on-surface:       #D5DEEF;
 
@@ -349,7 +352,7 @@
   --accent-hover:             rgba(57, 88, 134, 0.08); /* Accent hover */
 
   /* Secondary */
-  --secondary:                #628ECB;
+  --secondary:                #2E5487;
   --on-secondary:             #FFFFFF;
   --secondary-container:      #C0CDEA;
 
@@ -378,9 +381,10 @@
   --canvas-input-bg:          #F0F3FA;
   --canvas-input-border:      #8AAEE0;
   --canvas-text-primary:      #395886;
-  --canvas-text-muted:        #628ECB;
+  --canvas-text-muted:        #2E5487;
   --canvas-accent:            #395886;
   --canvas-on-accent:         #FFFFFF;
+  --canvas-on-active:         #FFFFFF;
   --canvas-danger:            #A04A5A;
   --canvas-selection-fill:    rgba(57, 88, 134, 0.18);
   --canvas-selection-border:  #395886;
@@ -5639,4 +5643,290 @@ select.input {
   place-items: center;
   min-height: 240px;
   margin: 0;
+}
+
+/* Password field: masked input with an inline show/hide button. */
+.password-field-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-field-input {
+  padding-right: 40px;
+}
+
+.password-field-toggle {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+
+.password-field-toggle:hover {
+  color: var(--text);
+}
+
+.password-field-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.password-field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--error, #b3261e);
+}
+
+/* Compact cards: more previews per row for long lists such as Quick Merge. */
+.sort-grid--compact {
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 14px 12px;
+}
+
+.sort-grid--compact .sort-card-title {
+  font-size: 11.5px;
+}
+
+.sort-grid--compact .sort-card-meta {
+  font-size: 10.5px;
+}
+
+/* Canvas PDF: main tools stay in the top bar; options for the active tool or selected
+   object (text, weight, size, colors, layering) live in a panel on the left. */
+.canvas-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.canvas-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 0 0 252px;
+  width: 252px;
+  padding: 14px 14px 20px;
+  overflow-y: auto;
+  background: var(--canvas-panel-bg);
+  border-right: 1px solid var(--canvas-topbar-border);
+  scrollbar-width: thin;
+}
+
+.canvas-side-panel[hidden] {
+  display: none;
+}
+
+.canvas-side-panel > div {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  flex-wrap: nowrap !important;
+  gap: 12px !important;
+}
+
+.canvas-side-panel > div.canvas-layer-group {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.canvas-side-panel > div > div {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+/* Rows that pair a label with a control put the control on the right. */
+.canvas-side-panel > div > div:has(> span:first-child) {
+  justify-content: space-between;
+}
+
+.canvas-side-panel div[style*="width: 1px"] {
+  display: none;
+}
+
+.canvas-side-panel select,
+.canvas-side-panel input[type='text'],
+.canvas-side-panel input[type='number'] {
+  max-width: 100%;
+}
+
+@media (max-width: 760px) {
+  .canvas-main {
+    flex-direction: column;
+  }
+  .canvas-side-panel {
+    flex: 0 0 auto;
+    width: auto;
+    max-height: 38vh;
+    border-right: none;
+    border-bottom: 1px solid var(--canvas-topbar-border);
+  }
+}
+
+/* ── Shared layout helpers (replace per-page inline styles) ───────────────────── */
+[hidden] {
+  display: none !important;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.grow-spacer {
+  flex: 1;
+}
+
+.stack-16 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field-gap {
+  margin-top: 8px;
+}
+
+.hint-gap {
+  margin-top: 10px;
+}
+
+.hint-gap-sm {
+  margin-top: 6px;
+}
+
+.input-label--spaced {
+  margin-bottom: 12px;
+}
+
+.badge-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.card-title-row--wrap {
+  flex-wrap: wrap;
+}
+
+.card-title-text {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.card-title-note {
+  font-size: 12px;
+}
+
+.card-title-row svg {
+  color: var(--accent);
+}
+
+.check-row-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--on-surface);
+}
+
+.check-row input {
+  accent-color: var(--accent);
+}
+
+.action-row {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.file-card-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+/* Success banner shown after a download starts. */
+.result-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--success-container);
+  border: 1px solid var(--success);
+}
+
+.result-card-icon {
+  flex-shrink: 0;
+  color: var(--success);
+}
+
+.result-card-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--success);
+}
+
+.result-card-meta {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+}
+
+/* A PDF page preview inside a sortable card. */
+.sort-card-thumb {
+  width: 66%;
+  height: 86%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.size-bar--spaced {
+  margin-top: 8px;
+}
+
+.edit-content-safety-note strong {
+  color: var(--on-surface);
+}
+
+/* Small caption text keeps readable contrast in every theme. */
+.sidebar .sidebar-section-label {
+  color: color-mix(in srgb, var(--on-surface-variant) 55%, var(--on-surface));
+}
+
+/* The empty preview sits on a white document surface in every theme. */
+.preview-empty {
+  color: #5b6573;
 }

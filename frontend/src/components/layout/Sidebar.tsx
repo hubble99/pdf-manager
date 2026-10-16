@@ -71,9 +71,8 @@ export function Sidebar() {
   };
 
   return (
-    <aside
+    <nav
       className={`sidebar ${collapsed ? 'collapsed' : 'expanded'}`}
-      role="navigation"
       aria-label="Main navigation"
     >
       {/* ── Header / Logo ── */}
@@ -149,6 +148,6 @@ export function Sidebar() {
       >
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>
-    </aside>
+    </nav>
   );
 }

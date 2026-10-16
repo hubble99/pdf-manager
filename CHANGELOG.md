@@ -37,6 +37,19 @@
 - Images to PDF previews now fit their card at any rotation, so landscape or rotated images are no longer cropped.
 - Edit Content: the Output filename field now sits in the header next to **Save and download**, where it is visible without scrolling the control panel.
 
+**UI consistency and accessibility**
+
+- Protect PDF asks to confirm the password when adding protection; a mismatch blocks the action. Passwords have a show/hide toggle.
+- Shared controls (mode tabs, segmented options, option cards, sliders, password field) are now used across Merge, Protect, Compress, Extract, PDF & Image, QR & Barcode, Donation and Settings, with arrow-key navigation on tabs.
+- Quick Merge cards are smaller so more files fit without scrolling.
+- Keyboard and screen-reader fixes: labelled main navigation, page grid and tool-options regions, status announcements for results.
+- Text and button contrast now meets WCAG AA in all four themes.
+
+**Canvas PDF**
+
+- Tool options moved to a left panel; the top bar keeps the main tools.
+- Font weights 450, 500 and 550 are available for fonts that ship fewer weights (for example Arial, Times, Calibri). They are approximated by slightly thickening the nearest real weight; the saved text stays selectable.
+
 **Reordering**
 
 - Fixed mouse drag-and-drop in Merge (Quick and Folder mode): the desktop webview swallowed in-page HTML5 drag events, so only the arrow buttons worked. Reordering now uses pointer-based dragging (the same engine as Organize), with Alt+Arrow and earlier/later buttons kept for the keyboard.

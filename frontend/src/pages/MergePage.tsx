@@ -12,7 +12,7 @@ import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
-import { PageHeader } from '../components/ui';
+import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
@@ -208,33 +208,25 @@ export function MergePage() {
         description="Combine multiple PDF files into one document"
       />
 
-      <div className="tabs" role="tablist" aria-label="Merge mode">
-        <button
-          type="button"
-          role="tab"
-          id="merge-mode-quick"
-          aria-selected={mode === 'quick'}
-          className={`tab${mode === 'quick' ? ' active' : ''}`}
-          onClick={() => setMode('quick')}
-        >
-          Quick
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="merge-mode-folder"
-          aria-selected={mode === 'folder'}
-          className={`tab${mode === 'folder' ? ' active' : ''}`}
-          onClick={() => setMode('folder')}
-          disabled={!folderModeAvailable}
-          title={folderModeAvailable ? undefined : 'Folder mode requires the desktop app'}
-        >
-          Folder
-        </button>
+      <Tabs
+        ariaLabel="Merge mode"
+        value={mode}
+        onChange={setMode}
+        items={[
+          { value: 'quick', id: 'merge-mode-quick', label: 'Quick' },
+          {
+            value: 'folder',
+            id: 'merge-mode-folder',
+            label: 'Folder',
+            disabled: !folderModeAvailable,
+            title: folderModeAvailable ? undefined : 'Folder mode requires the desktop app',
+          },
+        ]}
+      >
         {!folderModeAvailable && (
           <span className="organize-help">Folder mode requires the desktop app</span>
         )}
-      </div>
+      </Tabs>
 
       {mode === 'folder' && <FolderWorkspace />}
 
@@ -245,7 +237,7 @@ export function MergePage() {
           type="file"
           accept=".pdf"
           multiple
-          style={{ display: 'none' }}
+          hidden
           onChange={handleFileInput}
           id="merge-file-input"
         />
@@ -267,7 +259,7 @@ export function MergePage() {
               <Upload className="drop-zone-icon" />
               <p className="drop-zone-title">Drop PDF files here</p>
               <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+              <div className="badge-row">
                 <span className="badge badge-neutral">PDF</span>
                 <span className="badge badge-neutral">Multiple files</span>
               </div>
@@ -277,20 +269,21 @@ export function MergePage() {
           <div className="merge-quick-split">
             {/* Left: previews in merge order */}
             <div className="card merge-quick-files">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div className="card-title-row card-title-row--wrap">
                 <FileText size={16} color="var(--accent)" />
-                <span style={{ fontWeight: 600, fontSize: 14 }}>Files to Merge</span>
+                <span className="card-title-text">Files to Merge</span>
                 <span className="badge badge-info">{files.length} file{files.length !== 1 ? 's' : ''}</span>
                 {duplicateOf.size > 0 && (
                   <span className="badge badge-warning" id="merge-duplicate-note">
                     {duplicateOf.size} duplicate{duplicateOf.size !== 1 ? 's' : ''} added
                   </span>
                 )}
-                <span style={{ flex: 1 }} />
-                <span className="text-muted" style={{ fontSize: 12 }}>Drag the previews to reorder</span>
+                <span className="grow-spacer" />
+                <span className="text-muted card-title-note">Drag the previews to reorder</span>
               </div>
               <SortableCardGrid
                 idPrefix="merge"
+                compact
                 ariaLabel="Files to merge, in merge order"
                 disabled={isLoading}
                 onReorder={reorderFiles}
@@ -303,7 +296,7 @@ export function MergePage() {
                     thumbnail: (
                       <PdfThumbnail
                         file={entry.file}
-                        style={{ width: '66%', height: '86%', border: '1px solid var(--line)', borderRadius: 3, background: '#fff' }}
+                        className="sort-card-thumb"
                       />
                     ),
                     meta: (
@@ -349,26 +342,19 @@ export function MergePage() {
                   onChange={(e) => setOutputName(e.target.value)}
                   placeholder="merged_output.pdf"
                 />
-                <p className="text-muted text-body-sm" style={{ marginTop: 6 }}>
+                <p className="text-muted text-body-sm hint-gap-sm">
                   The .pdf extension will be added automatically if omitted.
                 </p>
               </div>
 
               {result && (
-                <div
-                  className="card"
-                  style={{
-                    background: 'var(--success-container)',
-                    border: '1px solid var(--success)',
-                    display: 'flex', alignItems: 'center', gap: 12,
-                  }}
-                >
-                  <CheckCircle size={24} color="var(--success)" style={{ flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
+                <div className="card result-card" role="status">
+                  <CheckCircle size={24} className="result-card-icon" />
+                  <div className="grow">
+                    <div className="result-card-title">
                       Download started automatically
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
+                    <div className="result-card-meta">
                       <Filename name={result.filename} /> · {result.totalPages} pages · {formatBytes(result.sizeBytes)}
                     </div>
                   </div>
@@ -384,7 +370,7 @@ export function MergePage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="action-row">
                 <button
                   className="btn btn-secondary"
                   id="merge-clear-btn"
@@ -402,7 +388,7 @@ export function MergePage() {
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      <Loader2 size={15} className="spin" />
                       Merging…
                     </>
                   ) : (

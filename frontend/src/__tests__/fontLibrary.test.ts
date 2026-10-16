@@ -12,6 +12,8 @@ import {
   loadApplicationFontLibrary,
   mergeFontFamilies,
   nearestAvailableFontWeight,
+  getSelectableFontWeights,
+  resolveFontFace,
   toggleBoldWeight,
 } from '../features/edit-canvas/fontLibrary';
 
@@ -95,5 +97,27 @@ describe('Edit Canvas application font library', () => {
     expect(nearestAvailableFontWeight(600, [400, 500, 700])).toBe(700);
     expect(toggleBoldWeight(500, [400, 500, 700])).toBe(700);
     expect(toggleBoldWeight(700, [400, 500, 700])).toBe(400);
+  });
+
+  it('offers in-between weights for limited families and resolves them to a lighter real face', () => {
+    expect(getSelectableFontWeights('Arial', [])).toEqual([400, 450, 500, 550, 700]);
+    expect(getSelectableFontWeights('Calibri', [])).toEqual([300, 400, 450, 500, 550, 700]);
+
+    const arimo = [
+      { id: 'a', family: 'Arimo', filename: 'a.ttf', weight: 400, bold: false, italic: false },
+      { id: 'b', family: 'Arimo', filename: 'b.ttf', weight: 500, bold: false, italic: false },
+      { id: 'c', family: 'Arimo', filename: 'c.ttf', weight: 700, bold: true, italic: false },
+    ];
+    expect(getSelectableFontWeights('Arimo', arimo)).toEqual([400, 450, 500, 550, 700]);
+
+    expect(resolveFontFace(400, [400, 700])).toEqual({ faceWeight: 400, strokeEm: 0 });
+    expect(resolveFontFace(700, [400, 700])).toEqual({ faceWeight: 700, strokeEm: 0 });
+    const medium = resolveFontFace(500, [400, 700]);
+    expect(medium.faceWeight).toBe(400);
+    expect(medium.strokeEm).toBeCloseTo(0.02);
+    const fromMedium = resolveFontFace(550, [400, 500, 700]);
+    expect(fromMedium.faceWeight).toBe(500);
+    expect(fromMedium.strokeEm).toBeCloseTo(0.01);
+    expect(resolveFontFace(500, [400, 500, 700])).toEqual({ faceWeight: 500, strokeEm: 0 });
   });
 });

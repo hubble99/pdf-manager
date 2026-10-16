@@ -36,7 +36,9 @@ const WEIGHT_LABELS: Readonly<Record<number, string>> = {
   200: 'Extra Light',
   300: 'Light',
   400: 'Regular',
+  450: 'Book',
   500: 'Medium',
+  550: 'Demi',
   600: 'SemiBold',
   700: 'Bold',
   800: 'Extra Bold',
@@ -96,6 +98,45 @@ export function getAvailableFontWeights(
     .find(([name]) => normalizeFamily(name) === key)?.[1] ?? [];
   const weights = Array.from(new Set([...builtInWeights, ...applicationWeights])).sort((left, right) => left - right);
   return weights.length > 0 ? weights : [400, 700];
+}
+
+/**
+ * Fonts that ship only Regular and Bold get in-between weights by thickening the
+ * glyph outlines of the nearest lighter face. The amount grows linearly with the
+ * weight above that face; 0.06 em of stroke is roughly Regular to Bold.
+ */
+export const SYNTHETIC_FONT_WEIGHTS: readonly number[] = [450, 500, 550];
+const SYNTHETIC_STROKE_EM_PER_WEIGHT = 0.06 / 300;
+
+/** Real weights plus the in-between weights that can be synthesized from a lighter face. */
+export function getSelectableFontWeights(
+  family: string,
+  entries: readonly ApplicationFontEntry[],
+): number[] {
+  const real = getAvailableFontWeights(family, entries);
+  const synthetic = SYNTHETIC_FONT_WEIGHTS.filter(
+    (weight) => !real.includes(weight) && real.some((value) => value < weight),
+  );
+  return Array.from(new Set([...real, ...synthetic])).sort((left, right) => left - right);
+}
+
+export interface ResolvedFontFace {
+  /** The real face to render with. */
+  faceWeight: number;
+  /** Outline thickening in em; 0 when the face is a real one. */
+  strokeEm: number;
+}
+
+export function resolveFontFace(requested: number, realWeights: readonly number[]): ResolvedFontFace {
+  if (realWeights.includes(requested)) return { faceWeight: requested, strokeEm: 0 };
+  if (SYNTHETIC_FONT_WEIGHTS.includes(requested)) {
+    const lighter = realWeights.filter((value) => value < requested);
+    if (lighter.length > 0) {
+      const faceWeight = Math.max(...lighter);
+      return { faceWeight, strokeEm: (requested - faceWeight) * SYNTHETIC_STROKE_EM_PER_WEIGHT };
+    }
+  }
+  return { faceWeight: nearestAvailableFontWeight(requested, realWeights), strokeEm: 0 };
 }
 
 export function getFontWeightLabel(weight: number): string {

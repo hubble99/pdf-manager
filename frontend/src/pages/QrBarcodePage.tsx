@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
-import { PageHeader } from '../components/ui';
+import { PageHeader, RadioCardGroup, RangeField, Tabs } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
 import { normalizeQrContent } from '../utils/qrContent';
 import { openOutputFolder } from '../utils/tauriDialog';
@@ -248,21 +248,6 @@ export function QrBarcodePage() {
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  const optionCard = (
-    group: string,
-    opt: { value: string; label: string; desc: string },
-    selected: boolean,
-    onSelect: () => void,
-  ) => (
-    <label key={opt.value} className={`radio-card${selected ? ' active' : ''}`}>
-      <input type="radio" name={group} value={opt.value} checked={selected} onChange={onSelect} />
-      <span className="radio-copy">
-        <span className="radio-title">{opt.label}</span>
-        <span className="radio-desc">{opt.desc}</span>
-      </span>
-    </label>
-  );
-
   return (
     <div className="feature-page">
       <PageHeader
@@ -271,28 +256,15 @@ export function QrBarcodePage() {
         description="Generate custom QR codes and barcodes"
       />
 
-      <div className="tabs" role="tablist" aria-label="QR and barcode modes">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'qr'}
-          className={`tab${activeTab === 'qr' ? ' active' : ''}`}
-          onClick={() => setActiveTab('qr')}
-          id="qr-tab-qr"
-        >
-          <QrCode size={15} aria-hidden="true" /> QR Code
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'barcode'}
-          className={`tab${activeTab === 'barcode' ? ' active' : ''}`}
-          onClick={() => setActiveTab('barcode')}
-          id="qr-tab-barcode"
-        >
-          <Barcode size={15} aria-hidden="true" /> Barcode
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="QR and barcode modes"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={[
+          { value: 'qr', id: 'qr-tab-qr', label: 'QR Code', icon: <QrCode size={15} aria-hidden="true" /> },
+          { value: 'barcode', id: 'qr-tab-barcode', label: 'Barcode', icon: <Barcode size={15} aria-hidden="true" /> },
+        ]}
+      />
 
       <div className="page-body">
         <div className="form-col form-col--wide form-col--two">
@@ -317,7 +289,7 @@ export function QrBarcodePage() {
                       rows={5}
                     />
                     {normalizeQrContent(qrContent) !== qrContent && (
-                      <p className="text-muted text-body-sm" style={{ marginTop: 6 }} id="qr-link-note">
+                      <p className="text-muted text-body-sm hint-gap-sm" id="qr-link-note">
                         Saved as <strong>{normalizeQrContent(qrContent).trim()}</strong> so phones open it as a link.
                       </p>
                     )}
@@ -329,12 +301,13 @@ export function QrBarcodePage() {
                     <span className="card-head-title">Error correction</span>
                   </div>
                   <div className="card-body">
-                    <div className="opt-grid" role="radiogroup" aria-label="Error correction">
-                      {QR_EC_OPTIONS.map((opt) => optionCard(
-                        'errorCorrection', opt, qrErrorCorrection === opt.value,
-                        () => setQrErrorCorrection(opt.value),
-                      ))}
-                    </div>
+                    <RadioCardGroup
+                      ariaLabel="Error correction"
+                      name="errorCorrection"
+                      options={QR_EC_OPTIONS}
+                      value={qrErrorCorrection}
+                      onChange={setQrErrorCorrection}
+                    />
                     <small className="hint">Higher levels survive more damage but hold less content.</small>
                   </div>
                 </div>
@@ -374,12 +347,13 @@ export function QrBarcodePage() {
                     <span className="card-head-title">Barcode type</span>
                   </div>
                   <div className="card-body">
-                    <div className="opt-grid" role="radiogroup" aria-label="Barcode type">
-                      {BARCODE_TYPES.map((opt) => optionCard(
-                        'barcodeType', opt, barcodeType === opt.value,
-                        () => setBarcodeType(opt.value),
-                      ))}
-                    </div>
+                    <RadioCardGroup
+                      ariaLabel="Barcode type"
+                      name="barcodeType"
+                      options={BARCODE_TYPES}
+                      value={barcodeType}
+                      onChange={setBarcodeType}
+                    />
                   </div>
                 </div>
               </>
@@ -390,12 +364,13 @@ export function QrBarcodePage() {
                 <span className="card-head-title">Export format</span>
               </div>
               <div className="card-body">
-                <div className="opt-grid" role="radiogroup" aria-label="Export format">
-                  {FORMAT_OPTIONS.map((opt) => optionCard(
-                    'format', opt, format === opt.value,
-                    () => setFormat(opt.value as 'png' | 'svg'),
-                  ))}
-                </div>
+                <RadioCardGroup
+                  ariaLabel="Export format"
+                  name="format"
+                  options={FORMAT_OPTIONS as readonly { value: 'png' | 'svg'; label: string; desc: string }[]}
+                  value={format}
+                  onChange={setFormat}
+                />
               </div>
             </div>
           </div>
@@ -428,19 +403,19 @@ export function QrBarcodePage() {
                     <label htmlFor="qr-size-slider">
                       Size <span className="chip">{qrSize}</span>
                     </label>
-                    <input
+                    <RangeField
                       id="qr-size-slider"
-                      className="range"
-                      type="range"
-                      min="1"
-                      max="20"
+                      min={1}
+                      max={20}
                       value={qrSize}
-                      onChange={(e) => setQrSize(parseInt(e.target.value, 10))}
+                      onChange={setQrSize}
+                      scale={(
+                        <>
+                          <span>Small (1)</span>
+                          <span>Large (20)</span>
+                        </>
+                      )}
                     />
-                    <div className="range-scale">
-                      <span>Small (1)</span>
-                      <span>Large (20)</span>
-                    </div>
                   </div>
                 )}
 

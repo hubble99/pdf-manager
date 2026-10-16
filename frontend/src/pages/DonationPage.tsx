@@ -1,6 +1,6 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState } from 'react';
 import { Copy, ExternalLink, Flag, Globe, Heart } from 'lucide-react';
-import { PageHeader } from '../components/ui';
+import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
 import { openInSystemBrowser } from '../utils/openExternal';
@@ -57,28 +57,19 @@ export function DonationPage() {
     </div>
   );
 
-  const tab = (id: Method, label: string, icon: ReactNode) => (
-    <button
-      type="button"
-      role="tab"
-      id={`donation-tab-${id}`}
-      aria-selected={method === id}
-      aria-controls={`donation-panel-${id}`}
-      className={`tab${method === id ? ' active' : ''}`}
-      onClick={() => setMethod(id)}
-    >
-      {icon} {label}
-    </button>
-  );
-
   return (
     <div className="feature-page">
       <PageHeader icon={Heart} title={DONATION_TEXTS.title} description={DONATION_TEXTS.summary} />
 
-      <div className="tabs" role="tablist" aria-label="Donation method">
-        {tab('qris', 'Indonesia', <Flag size={15} aria-hidden="true" />)}
-        {tab('paypal', 'International', <Globe size={15} aria-hidden="true" />)}
-      </div>
+      <Tabs
+        ariaLabel="Donation method"
+        value={method}
+        onChange={setMethod}
+        items={[
+          { value: 'qris', id: 'donation-tab-qris', controls: 'donation-panel-qris', label: 'Indonesia', icon: <Flag size={15} aria-hidden="true" /> },
+          { value: 'paypal', id: 'donation-tab-paypal', controls: 'donation-panel-paypal', label: 'International', icon: <Globe size={15} aria-hidden="true" /> },
+        ]}
+      />
 
       <div className="page-body">
         <div className="donation-col">

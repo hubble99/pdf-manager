@@ -61,6 +61,8 @@ import {
 import {
   ensureApplicationFontFace,
   getAvailableFontWeights,
+  getSelectableFontWeights,
+  resolveFontFace,
   getFontWeightLabel,
   loadApplicationFontLibrary,
   mergeFontFamilies,
@@ -290,17 +292,22 @@ export function EditCanvasPage() {
   const currentFontItalic = selectedObject?.type === 'text'
     ? (selectedObject as TextObject).italic
     : defaultTextProps.italic;
-  const availableFontWeights = useMemo(
+  const realFontWeights = useMemo(
     () => getAvailableFontWeights(currentFontFamily, applicationFontEntries),
     [currentFontFamily, applicationFontEntries],
   );
+  const availableFontWeights = useMemo(
+    () => getSelectableFontWeights(currentFontFamily, applicationFontEntries),
+    [currentFontFamily, applicationFontEntries],
+  );
+  const currentFontFace = resolveFontFace(currentFontWeight, realFontWeights);
 
   useEffect(() => {
     let cancelled = false;
     ensureApplicationFontFace(
       applicationFontEntries,
       currentFontFamily,
-      currentFontWeight,
+      currentFontFace.faceWeight,
       currentFontItalic,
     )
       .then((registered) => {
@@ -319,7 +326,7 @@ export function EditCanvasPage() {
     return () => {
       cancelled = true;
     };
-  }, [applicationFontEntries, currentFontFamily, currentFontWeight, currentFontItalic]);
+  }, [applicationFontEntries, currentFontFamily, currentFontFace.faceWeight, currentFontItalic]);
 
   // Instantly commits current objects state of page to history (for drag/transform/draw finishes)
   const commitPageObjectsToHistory = useCallback((pageIndex: number, finalObjects: CanvasObject[]) => {
@@ -459,18 +466,31 @@ export function EditCanvasPage() {
 
   const setFontWeight = useCallback((requestedWeight: number) => {
     const weight = nearestAvailableFontWeight(requestedWeight, availableFontWeights);
-    const patch = { fontWeight: weight, bold: weight >= 700 };
+    const face = resolveFontFace(weight, realFontWeights);
+    const patch = {
+      fontWeight: weight,
+      fontFaceWeight: face.faceWeight,
+      syntheticStrokeEm: face.strokeEm,
+      bold: weight >= 700,
+    };
     if (selectedObject?.type === 'text') {
       updateSelectedObject(patch);
     } else {
       setDefaultTextProps(previous => ({ ...previous, ...patch }));
     }
-  }, [availableFontWeights, selectedObject, updateSelectedObject]);
+  }, [availableFontWeights, realFontWeights, selectedObject, updateSelectedObject]);
 
   const setFontFamily = useCallback((family: string) => {
-    const weights = getAvailableFontWeights(family, applicationFontEntries);
+    const weights = getSelectableFontWeights(family, applicationFontEntries);
     const weight = nearestAvailableFontWeight(currentFontWeight, weights);
-    const patch = { fontFamily: family, fontWeight: weight, bold: weight >= 700 };
+    const face = resolveFontFace(weight, getAvailableFontWeights(family, applicationFontEntries));
+    const patch = {
+      fontFamily: family,
+      fontWeight: weight,
+      fontFaceWeight: face.faceWeight,
+      syntheticStrokeEm: face.strokeEm,
+      bold: weight >= 700,
+    };
     if (selectedObject?.type === 'text') {
       updateSelectedObject(patch);
     } else {
@@ -1356,7 +1376,7 @@ export function EditCanvasPage() {
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.15s ease',
                   background: isActive ? 'var(--primary-container)' : 'transparent',
-                  color: isActive ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
+                  color: isActive ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)',
                   opacity: pages.length === 0 ? 0.4 : 1,
                 }}
                 onMouseEnter={(e) => {
@@ -1495,6 +1515,7 @@ export function EditCanvasPage() {
           <input
             id="edit-output-name"
             type="text"
+            aria-label="Output filename"
             value={outputFilename}
             onChange={(e) => setOutputFilename(e.target.value)}
             placeholder="edited_document"
@@ -1522,8 +1543,8 @@ export function EditCanvasPage() {
           style={{
             height: '32px',
             padding: '0 14px',
-            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary-container)',
-            color: 'var(--canvas-on-accent)',
+            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary)',
+            color: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-text-muted)' : 'var(--canvas-on-accent)',
             borderRadius: '6px',
             fontWeight: 600,
             fontSize: '13px',
@@ -1550,22 +1571,13 @@ export function EditCanvasPage() {
         </div>
       </div>
 
-      {/* ── Contextual Controls Toolbar Sub-Bar (Row 2, Height: 40px) ─────────── */}
+      {/* ── Workspace: contextual controls in a left panel, canvas to the right ── */}
+      <div className="canvas-main">
       <div
-        className="canvas-contextual-bar"
-        style={{
-          minHeight: '40px',
-          background: showContextualPanel ? 'var(--canvas-panel-bg)' : 'transparent',
-          borderBottom: showContextualPanel ? '1px solid var(--canvas-topbar-border)' : '1px solid transparent',
-          padding: '4px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '4px 16px',
-          zIndex: 15,
-          flexShrink: 0,
-          pointerEvents: showContextualPanel ? 'auto' : 'none',
-        }}
+        className="canvas-side-panel"
+        role="region"
+        aria-label="Tool options"
+        hidden={!showContextualPanel}
       >
         {showContextualPanel && (
           <>
@@ -1581,7 +1593,7 @@ export function EditCanvasPage() {
 
             {/* LAYERING CONTROLS (Only when object is selected) */}
             {selectedObject && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              <div className="canvas-layer-group" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                 <button
                   onClick={() => handleLayering('front')}
                   title="Bring to Front (Ctrl+Shift+])"
@@ -1640,6 +1652,7 @@ export function EditCanvasPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Font</span>
                   <select
+                    aria-label="Font family"
                     value={currentFontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
                     style={{ background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
@@ -1671,6 +1684,7 @@ export function EditCanvasPage() {
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Size</span>
                   <input
                     type="number"
+                    aria-label="Font size"
                     min="1"
                     step={0.5}
                     value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
@@ -1736,6 +1750,7 @@ export function EditCanvasPage() {
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title="Rotation Angle">Rot°</span>
                   <input
                     type="number"
+                    aria-label="Rotation angle in degrees"
                     step={1}
                     value={selectedObject ? (Math.round((selectedObject.angle || 0) * 10) / 10) : 0}
                     onChange={(e) => {
@@ -1763,7 +1778,7 @@ export function EditCanvasPage() {
                       background: currentFontWeight >= 700 ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)',
                       borderRadius: '4px',
-                      color: currentFontWeight >= 700 ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
+                      color: currentFontWeight >= 700 ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1787,7 +1802,7 @@ export function EditCanvasPage() {
                       background: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)',
                       borderRadius: '4px',
-                      color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)',
+                      color: (selectedObject ? (selectedObject as TextObject).italic : defaultTextProps.italic) ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1805,7 +1820,7 @@ export function EditCanvasPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignLeft size={14} />
@@ -1820,7 +1835,7 @@ export function EditCanvasPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignCenter size={14} />
@@ -1835,7 +1850,7 @@ export function EditCanvasPage() {
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
                       border: '1px solid var(--canvas-input-border)', borderRadius: '4px',
-                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--canvas-on-accent)' : 'var(--canvas-text-muted)', cursor: 'pointer'
+                    color: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)', cursor: 'pointer'
                     }}
                   >
                     <AlignRight size={14} />
@@ -1854,6 +1869,7 @@ export function EditCanvasPage() {
                       }
                     }}
                     title="Text Color"
+                    aria-label="Text color"
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
@@ -1893,6 +1909,7 @@ export function EditCanvasPage() {
                       }
                     }}
                     title="Stroke Color"
+                    aria-label="Stroke color"
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px', opacity: (selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) === 0 ? 0.4 : 1 }}
                   />
                 </div>
@@ -1900,6 +1917,7 @@ export function EditCanvasPage() {
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
                   <input
                     type="range"
+                    aria-label="Outline width"
                     min="0"
                     max="20"
                     value={selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}
@@ -1930,6 +1948,7 @@ export function EditCanvasPage() {
                       }
                     }}
                     title="Fill Color"
+                    aria-label="Fill color"
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
@@ -1937,6 +1956,7 @@ export function EditCanvasPage() {
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Opacity</span>
                   <input
                     type="range"
+                    aria-label="Fill opacity"
                     min="0"
                     max="100"
                     value={selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}
@@ -1974,6 +1994,7 @@ export function EditCanvasPage() {
                       }
                     }}
                     title="Stroke Color"
+                    aria-label="Stroke color"
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
@@ -1981,6 +2002,7 @@ export function EditCanvasPage() {
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
                   <input
                     type="range"
+                    aria-label="Stroke width"
                     min="1"
                     max="20"
                     value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}
@@ -2008,10 +2030,13 @@ export function EditCanvasPage() {
       <div
         ref={canvasViewportRef}
         className="canvas-workspace"
+        role="region"
+        aria-label="Document canvas"
+        tabIndex={0}
         style={{
           flex: 1,
           minHeight: 0,
-          width: '100%',
+          minWidth: 0,
           overflowY: 'auto',
           overflowX: 'auto',
           padding: '24px',
@@ -2118,6 +2143,7 @@ export function EditCanvasPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* ── Context Menu ──────────────────────────────────────────────────────── */}

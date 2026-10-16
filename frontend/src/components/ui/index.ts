@@ -1,3 +1,11 @@
 export { PageHeader } from './PageHeader';
 export { StateView } from './StateView';
 export { ChangeFileControls } from './ChangeFileControls';
+export { PasswordField } from './PasswordField';
+export { Tabs } from './Tabs';
+export type { TabItem } from './Tabs';
+export { SegmentedControl } from './SegmentedControl';
+export type { SegmentOption } from './SegmentedControl';
+export { RadioCardGroup } from './RadioCardGroup';
+export type { RadioCardOption } from './RadioCardGroup';
+export { RangeField } from './RangeField';

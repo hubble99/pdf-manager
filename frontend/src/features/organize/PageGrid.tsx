@@ -184,7 +184,7 @@ export function PageGrid({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={keys} strategy={rectSortingStrategy}>
-        <div className="organize-grid" role="list">
+        <div className="organize-grid" role="group" aria-label="Page grid">
           {pages.map((page, index) => (
             <PageCell
               key={page.key}

@@ -13,7 +13,7 @@ import {
 import { Filename } from '../components/Filename';
 import { PageThumbGrid } from '../components/preview';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
-import { PageHeader } from '../components/ui';
+import { PageHeader, RadioCardGroup, SegmentedControl, Tabs } from '../components/ui';
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
 import { DPI_OPTIONS, FORMAT_OPTIONS, PAGE_SIZE_OPTIONS, formatBytes } from '../features/converter/options';
@@ -192,26 +192,21 @@ export function ConverterPage() {
         description={TAB_COPY[activeTab].description}
       />
 
-      <div className="tabs" role="tablist" aria-label="Conversion direction">
-        {(['pdf', 'images'] as const).map((tab) => {
+      <Tabs
+        ariaLabel="Conversion direction"
+        value={activeTab}
+        onChange={(tab) => { converter.dismissBatchError(); setChosenTab(tab); }}
+        items={(['pdf', 'images'] as const).map((tab) => {
           const locked = kind !== 'empty' && kind !== tab;
-          return (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              id={`converter-tab-${tab}`}
-              aria-selected={activeTab === tab}
-              className={`tab${activeTab === tab ? ' active' : ''}`}
-              onClick={() => { converter.dismissBatchError(); setChosenTab(tab); }}
-              disabled={locked || isConverting}
-              title={locked ? 'Clear the current files to switch direction' : undefined}
-            >
-              {TAB_COPY[tab].label}
-            </button>
-          );
+          return {
+            value: tab,
+            id: `converter-tab-${tab}`,
+            label: TAB_COPY[tab].label,
+            disabled: locked || isConverting,
+            title: locked ? 'Clear the current files to switch direction' : undefined,
+          };
         })}
-      </div>
+      />
 
       <div className="page-body">
         {fileInput}
@@ -385,39 +380,25 @@ export function ConverterPage() {
                 <div className="card-body">
                   <div className="setting-row">
                     <span className="setting-label" id="converter-format-label">Format</span>
-                    <div className="seg" role="group" aria-labelledby="converter-format-label">
-                      {FORMAT_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          id={`converter-format-${option.value}`}
-                          aria-pressed={format === option.value}
-                          className={format === option.value ? 'active' : ''}
-                          disabled={isConverting}
-                          onClick={() => converter.setFormat(option.value)}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      ariaLabelledBy="converter-format-label"
+                      idPrefix="converter-format"
+                      options={FORMAT_OPTIONS}
+                      value={format}
+                      disabled={isConverting}
+                      onChange={converter.setFormat}
+                    />
                   </div>
                   <div className="setting-row">
                     <span className="setting-label" id="converter-dpi-label">Resolution</span>
-                    <div className="seg" role="group" aria-labelledby="converter-dpi-label">
-                      {DPI_OPTIONS.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          id={`converter-dpi-${option.value}`}
-                          aria-pressed={dpi === option.value}
-                          className={dpi === option.value ? 'active' : ''}
-                          disabled={isConverting}
-                          onClick={() => converter.setDpi(option.value)}
-                        >
-                          {option.value}
-                        </button>
-                      ))}
-                    </div>
+                    <SegmentedControl
+                      ariaLabelledBy="converter-dpi-label"
+                      idPrefix="converter-dpi"
+                      options={DPI_OPTIONS.map((option) => ({ value: option.value, label: option.value }))}
+                      value={dpi}
+                      disabled={isConverting}
+                      onChange={converter.setDpi}
+                    />
                     <span className="setting-unit">DPI</span>
                   </div>
                   <small className="hint">
@@ -533,29 +514,20 @@ export function ConverterPage() {
                 </span>
               </div>
               <div className="card-body">
-                <div className="opt-grid" role="radiogroup" aria-labelledby="converter-page-size-label">
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <label
-                      key={option.value}
-                      htmlFor={`converter-size-${option.value}`}
-                      className={`radio-card${pageSize === option.value ? ' active' : ''}${option.value === 'match_image' ? ' radio-card--wide' : ''}`}
-                    >
-                      <input
-                        id={`converter-size-${option.value}`}
-                        type="radio"
-                        name="converter-page-size"
-                        value={option.value}
-                        checked={pageSize === option.value}
-                        onChange={() => converter.setPageSize(option.value)}
-                        disabled={isConverting}
-                      />
-                      <span className="radio-copy">
-                        <span className="radio-title">{option.label}</span>
-                        <span className="radio-desc">{option.desc}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                <RadioCardGroup
+                  labelledBy="converter-page-size-label"
+                  name="converter-page-size"
+                  idPrefix="converter-size"
+                  options={PAGE_SIZE_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                    desc: option.desc,
+                    wide: option.value === 'match_image',
+                  }))}
+                  value={pageSize}
+                  disabled={isConverting}
+                  onChange={converter.setPageSize}
+                />
                 <div className="field">
                   <label htmlFor="converter-image-output">Output Filename</label>
                   <input

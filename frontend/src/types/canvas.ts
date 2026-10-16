@@ -29,6 +29,10 @@ export interface TextObject extends BaseCanvasObject {
   fontSize: number;
   letterSpacing?: number;
   fontWeight?: number;
+  /** Real face used to draw `fontWeight`; differs when the weight is synthesized. */
+  fontFaceWeight?: number;
+  /** Outline thickening (em) that synthesizes an in-between weight. */
+  syntheticStrokeEm?: number;
   bold: boolean;
   italic: boolean;
   color: string;
@@ -75,6 +79,8 @@ export interface DefaultTextProps {
   fontSize: number;
   letterSpacing: number;
   fontWeight: number;
+  fontFaceWeight?: number;
+  syntheticStrokeEm?: number;
   bold: boolean;
   italic: boolean;
   color: string;

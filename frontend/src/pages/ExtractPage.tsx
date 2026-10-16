@@ -226,7 +226,7 @@ export function ExtractPage() {
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf"
-                style={{ display: 'none' }}
+                hidden
                 onChange={handleFileInput}
                 id="extract-file-input"
               />

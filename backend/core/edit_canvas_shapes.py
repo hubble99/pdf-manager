@@ -374,8 +374,11 @@ def _text_clusters(text: str) -> list[str]:
 
 
 def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float, color) -> None:
-    raw_weight = item.get("fontWeight")
+    # An in-between weight (450/500/550) is drawn with the nearest lighter real face
+    # plus a thin outline; the frontend sends both the face and the outline amount.
+    raw_weight = item.get("fontFaceWeight") or item.get("fontWeight")
     font_weight = int(raw_weight) if raw_weight is not None else None
+    synthetic_em = max(0.0, min(0.1, float(item.get("syntheticStrokeEm") or 0)))
     font = load_font(
         item.get("fontFamily", "Arial"),
         item.get("bold", False),
@@ -392,6 +395,7 @@ def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float
     align = item.get("textAlign", "left")
     line_height = font_size * float(item.get("lineHeight", 1.16))
     writer = fitz.TextWriter(page.rect)
+    operations: list[tuple[fitz.Point, str]] = []
     baseline = y + font_size * font.ascender
     for index, line in enumerate(lines):
         offset = 0.0
@@ -407,26 +411,28 @@ def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float
             offset = max(0.0, width - line_width)
         position = fitz.Point(x + offset, baseline + index * line_height)
         if letter_spacing == 0 or len(clusters) <= 1:
-            writer.append(position, line, font=font, fontsize=font_size)
+            operations.append((position, line))
         else:
             cursor_x = position.x
             for cluster in clusters:
-                writer.append(
-                    fitz.Point(cursor_x, position.y),
-                    cluster,
-                    font=font,
-                    fontsize=font_size,
-                )
+                operations.append((fitz.Point(cursor_x, position.y), cluster))
                 cursor_x += font.text_length(cluster, fontsize=font_size) + tracking_gap
     transform_matrix = item.get("transformMatrix")
     if transform_matrix and len(transform_matrix) == 6:
         angle = math.degrees(math.atan2(float(transform_matrix[1]), float(transform_matrix[0])))
     else:
         angle = float(item.get("angle", 0) or 0)
-    # TextWriter does not isolate existing page graphics state like Shape.commit
-    # does. Source transforms (including remove_rotation's matrix) must not
-    # leak into the new text's coordinates or glyph orientation.
+    opacity = max(0.0, min(1.0, float(item.get("opacity", 1))))
+    morph = (fitz.Point(x, y), fitz.Matrix(angle)) if angle else None
+    # Neither TextWriter nor insert_text isolates existing page graphics state. Source
+    # transforms (including remove_rotation's matrix) must not leak into the new
+    # text's coordinates or glyph orientation.
     page.wrap_contents()
+    if synthetic_em > 0:
+        _draw_thickened_text(page, font, operations, font_size, synthetic_em, color, opacity, morph)
+        return
+    for position, text in operations:
+        writer.append(position, text, font=font, fontsize=font_size)
     writer.write_text(
         page,
         color=color,
@@ -434,3 +440,36 @@ def draw_native_text(page: fitz.Page, item: dict, scale_x: float, scale_y: float
         morph=(fitz.Point(x, y), fitz.Matrix(angle)) if angle else None,
         overlay=True,
     )
+
+
+def _draw_thickened_text(
+    page: fitz.Page,
+    font: fitz.Font,
+    operations: list[tuple[fitz.Point, str]],
+    font_size: float,
+    stroke_em: float,
+    color,
+    opacity: float,
+    morph,
+) -> None:
+    """Draw real, selectable text in fill-and-stroke mode to synthesize an in-between weight."""
+    if font.buffer:
+        fontname = f"SW{abs(hash(font.name)) % 100000}"
+        page.insert_font(fontname=fontname, fontbuffer=font.buffer)
+    else:
+        fontname = "helv"
+    for position, text in operations:
+        page.insert_text(
+            position,
+            text,
+            fontsize=font_size,
+            fontname=fontname,
+            color=color,
+            fill=color,
+            render_mode=2,
+            border_width=stroke_em,
+            fill_opacity=opacity,
+            stroke_opacity=opacity,
+            morph=morph,
+            overlay=True,
+        )

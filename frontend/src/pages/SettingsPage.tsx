@@ -265,10 +265,9 @@ export function SettingsPage() {
                     </span>
                     <button
                       type="button"
-                      className="btn btn-ghost btn-icon btn-sm"
+                      className="btn btn-ghost btn-icon btn-sm text-error"
                       onClick={() => handleRemoveHistory(entry.id)}
                       aria-label={`Remove ${entry.filename} from the list`}
-                      style={{ color: 'var(--error)' }}
                     >
                       <X size={14} />
                     </button>

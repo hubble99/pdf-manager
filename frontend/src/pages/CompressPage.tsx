@@ -12,7 +12,7 @@ import {
 import apiClient from '../api/client';
 import { API_BASE_URL } from '../api/config';
 import { Filename } from '../components/Filename';
-import { ChangeFileControls, PageHeader } from '../components/ui';
+import { ChangeFileControls, PageHeader, RangeField, SegmentedControl } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
@@ -217,7 +217,7 @@ export function CompressPage() {
                   ref={fileInputRef}
                   type="file"
                   accept=".pdf"
-                  style={{ display: 'none' }}
+                  hidden
                   onChange={handleFileInput}
                   id="compress-file-input"
                 />
@@ -264,36 +264,31 @@ export function CompressPage() {
                   </span>
                 </div>
                 <div className="card-body">
-                  <input
+                  <RangeField
                     id="compress-quality-slider"
-                    className="range"
-                    type="range"
                     min={10}
                     max={95}
                     step={5}
                     value={quality}
                     disabled={isLoading}
-                    onChange={(e) => setQuality(Number(e.target.value))}
+                    valueText={`${qualityLabel(quality)}, ${quality}`}
+                    onChange={setQuality}
+                    scale={(
+                      <>
+                        <span>Smaller file</span>
+                        <b>{quality}</b>
+                        <span>Better quality</span>
+                      </>
+                    )}
                   />
-                  <div className="range-scale">
-                    <span>Smaller file</span>
-                    <b>{quality}</b>
-                    <span>Better quality</span>
-                  </div>
-                  <div className="seg seg--equal" role="group" aria-label="Quality preset">
-                    {preset.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        aria-pressed={quality === item.value}
-                        className={quality === item.value ? 'active' : ''}
-                        disabled={isLoading}
-                        onClick={() => setQuality(item.value)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
+                  <SegmentedControl
+                    equal
+                    ariaLabel="Quality preset"
+                    options={preset}
+                    value={quality}
+                    disabled={isLoading}
+                    onChange={setQuality}
+                  />
                   <small className="hint">
                     {quality < 50
                       ? 'Aggressive compression. Smallest file, some image quality loss expected.'
@@ -385,7 +380,7 @@ export function CompressPage() {
                   <div className="status-card-copy">
                     <b>Compressing… {progress.percent}%</b>
                     <small>Page {progress.page} of {progress.total}</small>
-                    <div className="size-bar" style={{ marginTop: 8 }}>
+                    <div className="size-bar size-bar--spaced">
                       <i style={{ width: `${progress.percent}%` }} />
                     </div>
                   </div>

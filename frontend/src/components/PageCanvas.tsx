@@ -312,6 +312,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             fontSize: bridge.defaultTextProps.fontSize,
             letterSpacing: bridge.defaultTextProps.letterSpacing,
             fontWeight: bridge.defaultTextProps.fontWeight,
+            fontFaceWeight: bridge.defaultTextProps.fontFaceWeight,
+            syntheticStrokeEm: bridge.defaultTextProps.syntheticStrokeEm,
             bold: bridge.defaultTextProps.bold,
             italic: bridge.defaultTextProps.italic,
             color: bridge.defaultTextProps.color,
@@ -870,7 +872,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       if (finalText === EMPTY_TEXT_SENTINEL) {
         const textObject = currentPage.objects.find(o => o.id === target.id) as TextObject | undefined;
         const presentation = getTextCanvasPresentation(finalText, textObject?.color || DEFAULT_STROKE_COLOR);
-        target.set({ text: presentation.text, fill: presentation.fill });
+        target.set({ text: presentation.text, fill: presentation.fill, ...(target.strokeWidth > 0 ? { stroke: presentation.fill } : {}) });
         canvas.requestRenderAll();
       }
     });
@@ -1017,7 +1019,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         if (obj.type === 'text') {
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
-          const fontWeight = textObj.fontWeight ?? (textObj.bold ? 700 : 400);
+          const fontWeight = textObj.fontFaceWeight ?? textObj.fontWeight ?? (textObj.bold ? 700 : 400);
+          const syntheticStroke = textObj.syntheticStrokeEm ? textObj.syntheticStrokeEm * textObj.fontSize : 0;
           const safeWidth = textObj.width || DEFAULT_TEXT_WIDTH;
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           
@@ -1031,6 +1034,10 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             fill: presentation.fill,
             fontStyle: fontStyle as any,
             fontWeight,
+            stroke: syntheticStroke > 0 ? presentation.fill : null,
+            strokeWidth: syntheticStroke,
+            strokeUniform: true,
+            paintFirst: 'stroke',
             textAlign: textObj.textAlign || 'left',
             editable: true,
             editingBorderColor: activeColors.selectionBorder,
@@ -1214,7 +1221,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         if (obj.type === 'text') {
           const textObj = obj as TextObject;
           const fontStyle = textObj.italic ? 'italic' : 'normal';
-          const fontWeight = textObj.fontWeight ?? (textObj.bold ? 700 : 400);
+          const fontWeight = textObj.fontFaceWeight ?? textObj.fontWeight ?? (textObj.bold ? 700 : 400);
+          const syntheticStroke = textObj.syntheticStrokeEm ? textObj.syntheticStrokeEm * textObj.fontSize : 0;
           const presentation = getTextCanvasPresentation(textObj.text, textObj.color);
           fabricObj.set({
             text: presentation.text,
@@ -1225,6 +1233,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             fill: presentation.fill,
             fontStyle: fontStyle as any,
             fontWeight,
+            stroke: syntheticStroke > 0 ? presentation.fill : null,
+            strokeWidth: syntheticStroke,
             textAlign: textObj.textAlign || 'left',
           });
         } else if (obj.type === 'rect' || obj.type === 'circle') {

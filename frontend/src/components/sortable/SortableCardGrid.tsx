@@ -26,6 +26,8 @@ export interface SortableCardGridProps {
   /** Prefix for generated element ids, e.g. "merge". */
   idPrefix: string;
   ariaLabel: string;
+  /** Smaller cards, for long lists. */
+  compact?: boolean;
 }
 
 function Card({
@@ -138,11 +140,11 @@ function Card({
  * knows nothing about pages, so any list of previews can sit on top of it.
  */
 export function SortableCardGrid({
-  cards, onReorder, onRemove, disabled = false, idPrefix, ariaLabel,
+  cards, onReorder, onRemove, disabled = false, idPrefix, ariaLabel, compact = false,
 }: SortableCardGridProps) {
   return (
     <SortableArea ids={cards.map((card) => card.id)} onReorder={onReorder} layout="grid">
-      <ul className="sort-grid" aria-label={ariaLabel}>
+      <ul className={`sort-grid${compact ? ' sort-grid--compact' : ''}`} aria-label={ariaLabel}>
         {cards.map((card, index) => (
           <Card
             key={card.id}

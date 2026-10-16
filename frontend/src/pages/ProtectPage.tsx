@@ -2,8 +2,6 @@ import { useCallback, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   CheckCircle,
-  Eye,
-  EyeOff,
   FolderOpen,
   Lock,
   LockOpen,
@@ -15,7 +13,7 @@ import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { addHistoryEntry } from '../utils/historyStore';
-import { ChangeFileControls, PageHeader } from '../components/ui';
+import { ChangeFileControls, PageHeader, PasswordField, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
@@ -51,14 +49,11 @@ export function ProtectPage() {
   
   // Form State
   const [userPw, setUserPw] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
   const [ownerPw, setOwnerPw] = useState('');
   const [removePw, setRemovePw] = useState('');
   const [outputName, setOutputName] = useState('');
   
-  const [showUserPw, setShowUserPw] = useState(false);
-  const [showOwnerPw, setShowOwnerPw] = useState(false);
-  const [showRemovePw, setShowRemovePw] = useState(false);
-
   const [allowPrint, setAllowPrint] = useState(true);
   const [allowCopy, setAllowCopy] = useState(true);
   const [allowModify, setAllowModify] = useState(true);
@@ -81,6 +76,7 @@ export function ProtectPage() {
 
       // Reset form
       setUserPw('');
+      setConfirmPw('');
       setOwnerPw('');
       setRemovePw('');
       setOutputName('');
@@ -109,6 +105,7 @@ export function ProtectPage() {
   const handleProtect = async () => {
     if (!file) { showToast({ type: 'error', title: 'No file', message: 'Please select a PDF file first.' }); return; }
     if (!userPw) { showToast({ type: 'error', title: 'No password', message: 'User password is required to encrypt the document.' }); return; }
+    if (userPw !== confirmPw) { showToast({ type: 'error', title: 'Passwords do not match', message: 'Re-enter the password in both fields.' }); return; }
     
     setIsLoading(true);
     setResult(null);
@@ -222,30 +219,15 @@ export function ProtectPage() {
         description="Add or remove AES-256 password protection from PDF files"
       />
 
-      <div className="tabs" role="tablist" aria-label="Protect mode">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'add'}
-          className={`tab${mode === 'add' ? ' active' : ''}`}
-          onClick={() => { setMode('add'); setResult(null); }}
-          id="protect-tab-add"
-        >
-          <Lock size={15} />
-          Add Password
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'remove'}
-          className={`tab${mode === 'remove' ? ' active' : ''}`}
-          onClick={() => { setMode('remove'); setResult(null); }}
-          id="protect-tab-remove"
-        >
-          <LockOpen size={15} />
-          Remove Password
-        </button>
-      </div>
+      <Tabs
+        ariaLabel="Protect mode"
+        value={mode}
+        onChange={(next) => { setMode(next); setResult(null); }}
+        items={[
+          { value: 'add', id: 'protect-tab-add', label: 'Add Password', icon: <Lock size={15} aria-hidden="true" /> },
+          { value: 'remove', id: 'protect-tab-remove', label: 'Remove Password', icon: <LockOpen size={15} aria-hidden="true" /> },
+        ]}
+      />
 
       {/* Body */}
       <div className="page-body">
@@ -268,7 +250,7 @@ export function ProtectPage() {
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf"
-                style={{ display: 'none' }}
+                hidden
                 onChange={handleFileInput}
               />
               <Upload className="drop-zone-icon" />
@@ -278,11 +260,11 @@ export function ProtectPage() {
               <p className="drop-zone-sub">or click to browse · Single PDF</p>
             </div>
           ) : (
-            <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="card file-card">
               <PdfThumbnail file={file} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="grow">
                 <Filename name={file.name} className="file-item-name" />
-                <div className="file-item-meta" style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
+                <div className="file-item-meta file-card-meta">
                   <span>{formatBytes(file.size)}</span>
                 </div>
               </div>
@@ -299,50 +281,35 @@ export function ProtectPage() {
           {/* ADD PASSWORD form */}
           {file && mode === 'add' && (
             <div className="card">
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="card-title-row">
                 <Lock size={16} color="var(--accent)" /> Encryption Settings
               </div>
               
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label className="input-label">User Password (Required to Open)</label>
-                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                    <input
-                      className="input"
-                      type={showUserPw ? 'text' : 'password'}
-                      value={userPw}
-                      onChange={(e) => setUserPw(e.target.value)}
-                      placeholder="Password to open document"
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button 
-                      onClick={() => setShowUserPw(!showUserPw)}
-                      style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--on-surface-variant)', cursor: 'pointer' }}
-                    >
-                      {showUserPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="input-label">Owner Password (Optional, Required to Edit)</label>
-                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                    <input
-                      className="input"
-                      type={showOwnerPw ? 'text' : 'password'}
-                      value={ownerPw}
-                      onChange={(e) => setOwnerPw(e.target.value)}
-                      placeholder="Password to restrict permissions"
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button 
-                      onClick={() => setShowOwnerPw(!showOwnerPw)}
-                      style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--on-surface-variant)', cursor: 'pointer' }}
-                    >
-                      {showOwnerPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
-                <div style={{ marginTop: 8 }}>
+              <div className="stack-16">
+                <PasswordField
+                  id="protect-user-pw"
+                  label="User Password (Required to Open)"
+                  value={userPw}
+                  onChange={setUserPw}
+                  placeholder="Password to open document"
+                />
+                <PasswordField
+                  id="protect-confirm-pw"
+                  label="Confirm Password"
+                  value={confirmPw}
+                  onChange={setConfirmPw}
+                  placeholder="Re-enter the password"
+                  error={confirmPw && userPw !== confirmPw ? 'Passwords do not match.' : undefined}
+                />
+                <PasswordField
+                  id="protect-owner-pw"
+                  label="Owner Password (Optional, Required to Edit)"
+                  value={ownerPw}
+                  onChange={setOwnerPw}
+                  placeholder="Password to restrict permissions"
+                  autoComplete="new-password"
+                />
+                <div className="field-gap">
                   <label className="input-label">Output Filename (optional)</label>
                   <input
                     className="input"
@@ -352,23 +319,23 @@ export function ProtectPage() {
                     placeholder={`${fileStem}_protected`}
                   />
                 </div>
-                <div style={{ marginTop: 8 }}>
-                  <label className="input-label" style={{ marginBottom: 12 }}>Permissions (require Owner Password to change)</label>
-                  <div style={{ display: 'flex', gap: 24 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--on-surface)' }}>
-                      <input type="checkbox" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                <div className="field-gap">
+                  <label className="input-label input-label--spaced">Permissions (require Owner Password to change)</label>
+                  <div className="check-row-group">
+                    <label className="check-row">
+                      <input type="checkbox" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
                       Allow Printing
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--on-surface)' }}>
-                      <input type="checkbox" checked={allowCopy} onChange={(e) => setAllowCopy(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                    <label className="check-row">
+                      <input type="checkbox" checked={allowCopy} onChange={(e) => setAllowCopy(e.target.checked)} />
                       Allow Copying
                     </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--on-surface)' }}>
-                      <input type="checkbox" checked={allowModify} onChange={(e) => setAllowModify(e.target.checked)} style={{ accentColor: 'var(--accent)' }} />
+                    <label className="check-row">
+                      <input type="checkbox" checked={allowModify} onChange={(e) => setAllowModify(e.target.checked)} />
                       Allow Modifying
                     </label>
                   </div>
-                  <p className="text-muted text-body-sm" style={{ marginTop: 10 }}>
+                  <p className="text-muted text-body-sm hint-gap">
                     If an owner password is not set, some PDF readers may ignore these restrictions.
                   </p>
                 </div>
@@ -379,49 +346,31 @@ export function ProtectPage() {
           {/* REMOVE PASSWORD form */}
           {file && mode === 'remove' && (
             <div className="card">
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="card-title-row">
                 <LockOpen size={16} color="var(--accent)" /> Remove Encryption
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label className="input-label">Current Password (to verify and unlock)</label>
-                  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                    <input
-                      className="input"
-                      type={showRemovePw ? 'text' : 'password'}
-                      value={removePw}
-                      onChange={(e) => setRemovePw(e.target.value)}
-                      placeholder="Enter existing PDF password"
-                      style={{ paddingRight: 40 }}
-                    />
-                    <button 
-                      onClick={() => setShowRemovePw(!showRemovePw)}
-                      style={{ position: 'absolute', right: 10, background: 'none', border: 'none', color: 'var(--on-surface-variant)', cursor: 'pointer' }}
-                    >
-                      {showRemovePw ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
+              <div className="stack-16">
+                <PasswordField
+                  id="protect-remove-pw"
+                  label="Current Password (to verify and unlock)"
+                  value={removePw}
+                  onChange={setRemovePw}
+                  placeholder="Enter existing PDF password"
+                  autoComplete="current-password"
+                />
               </div>
             </div>
           )}
 
           {/* Result */}
           {result && (
-            <div
-              className="card"
-              style={{
-                background: 'var(--success-container)',
-                border: '1px solid var(--success)',
-                display: 'flex', alignItems: 'center', gap: 16,
-              }}
-            >
-              <CheckCircle size={28} color="var(--success)" style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--success)', marginBottom: 4 }}>
+            <div className="card result-card" role="status">
+              <CheckCircle size={28} className="result-card-icon" />
+              <div className="grow">
+                <div className="result-card-title">
                   {result.mode === 'add' ? 'Download started — PDF encrypted' : 'Download started — Password removed'}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
+                <div className="result-card-meta">
                   <Filename name={result.filename} />
                 </div>
               </div>
@@ -438,7 +387,7 @@ export function ProtectPage() {
 
           {/* Actions */}
           {file && (
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            <div className="action-row">
               <button
                 className="btn btn-secondary"
                 onClick={clearFile}
@@ -450,12 +399,12 @@ export function ProtectPage() {
                 <button
                   className="btn btn-primary"
                   onClick={handleProtect}
-                  disabled={isLoading || !userPw}
+                  disabled={isLoading || !userPw || userPw !== confirmPw}
                   id="protect-add-btn"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      <Loader2 size={15} className="spin" />
                       Encrypting…
                     </>
                   ) : (
@@ -474,7 +423,7 @@ export function ProtectPage() {
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      <Loader2 size={15} className="spin" />
                       Removing…
                     </>
                   ) : (
