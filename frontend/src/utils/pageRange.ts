@@ -28,8 +28,3 @@ export const parsePageRange = (input: string, total: number): Set<number> => {
   }
   return result;
 };
-
-export const isPageInRange = (page: number, input: string, total: number): boolean => {
-  const parsed = parsePageRange(input, total);
-  return parsed.has(page);
-};

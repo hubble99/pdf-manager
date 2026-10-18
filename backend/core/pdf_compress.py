@@ -14,111 +14,12 @@ from typing import Generator
 import fitz  # PyMuPDF
 from PIL import Image
 
-from config import settings
-from utils.filename_utils import sanitize_filename
 
 logger = logging.getLogger("pdf_manager.core.compress")
 
 
 class CompressError(Exception):
     """Raised when compression cannot be completed."""
-
-
-def compress_pdf(input_path: Path, quality: int = 70, output_filename: str = "") -> dict:
-    """
-    Compress a PDF by re-encoding all embedded raster images at the given JPEG quality.
-
-    Strategy:
-    1. Open source PDF.
-    2. For each page, get all image xrefs.
-    3. Extract each image, re-encode with Pillow at `quality` (JPEG), replace xref stream.
-    4. Save to new output path.
-
-    Args:
-        input_path: Path to the source PDF.
-        quality: JPEG quality (10–95). Lower = smaller file.
-        output_filename: Desired output filename (without path). Falls back to input stem.
-
-    Returns:
-        dict with keys:
-          output_path, size_before, size_after, reduction_pct, pages_processed, images_processed
-
-    Raises:
-        CompressError: On validation or processing failure.
-    """
-    if not (10 <= quality <= 95):
-        raise CompressError(f"Quality must be between 10 and 95 (got {quality}).")
-
-    size_before = input_path.stat().st_size
-
-    try:
-        doc = fitz.open(str(input_path))
-    except Exception as e:
-        raise CompressError(f"Cannot open PDF: {e}")
-
-    if doc.is_encrypted:
-        doc.close()
-        raise CompressError("PDF is encrypted and cannot be compressed.")
-
-    images_processed = 0
-    processed_xrefs = set()
-
-    try:
-        for page_num in range(doc.page_count):
-            page = doc[page_num]
-            image_list = page.get_images(full=True)
-
-            for img_info in image_list:
-                xref = img_info[0]  # xref of the image
-                if xref in processed_xrefs:
-                    continue
-                processed_xrefs.add(xref)
-                
-                try:
-                    images_processed += _recompress_image(page, xref, quality)
-                except Exception as e:
-                    # Non-fatal: skip images that can't be re-encoded (e.g. masks, non-JPEG)
-                    logger.debug(f"Skipped xref {xref} on page {page_num + 1}: {e}")
-
-        # Build output path — use user's filename or derive from input stem
-        if output_filename:
-            out_name = sanitize_filename(output_filename, "pdf")
-        else:
-            out_name = sanitize_filename(f"{input_path.stem}_compressed", "pdf")
-        out_path = settings.OUTPUT_DIR / out_name
-
-        doc.save(
-            str(out_path),
-            garbage=4,
-            deflate=True,
-            clean=True,
-        )
-
-    finally:
-        doc.close()
-
-    size_after = out_path.stat().st_size
-    if size_after >= size_before:
-        import shutil
-        shutil.copy2(input_path, out_path)
-        size_after = size_before
-        reduction_pct = 0.0
-    else:
-        reduction_pct = round((1 - size_after / size_before) * 100, 1) if size_before > 0 else 0.0
-
-    logger.info(
-        f"Compress: {size_before:,} → {size_after:,} bytes "
-        f"({reduction_pct}% reduction, {images_processed} images re-encoded)"
-    )
-
-    return {
-        "output_path": out_path,
-        "size_before": size_before,
-        "size_after": size_after,
-        "reduction_pct": reduction_pct,
-        "pages_processed": doc.page_count if not doc.is_closed else 0,
-        "images_processed": images_processed,
-    }
 
 
 def compress_pdf_with_progress(

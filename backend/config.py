@@ -34,13 +34,6 @@ class Settings(BaseSettings):
     # App data directory — persistent app-managed assets (e.g. font library)
     APP_DATA_DIR: Path = Path.home() / "PDFManager" / "data"
 
-    # Donation (optional). The value may be an email address or an https link.
-    # While it is still the sentinel below, the interface reports it as a
-    # placeholder and disables the action that would open it. The backend holds
-    # it because the open action may only ever open the configured destination.
-    DONATION_PAYPAL_VALUE: str = ""
-    DONATION_PAYPAL_PLACEHOLDER: str = ""
-
     # Logging
     LOG_LEVEL: str = "INFO"
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { t } from '../i18n';
+import { APP_NAME } from '../config/app';
 
 interface SplashScreenProps {
   onReady: () => void;
@@ -130,7 +131,7 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
         </div>
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--on-surface)', letterSpacing: '-0.02em', margin: 0 }}>
-            {t('PDF Manager')}
+            {APP_NAME}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--on-surface-variant)', marginTop: 4 }}>
             {t('Professional PDF Toolkit')}

@@ -57,7 +57,7 @@ export const DONATION_TEXTS = {
   recipientLabel: t('Recipient'),
   recipientCheck: t('Before you pay, check that your payment app shows this name.'),
   safetyNote: t(
-    'PDF Manager never asks for payment details, or for donations by email or chat. The only official source is {host}.',
+    'Dokuwu never asks for payment details, or for donations by email or chat. The only official source is {host}.',
     { host: OFFICIAL_SOURCE_HOST },
   ),
   copy: t('Copy link'),

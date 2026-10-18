@@ -8,7 +8,7 @@
 import packageJson from '../../package.json';
 import { t } from '../i18n';
 
-export const APP_NAME = 'PDF Manager';
+export const APP_NAME = 'Dokuwu';
 
 /**
  * The version the interface reports.
@@ -23,7 +23,6 @@ export const APP_VERSION: string = packageJson.version;
 
 /** Public repository and feedback destinations shown on Settings > About. */
 export const APP_SOURCE_URL = 'https://github.com/hubble99/pdf-manager';
-export const APP_ISSUES_URL = 'https://github.com/hubble99/pdf-manager/issues';
 export const APP_TECH_STACK = 'Tauri 2, React 19, Vite, FastAPI, PyMuPDF';
 
 export const APP_TAGLINE = t('Local document tools that keep your files on your device.');

@@ -75,7 +75,7 @@ function BackendStatusBar({ status }: { status: BackendStatus }) {
         }}
       />
       {isChecking
-        ? t('Connecting to PDF Manager backend...')
+        ? t('Connecting to Dokuwu backend...')
         : t('Backend offline — Start the Python server: cd backend && .venv\\Scripts\\uvicorn main:app --reload')}
     </div>
   );

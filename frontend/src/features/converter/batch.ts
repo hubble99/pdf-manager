@@ -12,8 +12,6 @@ export interface ConverterImage {
 export type ConverterInput = File | ConverterImage[] | null;
 export type ConverterKind = 'empty' | 'pdf' | 'images';
 
-export const CONVERTER_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff';
-
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff']);
 const IMAGE_MIME_TYPES = new Set([
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp',

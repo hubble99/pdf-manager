@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "PDF Manager",
+  "productName": "Dokuwu",
   "version": "1.8.0",
   "identifier": "com.pdfmanager.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "PDF Manager — Professional PDF Toolkit",
+        "title": "Dokuwu — Professional PDF Toolkit",
         "width": 1280,
         "height": 800,
         "minWidth": 960,
@@ -48,9 +48,9 @@
         "installMode": "currentUser"
       }
     },
-    "copyright": "Copyright © 2026 PDF Manager",
+    "copyright": "Copyright © 2026 Dokuwu",
     "category": "Utility",
     "shortDescription": "Professional PDF management toolkit",
-    "longDescription": "PDF Manager is a professional desktop application for merging, splitting, compressing, converting, and editing PDF documents. Powered by PyMuPDF and FastAPI."
+    "longDescription": "Dokuwu is a professional desktop application for merging, splitting, compressing, converting, and editing PDF documents. Powered by PyMuPDF and FastAPI."
   }
 }

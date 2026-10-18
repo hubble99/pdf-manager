@@ -1,6 +1,6 @@
 """
-Compress PDF router — POST /api/v1/compress/
-Accepts 1 PDF + quality level, returns the compressed PDF with metadata.
+Compress PDF router — POST /api/v1/compress/stream, GET /api/v1/compress/download/{id}
+Accepts 1 PDF + quality level, streams progress, then serves the compressed PDF.
 """
 import json
 import logging
@@ -8,77 +8,14 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
-from core.pdf_compress import CompressError, compress_pdf, compress_pdf_with_progress
+from core.pdf_compress import compress_pdf_with_progress
 from config import settings
-from models.common import ErrorResponse
 from utils.file_utils import cleanup_temp_file, save_upload
 
 logger = logging.getLogger("pdf_manager.router.compress")
 router = APIRouter(prefix="/compress", tags=["compress"])
-
-
-@router.post("/")
-async def compress_pdf_endpoint(
-    file: UploadFile = File(...),
-    quality: int = Form(default=70),
-    output_filename: str = Form(default=""),
-):
-    """
-    Compress a PDF by re-encoding embedded images at lower JPEG quality.
-
-    - **file**: Source PDF
-    - **quality**: JPEG quality 10–95 (default 70). Lower = smaller file.
-
-    Returns the compressed PDF with size metadata in response headers.
-    """
-    temp_path: Path | None = None
-
-    try:
-        if not file.filename or not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(status_code=400, detail="File must be a PDF.")
-
-        if not (10 <= quality <= 95):
-            raise HTTPException(status_code=400, detail="Quality must be between 10 and 95.")
-
-        temp_path = await save_upload(file, subdir="compress")
-
-        try:
-            result = compress_pdf(temp_path, quality=quality, output_filename=output_filename)
-        except CompressError as e:
-            raise HTTPException(status_code=422, detail=str(e))
-
-        out_path: Path = result["output_path"]
-        safe_filename = out_path.name
-        return FileResponse(
-            path=str(out_path),
-            media_type="application/pdf",
-            filename=safe_filename,
-            headers={
-                "X-Size-Before": str(result["size_before"]),
-                "X-Size-After": str(result["size_after"]),
-                "X-Reduction-Pct": str(result["reduction_pct"]),
-                "X-Images-Processed": str(result["images_processed"]),
-                "X-Output-File": safe_filename,
-            },
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"compress error: {e}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content=ErrorResponse(
-                status="error",
-                message="Compression failed due to an unexpected error.",
-                detail=str(e),
-            ).model_dump(),
-        )
-    finally:
-        if temp_path:
-            cleanup_temp_file(temp_path)
 
 
 # In-memory dictionary to store download paths

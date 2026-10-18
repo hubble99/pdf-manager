@@ -337,8 +337,6 @@ def test_plain_family_still_resolves_when_bold_variant_missing(font_env):
 # 5.2 Font library endpoints
 # ---------------------------------------------------------------------------
 
-import json as _json
-
 from httpx import ASGITransport
 from httpx import AsyncClient
 

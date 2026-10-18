@@ -13,7 +13,7 @@ including documents whose contents should not be sent to an external service.
 
 ## Product Purpose
 
-PDF Manager provides focused local workflows for inspecting, transforming, and
+Dokuwu (formerly PDF Manager) provides focused local workflows for inspecting, transforming, and
 editing PDF documents. Success means completing routine document work clearly
 and reliably while preserving the user's source files.
 

@@ -294,14 +294,6 @@ class ContentCommitStore:
                 raise UnknownOutcome("Content store requires reconciliation")
             return self._read_checked()
 
-    def reconcile(self) -> SessionState:
-        with self._mutex:
-            if self._lock_file is None:
-                raise UnknownOutcome("Content store is closed")
-            state = self._read_checked()
-            self._blocked = False
-            return state
-
     def checkpoint_path(self) -> Path:
         with self._mutex:
             state = self.state()

@@ -7,7 +7,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from config import settings
-from core.pdf_compress import CompressError, compress_pdf
+from core.pdf_compress import CompressError, compress_pdf_with_progress
 
 
 @pytest.fixture(autouse=True)
@@ -15,6 +15,16 @@ def isolated_output(tmp_path, monkeypatch):
     output = tmp_path / "output"
     output.mkdir()
     monkeypatch.setattr(settings, "OUTPUT_DIR", output)
+
+
+def compress_pdf(source, quality=70, output_filename="out.pdf"):
+    output_path = source.parent / output_filename
+    steps = compress_pdf_with_progress(str(source), str(output_path), quality)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as done:
+            return {**done.value, "output_path": output_path}
 
 
 def noisy_rgb(size=(320, 320)):

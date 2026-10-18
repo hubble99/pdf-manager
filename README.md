@@ -1,11 +1,13 @@
-# PDF Manager
+# Dokuwu
+
+> Dokuwu was previously named PDF Manager. The repository and its URL keep the original name.
 
 ![Version](https://img.shields.io/badge/version-1.8.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Release](https://img.shields.io/github/downloads/hubble99/pdf-manager/total)
 <p align="center">
-  <img src="frontend/src-tauri/icons/128x128.png" alt="PDF Manager Logo" width="96"/>
+  <img src="frontend/src-tauri/icons/128x128.png" alt="Dokuwu Logo" width="96"/>
 </p>
 
 <p align="center">
@@ -32,8 +34,7 @@
 | 🖼️ **PDF to Image** | Export PDF pages to PNG, JPEG, or WEBP formats |
 | 📄 **Image to PDF** | Convert images (JPG/PNG/WEBP/BMP) into a single PDF |
 | 🔲 **QR & Barcode** | Generate QR codes and barcodes (Code128, EAN13, EAN8, Code39) |
-| 📌 **Insert Content** | Insert PDF pages or images into an existing PDF document |
-| 🗂️ **Organize Pages** | Rearrange, delete, or rotate PDF pages |
+| 🗂️ **Organize Pages** | Rearrange, rotate, mirror, delete, and insert pages visually |
 | ✏️ **Canvas PDF** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
 | 🖊️ **Edit Content** | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
 | 🔒 **Protect/Unlock PDF** | Protect PDFs with a password or remove existing passwords |
@@ -205,7 +206,7 @@ The output installers will be located at: `frontend/src-tauri/target/release/bun
 
 1. Download the latest published installer from the [Releases](../../releases) page.
 2. Follow the installation wizard.
-3. Launch the app from **Start Menu → PDF Manager**.
+3. Launch the app from **Start Menu → Dokuwu**.
 
 ### System Requirements
 - Windows 10 / 11 (64-bit)
@@ -216,14 +217,14 @@ The output installers will be located at: `frontend/src-tauri/target/release/bun
 
 ## ⚠️ Windows SmartScreen Warning
 
-When installing PDF Manager for the first time, Windows SmartScreen may show a warning saying *"Windows protected your PC"*. This is expected behavior for open-source apps without an expensive code signing certificate.
+When installing Dokuwu for the first time, Windows SmartScreen may show a warning saying *"Windows protected your PC"*. This is expected behavior for open-source apps without an expensive code signing certificate.
 
 **To proceed with installation:**
 1. Click **"More info"** on the SmartScreen dialog
 2. Click **"Run anyway"**
 3. Installation will proceed normally
 
-PDF Manager is fully open-source. You can review the entire source code in this repository.
+Dokuwu is fully open-source. You can review the entire source code in this repository.
 
 ---
 
@@ -247,7 +248,7 @@ npx tsc --noEmit
 
 ## 🎨 UI Design System
 
-PDF Manager follows a compact desktop-productivity design system: document
+Dokuwu follows a compact desktop-productivity design system: document
 preview remains primary, controls stay space-efficient, and shared patterns are
 preferred over feature-specific styling through shared tokens and components.
 

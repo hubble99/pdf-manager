@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
-from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, insert, pdf_info, settings as settings_router, organize, protect, preview, edit_canvas, edit_content, fonts
+from routers import merge, extract, compress, pdf_to_image, image_to_pdf, qr_barcode, pdf_info, settings as settings_router, organize, protect, preview, edit_canvas, edit_content, fonts
 from version import APP_VERSION
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -238,7 +238,6 @@ app.include_router(compress.router, prefix="/api/v1")
 app.include_router(pdf_to_image.router, prefix="/api/v1")
 app.include_router(image_to_pdf.router, prefix="/api/v1")
 app.include_router(qr_barcode.router, prefix="/api/v1")
-app.include_router(insert.router, prefix="/api/v1")
 app.include_router(pdf_info.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(organize.router, prefix="/api/v1")

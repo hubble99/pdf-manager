@@ -5,6 +5,11 @@
 > 1.8.0 is the first published release since 1.2.4, so it carries everything in
 > the 1.7.0 section below plus the changes here.
 
+**Renamed to Dokuwu and final cleanup before publishing**
+
+- **Name:** the application is now called **Dokuwu** (previously PDF Manager). The window title, splash screen, Home, About, installer name and Start Menu entry use the new name. The repository, its URL, the app's data folders and saved settings keep their existing names, so nothing stored on a device is lost.
+- **Cleanup:** removed code that nothing used, with no change in behaviour. This covers four unused preview components, leftover template images, unused CSS rules, and backend endpoints no screen called (the one-shot Compress and Organize requests, Insert, and the Donation settings endpoints). Compress with progress and the Organize workspace are unchanged.
+
 **UAT feedback (October 18)**
 
 - **Language:** Settings now has a Language option, English or Bahasa Indonesia. The choice is remembered on the device and applied by reloading the app once. Every screen, message, tooltip and accessibility label is translated; any text without a translation falls back to English. A test fails if a new string is added without an Indonesian entry.

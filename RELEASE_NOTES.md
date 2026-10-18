@@ -1,4 +1,4 @@
-# PDF Manager 1.8.0 — Release Notes
+# Dokuwu 1.8.0 — Release Notes
 
 **Release type:** cumulative. This release publishes everything built since
 1.2.4 together: **1.3.0 through 1.8.0**. Those versions were
@@ -11,6 +11,8 @@ files are never uploaded.
 ## Highlights
 
 ### 1.8.0 changes
+- **New name: Dokuwu.** The app was called PDF Manager before. Your settings and files stay where they were, and the Windows installer and Start Menu entry now use the new name.
+- **Leaner build.** Unused code, styles, images and backend endpoints were removed with no change in behaviour.
 - **Edit Content** now works on signature-stamped government PDFs, and hidden text layers (for example a letterhead image with a transparent text layer) are shown as view-only instead of being silently edited.
 - **PDF & Image** has two tabs, PDF to Images and Images to PDF, each with its own uploader.
 - **Merge PDF** folder mode shows page count and size per file, reports the merged count correctly, and offers Open Folder. Edit Content also offers Open Folder after saving.
@@ -64,7 +66,7 @@ before a file is opened. Its verified-edit workflow is unchanged.
 ### Donation
 The Donation page now ships the **real QRIS and PayPal codes**. It shows
 `Recipient: Ramadhoni Nasri` for each method and the reminder to check that your
-payment app shows that name, plus the note that PDF Manager never asks for
+payment app shows that name, plus the note that Dokuwu never asks for
 payment details or for donations by email or chat. The PayPal link opens in your
 system browser only, and the app collects no card, account, or credential data.
 

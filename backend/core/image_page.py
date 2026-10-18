@@ -4,11 +4,6 @@ The workspace inserts an image at its own size, with no fitting to a standard
 page, so a rotated image's page follows the rotated image's dimensions. That
 matches the existing "original image size" behaviour of the image-to-PDF
 converter, and keeps one pixel equal to one PDF point.
-
-``core/insert/image_inserter.py`` has a similar preparation step inside a larger
-routine that fits the image onto a reference page; this module deliberately does
-not reuse that logic because the sizing rule differs. The duplication is scoped
-to this one function and is recorded in the change design.
 """
 from __future__ import annotations
 

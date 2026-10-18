@@ -117,10 +117,6 @@ class ContentWorkerAdapter:
         return b"".join(self._stderr_tail).decode("utf-8", "replace")
 
     @property
-    def process_id(self) -> int | None:
-        return self._process.pid if self._process is not None else None
-
-    @property
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 

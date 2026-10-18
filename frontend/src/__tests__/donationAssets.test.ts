@@ -35,7 +35,7 @@ describe('donation data and assets', () => {
 
   it('states the required payment-safety guidance', () => {
     expect(DONATION_TEXTS.safetyNote).toBe(
-      'PDF Manager never asks for payment details, or for donations by email or '
+      'Dokuwu never asks for payment details, or for donations by email or '
       + 'chat. The only official source is github.com/hubble99/pdf-manager.',
     );
   });
