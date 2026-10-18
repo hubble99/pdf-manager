@@ -179,7 +179,7 @@ function LazyPageContainer({
         }}
       >
         <Loader2 className="animate-spin" size={24} />
-        <span>Loading Page...</span>
+        <span>{t('Loading Page...')}</span>
       </div>
     );
   }
@@ -188,6 +188,7 @@ function LazyPageContainer({
 }
 
 import { PageCanvas } from '../components/PageCanvas';
+import { t, tn } from '../i18n';
 
 // ── Main EditCanvasPage Component ────────────────────────────────────────────
 export function EditCanvasPage() {
@@ -249,8 +250,8 @@ export function EditCanvasPage() {
         if (cancelled) return;
         showToastRef.current({
           type: 'warning',
-          title: 'Font library unavailable',
-          message: error instanceof Error ? error.message : 'Could not load application fonts.',
+          title: t('Font library unavailable'),
+          message: error instanceof Error ? error.message : t('Could not load application fonts.'),
         });
       });
     return () => {
@@ -319,8 +320,8 @@ export function EditCanvasPage() {
         if (cancelled) return;
         showToastRef.current({
           type: 'warning',
-          title: 'Font face unavailable',
-          message: error instanceof Error ? error.message : 'The selected font face could not be loaded.',
+          title: t('Font face unavailable'),
+          message: error instanceof Error ? error.message : t('The selected font face could not be loaded.'),
         });
       });
     return () => {
@@ -656,14 +657,14 @@ export function EditCanvasPage() {
 
       showToast({
         type: 'success',
-        title: 'PDF Loaded Successfully',
-        message: `Loaded ${res.data.total} page(s) for editing.`,
+        title: t('PDF Loaded Successfully'),
+        message: tn(res.data.total, 'Loaded {n} page for editing.', 'Loaded {n} pages for editing.'),
       });
     } catch (err: any) {
       showToast({
         type: 'error',
-        title: 'Conversion Failed',
-        message: err.message || 'Could not extract PDF pages.',
+        title: t('Conversion Failed'),
+        message: err.message || t('Could not extract PDF pages.'),
       });
       setFile(null);
     } finally {
@@ -684,7 +685,7 @@ export function EditCanvasPage() {
     const visiblePage = pages[activePageIndex];
     if (!visiblePage) return;
 
-    const targetDpi = Math.max(PREVIEW_MIN_DPI, Math.min(PREVIEW_MAX_DPI, Math.ceil(200 * Math.max(1, zoomLevel))));
+    const targetDpi = Math.max(PREVIEW_MIN_DPI, Math.min(PREVIEW_MAX_DPI, Math.ceil(PREVIEW_MIN_DPI * Math.max(1, zoomLevel))));
     if ((visiblePage.previewDpi || PREVIEW_BASE_DPI) >= targetDpi) return;
 
     const timeout = window.setTimeout(async () => {
@@ -729,8 +730,8 @@ export function EditCanvasPage() {
     } else {
       showToast({
         type: 'error',
-        title: 'Invalid File',
-        message: 'Please drop a valid PDF file.',
+        title: t('Invalid File'),
+        message: t('Please drop a valid PDF file.'),
       });
     }
   };
@@ -885,7 +886,7 @@ export function EditCanvasPage() {
               }
               if (copiedObjects.length > 0) {
                 clipboardRef.current = { objects: copiedObjects, sourcePageIndex: activePageIndex, pasteCountByPage: {} };
-                showToast({ type: 'success', title: 'Copied', message: `${copiedObjects.length} objects copied to clipboard.` });
+                showToast({ type: 'success', title: t('Copied'), message: tn(copiedObjects.length, '{n} object copied to clipboard.', '{n} objects copied to clipboard.') });
               }
             }
           }
@@ -919,7 +920,7 @@ export function EditCanvasPage() {
                 setSelectedObjectId(null);
                 activeCanvas.discardActiveObject();
                 activeCanvas.requestRenderAll();
-                showToast({ type: 'success', title: 'Cut', message: `${copiedObjects.length} objects cut to clipboard.` });
+                showToast({ type: 'success', title: t('Cut'), message: tn(copiedObjects.length, '{n} object cut to clipboard.', '{n} objects cut to clipboard.') });
               }
             }
           }
@@ -971,7 +972,7 @@ export function EditCanvasPage() {
                 activeCanvas.requestRenderAll();
               }
             }, 50);
-            showToast({ type: 'success', title: 'Pasted', message: `${newObjs.length} objects pasted.` });
+            showToast({ type: 'success', title: t('Pasted'), message: tn(newObjs.length, '{n} object pasted.', '{n} objects pasted.') });
           }
         }
       }
@@ -1194,10 +1195,10 @@ export function EditCanvasPage() {
 
       showToast({
         type: 'success',
-        title: 'PDF Saved Successfully',
-        message: 'Your edited PDF document is ready.',
+        title: t('PDF Saved Successfully'),
+        message: t('Your edited PDF document is ready.'),
         action: {
-          label: 'Open Folder',
+          label: t('Open Folder'),
           onClick: openOutputFolder,
         },
         duration: 8000,
@@ -1205,8 +1206,8 @@ export function EditCanvasPage() {
     } catch (err: any) {
       showToast({
         type: 'error',
-        title: 'Save Failed',
-        message: err.message || 'Could not compile and save PDF.',
+        title: t('Save Failed'),
+        message: err.message || t('Could not compile and save PDF.'),
       });
     } finally {
       setSaving(false);
@@ -1265,7 +1266,7 @@ export function EditCanvasPage() {
             style={{ whiteSpace: 'nowrap' }}
           >
             <FileEdit size={18} />
-            <span>Canvas PDF</span>
+            <span>{t('Canvas PDF')}</span>
           </span>
         </div>
 
@@ -1293,7 +1294,7 @@ export function EditCanvasPage() {
               <button
                 onClick={handleRemoveFile}
                 className="text-[var(--canvas-text-muted)] hover:text-[var(--canvas-danger)] transition-colors p-1"
-                title="Clear PDF"
+                title={t('Clear PDF')}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
               >
                 <Trash2 size={14} />
@@ -1327,7 +1328,7 @@ export function EditCanvasPage() {
             onMouseLeave={(e) => {
               if (!isDragOver) e.currentTarget.style.background = 'transparent';
             }}
-            title="Upload PDF"
+            title={t('Upload PDF')}
           >
             <Upload size={16} />
           </div>
@@ -1336,7 +1337,7 @@ export function EditCanvasPage() {
         {file && loading && (
           <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
             <Loader2 className="animate-spin text-[var(--canvas-accent)]" size={14} />
-            <span>Converting...</span>
+            <span>{t('Converting...')}</span>
           </div>
         )}
 
@@ -1346,25 +1347,25 @@ export function EditCanvasPage() {
         {/* Canvas Tool Buttons (Icon Only) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {[
-            { id: 'select', label: 'Select (V)', icon: MousePointer },
-            { id: 'pen', label: 'Pen (P)', icon: Pen },
-            { id: 'highlighter', label: 'Highlighter (H)', icon: Highlighter },
-            { id: 'text', label: 'Text (T)', icon: Type },
-            { id: 'rect', label: 'Rectangle (R)', icon: Square },
-            { id: 'circle', label: 'Circle (C)', icon: CircleIcon },
-            { id: 'line', label: 'Line (L)', icon: Minus },
-            { id: 'eraser', label: 'Eraser (E)', icon: Eraser },
-            { id: 'eyedropper', label: 'Smart Eyedropper — sample nearby foreground color', icon: Pipette },
-          ].map((t) => {
-            const Icon = t.icon;
-            const isActive = activeTool === t.id;
+            { id: 'select', label: t('Select (V)'), icon: MousePointer },
+            { id: 'pen', label: t('Pen (P)'), icon: Pen },
+            { id: 'highlighter', label: t('Highlighter (H)'), icon: Highlighter },
+            { id: 'text', label: t('Text (T)'), icon: Type },
+            { id: 'rect', label: t('Rectangle (R)'), icon: Square },
+            { id: 'circle', label: t('Circle (C)'), icon: CircleIcon },
+            { id: 'line', label: t('Line (L)'), icon: Minus },
+            { id: 'eraser', label: t('Eraser (E)'), icon: Eraser },
+            { id: 'eyedropper', label: t('Smart Eyedropper — sample nearby foreground color'), icon: Pipette },
+          ].map((tool) => {
+            const Icon = tool.icon;
+            const isActive = activeTool === tool.id;
             const disabled = pages.length === 0;
             return (
               <button
-                key={t.id}
-                onClick={() => handleToolSelect(t.id as EditTool)}
+                key={tool.id}
+                onClick={() => handleToolSelect(tool.id as EditTool)}
                 disabled={disabled}
-                title={t.label}
+                title={tool.label}
                 style={{
                   width: '32px',
                   height: '32px',
@@ -1400,7 +1401,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleZoomOut}
             disabled={pages.length === 0 || zoomLevel <= 0.25}
-            title="Zoom Out"
+            title={t('Zoom Out')}
             style={{
               background: 'transparent',
               color: (pages.length === 0 || zoomLevel <= 0.25) ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
@@ -1420,7 +1421,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleZoomIn}
             disabled={pages.length === 0 || zoomLevel >= 2.0}
-            title="Zoom In"
+            title={t('Zoom In')}
             style={{
               background: 'transparent',
               color: (pages.length === 0 || zoomLevel >= 2.0) ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
@@ -1437,7 +1438,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleFitToWidth}
             disabled={pages.length === 0}
-            title="Fit to Width"
+            title={t('Fit to Width')}
             style={{
               background: 'transparent',
               color: pages.length === 0 ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
@@ -1454,7 +1455,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleFitToPage}
             disabled={pages.length === 0}
-            title="Fit to Page (Ctrl+0)"
+            title={t('Fit to Page (Ctrl+0)')}
             style={{
               background: 'transparent',
               color: pages.length === 0 ? 'var(--outline-variant)' : 'var(--canvas-text-muted)',
@@ -1472,7 +1473,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleUndo}
             disabled={isUndoDisabled || pages.length === 0}
-            title="Undo (Ctrl+Z)"
+            title={t('Undo (Ctrl+Z)')}
             style={{
               background: 'transparent',
               color: (isUndoDisabled || pages.length === 0) ? 'var(--outline-variant)' : 'var(--canvas-text-primary)',
@@ -1489,7 +1490,7 @@ export function EditCanvasPage() {
           <button
             onClick={handleRedo}
             disabled={isRedoDisabled || pages.length === 0}
-            title="Redo (Ctrl+Y)"
+            title={t('Redo (Ctrl+Y)')}
             style={{
               background: 'transparent',
               color: (isRedoDisabled || pages.length === 0) ? 'var(--outline-variant)' : 'var(--canvas-text-primary)',
@@ -1515,12 +1516,12 @@ export function EditCanvasPage() {
           <input
             id="edit-output-name"
             type="text"
-            aria-label="Output filename"
+            aria-label={t('Output filename')}
             value={outputFilename}
             onChange={(e) => setOutputFilename(e.target.value)}
             placeholder="edited_document"
             disabled={!file || loading}
-            title="Output Filename"
+            title={t('Output Filename')}
             style={{
               width: '100%',
               height: '32px',
@@ -1562,10 +1563,10 @@ export function EditCanvasPage() {
           {saving ? (
             <>
               <Loader2 className="animate-spin" size={14} />
-              <span>Saving...</span>
+              <span>{t('Saving...')}</span>
             </>
           ) : (
-            <span>Save as PDF</span>
+            <span>{t('Save as PDF')}</span>
           )}
         </button>
         </div>
@@ -1576,7 +1577,7 @@ export function EditCanvasPage() {
       <div
         className="canvas-side-panel"
         role="region"
-        aria-label="Tool options"
+        aria-label={t('Tool options')}
         hidden={!showContextualPanel}
       >
         {showContextualPanel && (
@@ -1585,8 +1586,8 @@ export function EditCanvasPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <span className="text-[11px] uppercase tracking-wider text-[var(--canvas-accent)] font-bold">
                 {selectedObject
-                  ? `Selected: ${selectedObject.type}`
-                  : `Config: ${activeTool}`}
+                  ? t('Selected: {type}', { type: t(selectedObject.type) })
+                  : t('Config: {tool}', { tool: t(activeTool) })}
               </span>
               <div style={{ width: '1px', height: '18px', background: 'var(--canvas-panel-border)' }} />
             </div>
@@ -1596,7 +1597,7 @@ export function EditCanvasPage() {
               <div className="canvas-layer-group" style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                 <button
                   onClick={() => handleLayering('front')}
-                  title="Bring to Front (Ctrl+Shift+])"
+                  title={t('Bring to Front (Ctrl+Shift+])')}
                   style={{
                     width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
@@ -1608,7 +1609,7 @@ export function EditCanvasPage() {
                 </button>
                 <button
                   onClick={() => handleLayering('forward')}
-                  title="Bring Forward (Ctrl+])"
+                  title={t('Bring Forward (Ctrl+])')}
                   style={{
                     width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
@@ -1620,7 +1621,7 @@ export function EditCanvasPage() {
                 </button>
                 <button
                   onClick={() => handleLayering('backward')}
-                  title="Send Backward (Ctrl+[)"
+                  title={t('Send Backward (Ctrl+[)')}
                   style={{
                     width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
@@ -1632,7 +1633,7 @@ export function EditCanvasPage() {
                 </button>
                 <button
                   onClick={() => handleLayering('back')}
-                  title="Send to Back (Ctrl+Shift+[)"
+                  title={t('Send to Back (Ctrl+Shift+[)')}
                   style={{
                     width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: 'transparent', border: 'none', borderRadius: '4px', color: 'var(--canvas-text-muted)', cursor: 'pointer'
@@ -1650,9 +1651,9 @@ export function EditCanvasPage() {
             {((selectedObject && selectedObject.type === 'text') || (!selectedObject && activeTool === 'text')) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Font</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Font')}</span>
                   <select
-                    aria-label="Font family"
+                    aria-label={t('Font family')}
                     value={currentFontFamily}
                     onChange={(e) => setFontFamily(e.target.value)}
                     style={{ background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
@@ -1665,10 +1666,10 @@ export function EditCanvasPage() {
                   </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Weight</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Weight')}</span>
                   <select
-                    aria-label="Font weight"
-                    title="Font weight"
+                    aria-label={t('Font weight')}
+                    title={t('Font weight')}
                     value={nearestAvailableFontWeight(currentFontWeight, availableFontWeights)}
                     onChange={(event) => setFontWeight(Number(event.target.value))}
                     style={{ width: '118px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 8px', borderRadius: '4px', outline: 'none', cursor: 'pointer', fontSize: '12px', height: '28px' }}
@@ -1681,10 +1682,10 @@ export function EditCanvasPage() {
                   </select>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Size</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Size')}</span>
                   <input
                     type="number"
-                    aria-label="Font size"
+                    aria-label={t('Font size')}
                     min="1"
                     step={0.5}
                     value={selectedObject ? (selectedObject as TextObject).fontSize : defaultTextProps.fontSize}
@@ -1701,7 +1702,7 @@ export function EditCanvasPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <span
-                    title="Letter spacing"
+                    title={t('Letter spacing')}
                     style={{ display: 'inline-flex', color: 'var(--canvas-text-muted)' }}
                   >
                     <MoveHorizontal size={16} aria-hidden="true" />
@@ -1709,8 +1710,8 @@ export function EditCanvasPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-icon btn-sm"
-                    aria-label="Decrease letter spacing by 1"
-                    title="Decrease letter spacing by 1"
+                    aria-label={t('Decrease letter spacing by 1')}
+                    title={t('Decrease letter spacing by 1')}
                     disabled={currentLetterSpacing <= MIN_LETTER_SPACING}
                     onClick={() => setLetterSpacing(stepLetterSpacing(currentLetterSpacing, -1))}
                   >
@@ -1722,8 +1723,8 @@ export function EditCanvasPage() {
                     min={MIN_LETTER_SPACING}
                     max={MAX_LETTER_SPACING}
                     step={1}
-                    aria-label="Letter spacing"
-                    title="Tighten or expand the space between letters"
+                    aria-label={t('Letter spacing')}
+                    title={t('Tighten or expand the space between letters')}
                     value={currentLetterSpacing}
                     onChange={(e) => setLetterSpacing(Number(e.target.value))}
                     style={{ width: '96px', height: '28px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
@@ -1731,8 +1732,8 @@ export function EditCanvasPage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-icon btn-sm"
-                    aria-label="Increase letter spacing by 1"
-                    title="Increase letter spacing by 1"
+                    aria-label={t('Increase letter spacing by 1')}
+                    title={t('Increase letter spacing by 1')}
                     disabled={currentLetterSpacing >= MAX_LETTER_SPACING}
                     onClick={() => setLetterSpacing(stepLetterSpacing(currentLetterSpacing, 1))}
                   >
@@ -1747,10 +1748,10 @@ export function EditCanvasPage() {
                   </output>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title="Rotation Angle">Rot°</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title={t('Rotation Angle')}>{t('Rot°')}</span>
                   <input
                     type="number"
-                    aria-label="Rotation angle in degrees"
+                    aria-label={t('Rotation angle in degrees')}
                     step={1}
                     value={selectedObject ? (Math.round((selectedObject.angle || 0) * 10) / 10) : 0}
                     onChange={(e) => {
@@ -1767,8 +1768,8 @@ export function EditCanvasPage() {
                     onClick={() => {
                       setFontWeight(toggleBoldWeight(currentFontWeight, availableFontWeights));
                     }}
-                    title="Toggle Bold (700)"
-                    aria-label="Toggle Bold (700)"
+                    title={t('Toggle Bold (700)')}
+                    aria-label={t('Toggle Bold (700)')}
                     style={{
                       width: '28px',
                       height: '28px',
@@ -1792,7 +1793,7 @@ export function EditCanvasPage() {
                         setDefaultTextProps(prev => ({ ...prev, italic: !prev.italic }));
                       }
                     }}
-                    title="Italic"
+                    title={t('Italic')}
                     style={{
                       width: '28px',
                       height: '28px',
@@ -1815,7 +1816,7 @@ export function EditCanvasPage() {
                       if (selectedObject) updateSelectedObject({ textAlign: 'left' });
                       else setDefaultTextProps(prev => ({ ...prev, textAlign: 'left' }));
                     }}
-                    title="Align Left"
+                    title={t('Align Left')}
                     style={{
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'left' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
@@ -1830,7 +1831,7 @@ export function EditCanvasPage() {
                       if (selectedObject) updateSelectedObject({ textAlign: 'center' });
                       else setDefaultTextProps(prev => ({ ...prev, textAlign: 'center' }));
                     }}
-                    title="Align Center"
+                    title={t('Align Center')}
                     style={{
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'center' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
@@ -1845,7 +1846,7 @@ export function EditCanvasPage() {
                       if (selectedObject) updateSelectedObject({ textAlign: 'right' });
                       else setDefaultTextProps(prev => ({ ...prev, textAlign: 'right' }));
                     }}
-                    title="Align Right"
+                    title={t('Align Right')}
                     style={{
                       width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: (selectedObject ? (selectedObject as TextObject).textAlign : defaultTextProps.textAlign) === 'right' ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
@@ -1857,7 +1858,7 @@ export function EditCanvasPage() {
                   </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Color</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Color')}</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as TextObject).color : defaultTextProps.color}
@@ -1868,8 +1869,8 @@ export function EditCanvasPage() {
                         setDefaultTextProps(prev => ({ ...prev, color: e.target.value }));
                       }
                     }}
-                    title="Text Color"
-                    aria-label="Text color"
+                    title={t('Text Color')}
+                    aria-label={t('Text color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
@@ -1895,7 +1896,7 @@ export function EditCanvasPage() {
                       }}
                     style={{ accentColor: 'var(--canvas-accent)', cursor: 'pointer', margin: 0 }}
                     />
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Stroke</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Stroke')}</span>
                   </label>
                   <input
                     type="color"
@@ -1908,16 +1909,16 @@ export function EditCanvasPage() {
                         setDefaultShapeProps(prev => ({ ...prev, strokeColor: e.target.value }));
                       }
                     }}
-                    title="Stroke Color"
-                    aria-label="Stroke color"
+                    title={t('Stroke Color')}
+                    aria-label={t('Stroke color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px', opacity: (selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) === 0 ? 0.4 : 1 }}
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Width')}</span>
                   <input
                     type="range"
-                    aria-label="Outline width"
+                    aria-label={t('Outline width')}
                     min="0"
                     max="20"
                     value={selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth}
@@ -1936,7 +1937,7 @@ export function EditCanvasPage() {
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Fill</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Fill')}</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as ShapeObject).fillColor : defaultShapeProps.fillColor}
@@ -1947,16 +1948,16 @@ export function EditCanvasPage() {
                         setDefaultShapeProps(prev => ({ ...prev, fillColor: e.target.value }));
                       }
                     }}
-                    title="Fill Color"
-                    aria-label="Fill color"
+                    title={t('Fill Color')}
+                    aria-label={t('Fill color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Opacity</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Opacity')}</span>
                   <input
                     type="range"
-                    aria-label="Fill opacity"
+                    aria-label={t('Fill opacity')}
                     min="0"
                     max="100"
                     value={selectedObject ? (selectedObject as ShapeObject).fillOpacity : defaultShapeProps.fillOpacity}
@@ -1982,7 +1983,7 @@ export function EditCanvasPage() {
               (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Color</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Color')}</span>
                   <input
                     type="color"
                     value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeColor : defaultStrokeProps.strokeColor}
@@ -1993,16 +1994,16 @@ export function EditCanvasPage() {
                         setDefaultStrokeProps(prev => ({ ...prev, strokeColor: e.target.value }));
                       }
                     }}
-                    title="Stroke Color"
-                    aria-label="Stroke color"
+                    title={t('Stroke Color')}
+                    aria-label={t('Stroke color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">Width</span>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Width')}</span>
                   <input
                     type="range"
-                    aria-label="Stroke width"
+                    aria-label={t('Stroke width')}
                     min="1"
                     max="20"
                     value={selectedObject ? (selectedObject as LineObject | FreehandObject).strokeWidth : defaultStrokeProps.strokeWidth}
@@ -2031,7 +2032,7 @@ export function EditCanvasPage() {
         ref={canvasViewportRef}
         className="canvas-workspace"
         role="region"
-        aria-label="Document canvas"
+        aria-label={t('Document canvas')}
         tabIndex={0}
         style={{
           flex: 1,
@@ -2077,8 +2078,8 @@ export function EditCanvasPage() {
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--canvas-topbar-bg)', border: '1px solid var(--canvas-input-border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Upload size={28} className="text-[var(--canvas-accent)]" />
             </div>
-            <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">No Document Uploaded</p>
-            <p className="text-sm">Click here or drag a file to begin editing.</p>
+            <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">{t('No Document Uploaded')}</p>
+            <p className="text-sm">{t('Click here or drag a file to begin editing.')}</p>
           </div>
         ) : (
           <div 
@@ -2166,7 +2167,7 @@ export function EditCanvasPage() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1.5 text-center text-[10px] uppercase font-bold tracking-wider text-[var(--canvas-text-muted)] border-b border-[var(--canvas-panel-border)] mb-1">
-            Layer Order
+            {t('Layer Order')}
           </div>
           <button
             onClick={() => { handleLayering('front'); setContextMenu(null); }}
@@ -2174,7 +2175,7 @@ export function EditCanvasPage() {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <ChevronsUp size={14} /> Bring to Front
+            <ChevronsUp size={14} /> {t('Bring to Front')}
           </button>
           <button
             onClick={() => { handleLayering('forward'); setContextMenu(null); }}
@@ -2182,7 +2183,7 @@ export function EditCanvasPage() {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <ChevronUp size={14} /> Bring Forward
+            <ChevronUp size={14} /> {t('Bring Forward')}
           </button>
           <button
             onClick={() => { handleLayering('backward'); setContextMenu(null); }}
@@ -2190,7 +2191,7 @@ export function EditCanvasPage() {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <ChevronDown size={14} /> Send Backward
+            <ChevronDown size={14} /> {t('Send Backward')}
           </button>
           <button
             onClick={() => { handleLayering('back'); setContextMenu(null); }}
@@ -2198,7 +2199,7 @@ export function EditCanvasPage() {
             onMouseEnter={(e) => e.currentTarget.style.background = 'var(--canvas-input-bg)'}
             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
-            <ChevronsDown size={14} /> Send to Back
+            <ChevronsDown size={14} /> {t('Send to Back')}
           </button>
         </div>
       )}

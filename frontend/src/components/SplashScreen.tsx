@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
+import { t } from '../i18n';
 
 interface SplashScreenProps {
   onReady: () => void;
@@ -48,21 +49,21 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
       if (elapsed >= MAX_WAIT_MS) {
         clearInterval(progressInterval);
         setTimedOut(true);
-        setStatusText('Please wait...');
+        setStatusText(t('Please wait...'));
         onError();
         return;
       }
 
       const attempt = Math.floor(elapsed / POLL_INTERVAL_MS) + 1;
-      if (attempt <= 3) setStatusText('Starting...');
-      else if (attempt <= 8) setStatusText('Loading...');
-      else setStatusText('Almost ready...');
+      if (attempt <= 3) setStatusText(t('Starting...'));
+      else if (attempt <= 8) setStatusText(t('Loading...'));
+      else setStatusText(t('Almost ready...'));
 
       const ok = await pingHealth();
       if (ok && !cancelled) {
         clearInterval(progressInterval);
         setProgress(100);
-        setStatusText('Ready!');
+        setStatusText(t('Ready!'));
         setTimeout(onReady, 300); // short pause so user sees 100%
         return;
       }
@@ -85,7 +86,7 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
   const handleRetry = () => {
     setTimedOut(false);
     setProgress(0);
-    setStatusText('Retrying...');
+    setStatusText(t('Retrying...'));
     setRetryCount((c) => c + 1);
   };
 
@@ -129,10 +130,10 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
         </div>
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--on-surface)', letterSpacing: '-0.02em', margin: 0 }}>
-            PDF Manager
+            {t('PDF Manager')}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--on-surface-variant)', marginTop: 4 }}>
-            Professional PDF Toolkit
+            {t('Professional PDF Toolkit')}
           </p>
         </div>
       </div>
@@ -156,10 +157,10 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
             <AlertCircle size={32} color="var(--error)" />
             <div>
               <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--on-surface)', marginBottom: 6 }}>
-                Please wait...
+                {t('Please wait...')}
               </div>
               <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', lineHeight: 1.5 }}>
-                Please wait...
+                {t('Please wait...')}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
@@ -169,14 +170,14 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
                 onClick={handleRetry}
               >
                 <RefreshCw size={13} />
-                Retry
+                {t('Retry')}
               </button>
               <button
                 id="splash-skip-btn"
                 className="btn btn-secondary btn-sm"
                 onClick={onReady}
               >
-                Continue Anyway
+                {t('Continue Anyway')}
               </button>
             </div>
           </div>
@@ -227,7 +228,7 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
             </div>
 
             <p style={{ fontSize: 11, color: 'var(--outline)', textAlign: 'center', margin: 0 }}>
-              Please wait...
+              {t('Please wait...')}
             </p>
           </>
         )}

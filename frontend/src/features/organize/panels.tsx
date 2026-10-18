@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
 import { sourceLetter } from './pageList';
 import type { InsertMode, InsertPosition, SourceHandle } from './types';
+import { t, tn } from '../../i18n';
 
 interface InsertPanelProps {
   source: SourceHandle | null;
@@ -41,16 +42,16 @@ export function InsertPanel({
     && preview.pages.length > 0 && total > 0;
 
   return (
-    <section className="card organize-panel" aria-label="Insert pages">
+    <section className="card organize-panel" aria-label={t('Insert pages')}>
       <div className="organize-panel-head">
         <span className="organize-panel-title">
-          Insert: {source.name} ({source.pageCount} page{source.pageCount === 1 ? '' : 's'})
+          {t('Insert:')} {source.name} ({tn(source.pageCount, '{n} page', '{n} pages')})
         </span>
         <button
           type="button"
           className="btn btn-ghost btn-icon btn-sm"
           onClick={onCancel}
-          aria-label="Close insert panel"
+          aria-label={t('Close insert panel')}
         >
           <X size={14} aria-hidden="true" />
         </button>
@@ -59,7 +60,7 @@ export function InsertPanel({
       <div className="organize-panel-grid">
         {showPages && (
           <div className="organize-field">
-            <span className="organize-field-label" id="insert-pages-label">Pages</span>
+            <span className="organize-field-label" id="insert-pages-label">{t('Pages')}</span>
             <div role="radiogroup" aria-labelledby="insert-pages-label" className="organize-choices">
               <label className="organize-choice">
                 <input
@@ -69,7 +70,7 @@ export function InsertPanel({
                   onChange={() => onModeChange('all')}
                   disabled={disabled}
                 />
-                <span>All</span>
+                <span>{t('All')}</span>
               </label>
               <label className="organize-choice">
                 <input
@@ -79,7 +80,7 @@ export function InsertPanel({
                   onChange={() => onModeChange('pick')}
                   disabled={disabled}
                 />
-                <span>Pick</span>
+                <span>{t('Pick')}</span>
               </label>
             </div>
             {mode === 'pick' && (
@@ -91,7 +92,7 @@ export function InsertPanel({
                   onChange={(event) => onPagesInputChange(event.target.value)}
                   placeholder="e.g. 1-5, 8, 10-12"
                   disabled={disabled}
-                  aria-label="Pages to insert from the source file"
+                  aria-label={t('Pages to insert from the source file')}
                   aria-invalid={pagesInvalid || undefined}
                   aria-describedby="insert-pages-help"
                   autoComplete="off"
@@ -103,7 +104,7 @@ export function InsertPanel({
                 >
                   {pagesInvalid
                     ? preview.error
-                    : `${preview.pages.length} page${preview.pages.length === 1 ? '' : 's'} from the source file, in the order typed.`}
+                    : tn(preview.pages.length, '{n} page from the source file, in the order typed.', '{n} pages from the source file, in the order typed.')}
                 </p>
               </>
             )}
@@ -111,7 +112,7 @@ export function InsertPanel({
         )}
 
         <div className="organize-field">
-          <span className="organize-field-label" id="insert-position-label">Position</span>
+          <span className="organize-field-label" id="insert-position-label">{t('Position')}</span>
           <div role="radiogroup" aria-labelledby="insert-position-label" className="organize-choices">
             <label className="organize-choice">
               <input
@@ -121,7 +122,7 @@ export function InsertPanel({
                 onChange={() => onPositionChange('after')}
                 disabled={disabled}
               />
-              <span>After</span>
+              <span>{t('After')}</span>
             </label>
             <label className="organize-choice">
               <input
@@ -131,11 +132,11 @@ export function InsertPanel({
                 onChange={() => onPositionChange('before')}
                 disabled={disabled}
               />
-              <span>Before</span>
+              <span>{t('Before')}</span>
             </label>
           </div>
           <div className="organize-reference">
-            <label className="organize-help" htmlFor="organize-insert-reference">Reference page</label>
+            <label className="organize-help" htmlFor="organize-insert-reference">{t('Reference page')}</label>
             <input
               id="organize-insert-reference"
               className="input organize-reference-input"
@@ -150,7 +151,7 @@ export function InsertPanel({
               aria-invalid={referenceInvalid || undefined}
               aria-describedby="organize-reference-help"
             />
-            <span className="organize-help">of {total}</span>
+            <span className="organize-help">{t('of')} {total}</span>
           </div>
         </div>
       </div>
@@ -162,12 +163,12 @@ export function InsertPanel({
       >
         {referenceInvalid
           ? preview.referenceError
-          : `Will be inserted ${position} page ${preview.reference} (of ${total}).`}
+          : t('Will be inserted {position} page {reference} (of {total}).', { position, reference: preview.reference, total })}
       </p>
 
       <div className="organize-panel-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={disabled}>
-          Cancel
+          {t('Cancel')}
         </button>
         <button
           type="button"
@@ -177,7 +178,7 @@ export function InsertPanel({
           disabled={!canInsert}
         >
           <Plus size={14} aria-hidden="true" />
-          Insert
+          {t('Insert')}
         </button>
       </div>
     </section>
@@ -201,21 +202,21 @@ export function DeletePagesPanel({
   const canDelete = !disabled && !invalid && preview.positions.length > 0;
 
   return (
-    <section className="card organize-panel" aria-label="Delete pages">
+    <section className="card organize-panel" aria-label={t('Delete pages')}>
       <div className="organize-panel-head">
-        <span className="organize-panel-title">Delete pages</span>
+        <span className="organize-panel-title">{t('Delete pages')}</span>
         <button
           type="button"
           className="btn btn-ghost btn-icon btn-sm"
           onClick={onCancel}
-          aria-label="Close delete panel"
+          aria-label={t('Close delete panel')}
         >
           <X size={14} aria-hidden="true" />
         </button>
       </div>
 
       <div className="organize-field">
-        <label className="organize-field-label" htmlFor="organize-delete-input">Pages</label>
+        <label className="organize-field-label" htmlFor="organize-delete-input">{t('Pages')}</label>
         <input
           id="organize-delete-input"
           className="input"
@@ -235,13 +236,13 @@ export function DeletePagesPanel({
         >
           {invalid
             ? preview.error
-            : `Numbers are current positions in the grid (1-${total}). Will delete ${preview.positions.length} page${preview.positions.length === 1 ? '' : 's'}, highlighted in the grid.`}
+            : tn(preview.positions.length, 'Numbers are current positions in the grid (1-{total}). Will delete {n} page, highlighted in the grid.', 'Numbers are current positions in the grid (1-{total}). Will delete {n} pages, highlighted in the grid.', { total })}
         </p>
       </div>
 
       <div className="organize-panel-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={disabled}>
-          Cancel
+          {t('Cancel')}
         </button>
         <button
           type="button"
@@ -251,7 +252,7 @@ export function DeletePagesPanel({
           disabled={!canDelete}
         >
           <Trash2 size={14} aria-hidden="true" />
-          Delete
+          {t('Delete')}
         </button>
       </div>
     </section>
@@ -277,15 +278,15 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
     .filter(({ source }) => source.id !== mainSourceId);
 
   return (
-    <section className="card organize-panel" aria-label="Sources">
+    <section className="card organize-panel" aria-label={t('Sources')}>
       <div className="organize-panel-head">
-        <span className="organize-panel-title">Sources</span>
+        <span className="organize-panel-title">{t('Sources')}</span>
         <button
           type="button"
           className="btn btn-ghost btn-icon btn-sm"
           onClick={onClose}
-          aria-label="Close Sources"
-          title="Close"
+          aria-label={t('Close Sources')}
+          title={t('Close')}
           id="organize-sources-close"
         >
           <X size={14} aria-hidden="true" />
@@ -293,7 +294,7 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
       </div>
 
       {inserted.length === 0 ? (
-        <p className="organize-help">No inserted files yet. Files you insert are listed here.</p>
+        <p className="organize-help">{t('No inserted files yet. Files you insert are listed here.')}</p>
       ) : (
         <ul className="organize-source-list">
           {inserted.map(({ source, index }) => (
@@ -303,25 +304,25 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
               </span>
               <span className="organize-source-name">
                 {source.name}
-                <span className="organize-help"> · {source.pageCount} page{source.pageCount === 1 ? '' : 's'}</span>
+                <span className="organize-help"> · {tn(source.pageCount, '{n} page', '{n} pages')}</span>
               </span>
 
               {confirming === source.id ? (
                 <span className="organize-source-confirm">
-                  <span className="organize-help">Remove its pages too?</span>
+                  <span className="organize-help">{t('Remove its pages too?')}</span>
                   <button
                     type="button"
                     className="btn btn-danger btn-sm"
                     onClick={() => { setConfirming(null); onRemove(source.id); }}
                   >
-                    Confirm
+                    {t('Confirm')}
                   </button>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
                     onClick={() => setConfirming(null)}
                   >
-                    Cancel
+                    {t('Cancel')}
                   </button>
                 </span>
               ) : (
@@ -331,8 +332,8 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
                     className="btn btn-ghost btn-icon btn-sm"
                     onClick={() => onReinsert(source.id)}
                     disabled={disabled}
-                    title="Insert again from this file"
-                    aria-label={`Insert again from ${source.name}`}
+                    title={t('Insert again from this file')}
+                    aria-label={t('Insert again from {name}', { name: source.name })}
                   >
                     <Plus size={13} aria-hidden="true" />
                   </button>
@@ -341,8 +342,8 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
                     className="btn btn-ghost btn-icon btn-sm organize-danger"
                     onClick={() => setConfirming(source.id)}
                     disabled={disabled}
-                    title="Remove this file and its pages"
-                    aria-label={`Remove ${source.name}`}
+                    title={t('Remove this file and its pages')}
+                    aria-label={t('Remove {name}', { name: source.name })}
                   >
                     <X size={13} aria-hidden="true" />
                   </button>
@@ -354,7 +355,7 @@ export function SourcesPanel({ sources, mainSourceId, disabled, onReinsert, onRe
       )}
       <p className="organize-help">
         <ArrowUp size={11} aria-hidden="true" /> <ArrowDown size={11} aria-hidden="true" />{' '}
-        Drag any page in the grid to reorder it.
+        {t('Drag any page in the grid to reorder it.')}
       </p>
     </section>
   );

@@ -14,6 +14,7 @@ import { PageHeader, RadioCardGroup, RangeField, Tabs } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
 import { normalizeQrContent } from '../utils/qrContent';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t } from '../i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,22 +24,22 @@ type TabType = 'qr' | 'barcode';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const QR_EC_OPTIONS = [
-  { value: 'L', label: 'Low (L)', desc: '7% recovery' },
-  { value: 'M', label: 'Medium (M)', desc: '15% recovery' },
-  { value: 'Q', label: 'Quartile (Q)', desc: '25% recovery' },
-  { value: 'H', label: 'High (H)', desc: '30% recovery' },
+  { value: 'L', label: t('Low (L)'), desc: t('7% recovery') },
+  { value: 'M', label: t('Medium (M)'), desc: t('15% recovery') },
+  { value: 'Q', label: t('Quartile (Q)'), desc: t('25% recovery') },
+  { value: 'H', label: t('High (H)'), desc: t('30% recovery') },
 ];
 
 const BARCODE_TYPES = [
-  { value: 'code128', label: 'CODE 128', desc: 'Alphanumeric' },
-  { value: 'ean13', label: 'EAN-13', desc: '12-13 digits' },
-  { value: 'ean8', label: 'EAN-8', desc: '7-8 digits' },
-  { value: 'code39', label: 'CODE 39', desc: 'Uppercase Alphanumeric' },
+  { value: 'code128', label: 'CODE 128', desc: t('Alphanumeric') },
+  { value: 'ean13', label: 'EAN-13', desc: t('12-13 digits') },
+  { value: 'ean8', label: 'EAN-8', desc: t('7-8 digits') },
+  { value: 'code39', label: 'CODE 39', desc: t('Uppercase Alphanumeric') },
 ];
 
 const FORMAT_OPTIONS = [
-  { value: 'png', label: 'PNG', desc: 'Fixed size, easy to share' },
-  { value: 'svg', label: 'SVG', desc: 'Scales without blur, best for print' },
+  { value: 'png', label: 'PNG', desc: t('Fixed size, easy to share') },
+  { value: 'svg', label: 'SVG', desc: t('Scales without blur, best for print') },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -114,14 +115,14 @@ export function QrBarcodePage() {
     if (!isQr) {
       if (barcodeType === 'ean13') {
         if (!/^\d{12,13}$/.test(content)) {
-          if (isUserAction) showToast({ type: 'error', title: 'Invalid Content', message: 'EAN-13 requires 12-13 digits.' });
+          if (isUserAction) showToast({ type: 'error', title: t('Invalid Content'), message: t('EAN-13 requires 12-13 digits.') });
           setIsLoading(false);
           setPreviewData(null);
           return;
         }
       } else if (barcodeType === 'ean8') {
         if (!/^\d{7,8}$/.test(content)) {
-          if (isUserAction) showToast({ type: 'error', title: 'Invalid Content', message: 'EAN-8 requires 7-8 digits.' });
+          if (isUserAction) showToast({ type: 'error', title: t('Invalid Content'), message: t('EAN-8 requires 7-8 digits.') });
           setIsLoading(false);
           setPreviewData(null);
           return;
@@ -175,7 +176,7 @@ export function QrBarcodePage() {
       }
 
       if (isUserAction) {
-        showToast({ type: 'success', title: 'Generated successfully', message: `${isQr ? 'QR Code' : 'Barcode'} is ready to download.` });
+        showToast({ type: 'success', title: t('Generated successfully'), message: t('{kind} is ready.', { kind: isQr ? t('QR Code') : t('Barcode') }) });
       }
 
     } catch (err: unknown) {
@@ -186,8 +187,8 @@ export function QrBarcodePage() {
         return;
       }
       if (isUserAction) {
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        showToast({ type: 'error', title: 'Generation failed', message: msg });
+        const msg = err instanceof Error ? err.message : t('Unknown error');
+        showToast({ type: 'error', title: t('Generation failed'), message: msg });
       }
       setPreviewData(null);
     } finally {
@@ -244,7 +245,7 @@ export function QrBarcodePage() {
       window.setTimeout(() => URL.revokeObjectURL(tempUrl as string), 5000);
     }
 
-    showToast({ type: 'success', title: 'Download started', message: `Saving ${filename}` });
+    showToast({ type: 'success', title: t('File saved'), message: t('Saved {name} to your Downloads folder', { name: filename }) });
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -252,17 +253,17 @@ export function QrBarcodePage() {
     <div className="feature-page">
       <PageHeader
         icon={QrCode}
-        title="QR & Barcode"
-        description="Generate custom QR codes and barcodes"
+        title={t('QR & Barcode')}
+        description={t('Generate custom QR codes and barcodes')}
       />
 
       <Tabs
-        ariaLabel="QR and barcode modes"
+        ariaLabel={t('QR and barcode modes')}
         value={activeTab}
         onChange={setActiveTab}
         items={[
-          { value: 'qr', id: 'qr-tab-qr', label: 'QR Code', icon: <QrCode size={15} aria-hidden="true" /> },
-          { value: 'barcode', id: 'qr-tab-barcode', label: 'Barcode', icon: <Barcode size={15} aria-hidden="true" /> },
+          { value: 'qr', id: 'qr-tab-qr', label: t('QR Code'), icon: <QrCode size={15} aria-hidden="true" /> },
+          { value: 'barcode', id: 'qr-tab-barcode', label: t('Barcode'), icon: <Barcode size={15} aria-hidden="true" /> },
         ]}
       />
 
@@ -276,7 +277,7 @@ export function QrBarcodePage() {
                 <div className="card card--flush">
                   <div className="card-head">
                     <span className="card-head-title">
-                      <label htmlFor="qr-content">Content</label>
+                      <label htmlFor="qr-content">{t('Content')}</label>
                     </span>
                   </div>
                   <div className="card-body">
@@ -285,12 +286,12 @@ export function QrBarcodePage() {
                       className="input"
                       value={qrContent}
                       onChange={(e) => setQrContent(e.target.value)}
-                      placeholder="Enter URL, text, or data..."
+                      placeholder={t('Enter URL, text, or data...')}
                       rows={5}
                     />
                     {normalizeQrContent(qrContent) !== qrContent && (
                       <p className="text-muted text-body-sm hint-gap-sm" id="qr-link-note">
-                        Saved as <strong>{normalizeQrContent(qrContent).trim()}</strong> so phones open it as a link.
+                        {t('Saved as')} <strong>{normalizeQrContent(qrContent).trim()}</strong> {t('so phones open it as a link.')}
                       </p>
                     )}
                   </div>
@@ -298,17 +299,17 @@ export function QrBarcodePage() {
 
                 <div className="card card--flush">
                   <div className="card-head">
-                    <span className="card-head-title">Error correction</span>
+                    <span className="card-head-title">{t('Error correction')}</span>
                   </div>
                   <div className="card-body">
                     <RadioCardGroup
-                      ariaLabel="Error correction"
+                      ariaLabel={t('Error correction')}
                       name="errorCorrection"
                       options={QR_EC_OPTIONS}
                       value={qrErrorCorrection}
                       onChange={setQrErrorCorrection}
                     />
-                    <small className="hint">Higher levels survive more damage but hold less content.</small>
+                    <small className="hint">{t('Higher levels survive more damage but hold less content.')}</small>
                   </div>
                 </div>
               </>
@@ -317,7 +318,7 @@ export function QrBarcodePage() {
                 <div className="card card--flush">
                   <div className="card-head">
                     <span className="card-head-title">
-                      <label htmlFor="barcode-content">Content</label>
+                      <label htmlFor="barcode-content">{t('Content')}</label>
                     </span>
                   </div>
                   <div className="card-body">
@@ -327,15 +328,15 @@ export function QrBarcodePage() {
                       type="text"
                       value={barcodeContent}
                       onChange={(e) => setBarcodeContent(e.target.value)}
-                      placeholder="Enter barcode data..."
+                      placeholder={t('Enter barcode data...')}
                     />
                     {barcodeType.startsWith('ean') && (
                       <small className="hint hint--icon">
                         <Info size={13} aria-hidden="true" />
                         <span>
                           {barcodeType === 'ean13'
-                            ? 'EAN-13 requires 12 or 13 numeric digits. The 13th digit is automatically generated as a checksum.'
-                            : 'EAN-8 requires 7 or 8 numeric digits. The 8th digit is automatically generated as a checksum.'}
+                            ? t('EAN-13 requires 12 or 13 numeric digits. The 13th digit is automatically generated as a checksum.')
+                            : t('EAN-8 requires 7 or 8 numeric digits. The 8th digit is automatically generated as a checksum.')}
                         </span>
                       </small>
                     )}
@@ -344,11 +345,11 @@ export function QrBarcodePage() {
 
                 <div className="card card--flush">
                   <div className="card-head">
-                    <span className="card-head-title">Barcode type</span>
+                    <span className="card-head-title">{t('Barcode type')}</span>
                   </div>
                   <div className="card-body">
                     <RadioCardGroup
-                      ariaLabel="Barcode type"
+                      ariaLabel={t('Barcode type')}
                       name="barcodeType"
                       options={BARCODE_TYPES}
                       value={barcodeType}
@@ -361,11 +362,11 @@ export function QrBarcodePage() {
 
             <div className="card card--flush">
               <div className="card-head">
-                <span className="card-head-title">Export format</span>
+                <span className="card-head-title">{t('Export format')}</span>
               </div>
               <div className="card-body">
                 <RadioCardGroup
-                  ariaLabel="Export format"
+                  ariaLabel={t('Export format')}
                   name="format"
                   options={FORMAT_OPTIONS as readonly { value: 'png' | 'svg'; label: string; desc: string }[]}
                   value={format}
@@ -379,21 +380,21 @@ export function QrBarcodePage() {
           <div className="col-stack">
             <div className="card card--flush">
               <div className="card-head">
-                <span className="card-head-title">Preview</span>
+                <span className="card-head-title">{t('Preview')}</span>
               </div>
               <div className="card-body">
-                <div className="preview-box">
+                <div className={`preview-box${activeTab === 'qr' ? ' preview-box--qr' : ''}`}>
                   {isLoading ? (
                     <div className="preview-empty">
                       <Loader2 size={24} className="spin" />
-                      <span>Generating...</span>
+                      <span>{t('Generating...')}</span>
                     </div>
                   ) : previewData ? (
-                    <img src={previewData.url} alt="Preview" />
+                    <img src={previewData.url} alt={t('Preview')} />
                   ) : (
                     <div className="preview-empty">
                       {activeTab === 'qr' ? <QrCode size={32} aria-hidden="true" /> : <Barcode size={32} aria-hidden="true" />}
-                      <span>Enter content to see preview</span>
+                      <span>{t('Enter content to see preview')}</span>
                     </div>
                   )}
                 </div>
@@ -401,7 +402,7 @@ export function QrBarcodePage() {
                 {activeTab === 'qr' && (
                   <div className="field">
                     <label htmlFor="qr-size-slider">
-                      Size <span className="chip">{qrSize}</span>
+                      {t('Size')} <span className="chip">{qrSize}</span>
                     </label>
                     <RangeField
                       id="qr-size-slider"
@@ -411,8 +412,8 @@ export function QrBarcodePage() {
                       onChange={setQrSize}
                       scale={(
                         <>
-                          <span>Small (1)</span>
-                          <span>Large (20)</span>
+                          <span>{t('Small (1)')}</span>
+                          <span>{t('Large (20)')}</span>
                         </>
                       )}
                     />
@@ -420,7 +421,7 @@ export function QrBarcodePage() {
                 )}
 
                 <div className="field">
-                  <label htmlFor="qr-output-name">Output filename</label>
+                  <label htmlFor="qr-output-name">{t('Output filename')}</label>
                   <input
                     id="qr-output-name"
                     className="input"
@@ -438,7 +439,7 @@ export function QrBarcodePage() {
                     disabled={!previewData || isLoading}
                   >
                     <Download size={15} />
-                    Download {format.toUpperCase()}
+                    {t('Save {format}', { format: format.toUpperCase() })}
                   </button>
                   <button
                     className="btn btn-secondary"
@@ -446,7 +447,7 @@ export function QrBarcodePage() {
                     disabled={!previewData || isLoading}
                   >
                     <FolderOpen size={15} />
-                    Open Folder
+                    {t('Open Folder')}
                   </button>
                 </div>
               </div>

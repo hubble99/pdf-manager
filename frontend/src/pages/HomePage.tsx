@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from '../config/app';
 import { BETA_TOOLTIP, featuresByGroup } from '../config/features';
+import { t } from '../i18n';
 
 /**
  * The entry point: what the product is, then every feature grouped by the task it
@@ -15,7 +16,7 @@ export function HomePage() {
       <PageHeader icon={Heart} title={APP_NAME} description={APP_TAGLINE} />
 
       <div className="page-body home-page">
-        <section className="home-hero" aria-label="About this application">
+        <section className="home-hero" aria-label={t('About this application')}>
           <div className="home-hero-copy">
             <h2 className="home-hero-name">{APP_NAME}</h2>
             <p className="home-hero-tagline">{APP_TAGLINE}</p>
@@ -25,13 +26,13 @@ export function HomePage() {
           <div className="card home-donation-teaser">
             <p className="home-donation-title">
               <Heart size={16} className="home-donation-icon" aria-hidden="true" />
-              Support this app
+              {t('Support this app')}
             </p>
             <p className="home-donation-copy">
-              {APP_NAME} is independent, private, and offline software.
+              {t('{app} is independent, private, and offline software.', { app: APP_NAME })}
             </p>
             <Link to="/donation" className="btn btn-primary btn-sm" id="home-donate">
-              Donate
+              {t('Donate')}
             </Link>
           </div>
         </section>

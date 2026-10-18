@@ -6,6 +6,7 @@
  * refused before it is uploaded, with a message that names the problem.
  */
 import { IMAGE_EXTENSIONS, type SourceKind } from './types';
+import { t } from '../../i18n';
 
 export interface FileKindCheck {
   ok: boolean;
@@ -40,7 +41,7 @@ export async function checkFileKind(file: File, expected: SourceKind): Promise<F
     if (looksLikePdf(header)) return { ok: true, error: null };
     return {
       ok: false,
-      error: `${file.name} is not a PDF file. Choose a PDF for this action.`,
+      error: t('{name} is not a PDF file. Choose a PDF for this action.', { name: file.name }),
     };
   }
 
@@ -49,7 +50,7 @@ export async function checkFileKind(file: File, expected: SourceKind): Promise<F
     if (ext && !(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
       return {
         ok: false,
-        error: `${file.name} looks like a ${imageLabel} but has an unsupported extension.`,
+        error: t('{name} looks like a {kind} but has an unsupported extension.', { name: file.name, kind: imageLabel }),
       };
     }
     return { ok: true, error: null };
@@ -58,11 +59,11 @@ export async function checkFileKind(file: File, expected: SourceKind): Promise<F
   if (!ext || !(IMAGE_EXTENSIONS as readonly string[]).includes(ext)) {
     return {
       ok: false,
-      error: `${file.name} is not a supported image. Use PNG, JPEG, WEBP, BMP, or TIFF.`,
+      error: t('{name} is not a supported image. Use PNG, JPEG, WEBP, BMP, or TIFF.', { name: file.name }),
     };
   }
   return {
     ok: false,
-    error: `${file.name} does not contain readable image data.`,
+    error: t('{name} does not contain readable image data.', { name: file.name }),
   };
 }

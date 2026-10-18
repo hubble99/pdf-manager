@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { t } from '../../i18n';
 
 export interface PageNavigationProps {
   currentPage: number; // 1-indexed
@@ -53,7 +54,7 @@ export function PageNavigation({
         <ChevronLeft size={16} />
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-        <span className="text-muted">Page:</span>
+        <span className="text-muted">{t('Page:')}</span>
         <input
           key={currentPage}
           ref={inputRef}

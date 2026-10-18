@@ -49,7 +49,7 @@ describe('QrBarcodePage', () => {
 
     expect(screen.getByAltText('Preview')).toHaveAttribute('src', 'blob:preview');
     expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Download PNG/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Save PNG/i })).toBeEnabled();
   }, 20000);
 
   it('replaces the preview once when the format changes and releases the old blob URL', async () => {

@@ -15,6 +15,7 @@ import {
 import type {
   InsertMode, InsertPosition, OrganizeSnapshot, PageRef, SourceHandle,
 } from './types';
+import { t, tn } from '../../i18n';
 
 export type { InsertMode, InsertPosition } from './types';
 
@@ -267,9 +268,9 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       setSelection(new Set());
     } catch (err) {
       if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : 'The file could not be added.';
+      const message = err instanceof Error ? err.message : t('The file could not be added.');
       setError(message);
-      showToast({ type: 'error', title: 'File not added', message });
+      showToast({ type: 'error', title: t('File not added'), message });
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -285,10 +286,10 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     if (existing || insertPendingSource?.fingerprint === fingerprint) {
       const isMain = existing?.id === mainSourceId;
       const message = isMain
-        ? `${file.name} is the PDF you opened. Use Duplicate on a page to repeat its pages.`
-        : `${file.name} is already in Sources. Use + next to it there to insert pages from it again.`;
+        ? t('{name} is the PDF you opened. Use Duplicate on a page to repeat its pages.', { name: file.name })
+        : t('{name} is already in Sources. Use + next to it there to insert pages from it again.', { name: file.name });
       setError(message);
-      showToast({ type: 'error', title: 'File already added', message });
+      showToast({ type: 'error', title: t('File already added'), message });
       if (!isMain) setPanel('sources');
       return;
     }
@@ -309,9 +310,9 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       setPanel('insert');
     } catch (err) {
       if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : 'The file could not be added.';
+      const message = err instanceof Error ? err.message : t('The file could not be added.');
       setError(message);
-      showToast({ type: 'error', title: 'File not added', message });
+      showToast({ type: 'error', title: t('File not added'), message });
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -367,9 +368,9 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
 
     const reference = clampReference(insertReference, total);
     const referenceError = !Number.isFinite(insertReference)
-      ? 'Enter the page the insertion is measured from.'
+      ? t('Enter the page the insertion is measured from.')
       : insertReference < 1 || insertReference > total
-        ? `Reference page must be between 1 and ${total}.`
+        ? t('Reference page must be between 1 and {total}.', { total })
         : null;
 
     return {
@@ -600,15 +601,15 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       triggerBlobDownload(assembled.blob, assembled.filename);
       setResult({
         filename: assembled.filename,
-        detail: `${assembled.totalPages} page${assembled.totalPages === 1 ? '' : 's'}`,
+        detail: tn(assembled.totalPages, '{n} page', '{n} pages'),
       });
       addHistoryEntry({ filename: assembled.filename, action: 'Organize PDF', size: assembled.blob.size });
-      showToast({ type: 'success', title: 'Document saved', message: `${assembled.totalPages} pages assembled` });
+      showToast({ type: 'success', title: t('Document saved'), message: tn(assembled.totalPages, '{n} page assembled', '{n} pages assembled') });
     } catch (err) {
       if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : 'The document could not be saved.';
+      const message = err instanceof Error ? err.message : t('The document could not be saved.');
       setError(message);
-      showToast({ type: 'error', title: 'Save failed', message });
+      showToast({ type: 'error', title: t('Save failed'), message });
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);

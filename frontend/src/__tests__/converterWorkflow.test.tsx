@@ -323,7 +323,7 @@ describe('unified converter workspace', () => {
       data: new Blob(['img']),
       headers: { 'x-pages-exported': '3', 'x-format': 'PNG', 'x-dpi': '150' },
     });
-    await screen.findByText('Download started automatically');
+    await screen.findByText('Saved to your Downloads folder');
   });
 
   it('discards a late PDF page-count response after the batch is cleared', async () => {

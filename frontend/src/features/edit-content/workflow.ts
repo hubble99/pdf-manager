@@ -6,6 +6,7 @@ import type {
   Point,
   PreflightResult,
 } from './types';
+import { t } from '../../i18n';
 
 export function buildEditCommand(original: string, draft: string): EditCommand | null {
   if (original === draft) return null;
@@ -118,37 +119,37 @@ export function selectionPolygon(
 
 export function explainGuard(reason?: string): string {
   const messages: Record<string, string> = {
-    REJECTED_STALE_REVISION: 'The document changed. Refresh and select the text again.',
-    REJECTED_STALE_TARGET: 'This selection is no longer current. Select the text again.',
-    REJECTED_SPLIT_TEXT_OBJECT: 'This word spans multiple native text objects and is view-only.',
-    REJECTED_TYPE3: 'Text using a Type 3 font is view-only in Edit Content V1.',
-    INVISIBLE_TEXT: 'This text is invisible (a hidden layer over an image), so editing it would not change what you see.',
-    REJECTED_UNSUPPORTED_GLYPH: 'The existing PDF font cannot represent the replacement.',
-    REJECTED_FONT_RESOURCE_COLLISION: 'This page has colliding font resources and cannot be regenerated safely.',
-    REJECTED_LAYOUT: 'The replacement would require unsupported layout changes.',
-    REJECTED_COLLATERAL_INTEGRITY: 'Verification found an unexpected change elsewhere in the PDF.',
-    REJECTED_PERSISTENCE: 'The replacement did not persist correctly after the PDF was reopened.',
-    REJECTED_PUBLICATION: 'The verified PDF could not be published safely.',
+    REJECTED_STALE_REVISION: t('The document changed. Refresh and select the text again.'),
+    REJECTED_STALE_TARGET: t('This selection is no longer current. Select the text again.'),
+    REJECTED_SPLIT_TEXT_OBJECT: t('This word spans multiple native text objects and is view-only.'),
+    REJECTED_TYPE3: t('Text using a Type 3 font is view-only in Edit Content V1.'),
+    INVISIBLE_TEXT: t('This text is invisible (a hidden layer over an image), so editing it would not change what you see.'),
+    REJECTED_UNSUPPORTED_GLYPH: t('The existing PDF font cannot represent the replacement.'),
+    REJECTED_FONT_RESOURCE_COLLISION: t('This page has colliding font resources and cannot be regenerated safely.'),
+    REJECTED_LAYOUT: t('The replacement would require unsupported layout changes.'),
+    REJECTED_COLLATERAL_INTEGRITY: t('Verification found an unexpected change elsewhere in the PDF.'),
+    REJECTED_PERSISTENCE: t('The replacement did not persist correctly after the PDF was reopened.'),
+    REJECTED_PUBLICATION: t('The verified PDF could not be published safely.'),
   };
-  return reason ? messages[reason] ?? 'This text cannot be edited safely.' : 'This text cannot be edited safely.';
+  return reason ? messages[reason] ?? t('This text cannot be edited safely.') : t('This text cannot be edited safely.');
 }
 
 const DETAIL_MESSAGES: Record<string, string> = {
-  SPLIT_WORD: 'This word is split across several text pieces in the PDF, so it cannot be edited safely.',
-  TYPE3_FONT: 'This text uses a Type 3 font, which Edit Content cannot edit.',
-  GLYPH_COVERAGE_UNKNOWN: 'Edit Content cannot confirm that the PDF font contains these characters. Try characters already used in this text.',
-  FONT_RESOURCE_COLLISION: 'This page has font resources that cannot be regenerated without risking other text.',
-  RESOURCE_SCOPE_UNKNOWN: 'The font resources of this page cannot be analysed safely.',
-  UNSUPPORTED_FONT_TYPE: 'This text uses a font type that Edit Content does not support.',
-  NESTED_CONTENT_SCOPE: 'This text sits inside a nested drawing group and is view-only.',
-  CLIPPED_TEXT: 'This text is clipped by a shape and is view-only.',
-  UNSUPPORTED_RENDER_MODE: 'This text uses an outline or invisible rendering mode and is view-only.',
-  NEW_LINE: 'New lines cannot be added in Edit Content.',
-  COMPLEX_SCRIPT: 'Text in this script needs shaping that Edit Content does not support.',
-  INVISIBLE_TEXT: 'This text is invisible (a hidden layer over an image), so editing it would not change what you see.',
-  OBJECT_NOT_EDITABLE: 'This text object is view-only.',
-  SELECTION_EXPIRED: 'This selection is out of date. Select the text again.',
-  INVALID_REQUEST: 'This change could not be checked.',
+  SPLIT_WORD: t('This word is split across several text pieces in the PDF, so it cannot be edited safely.'),
+  TYPE3_FONT: t('This text uses a Type 3 font, which Edit Content cannot edit.'),
+  GLYPH_COVERAGE_UNKNOWN: t('Edit Content cannot confirm that the PDF font contains these characters. Try characters already used in this text.'),
+  FONT_RESOURCE_COLLISION: t('This page has font resources that cannot be regenerated without risking other text.'),
+  RESOURCE_SCOPE_UNKNOWN: t('The font resources of this page cannot be analysed safely.'),
+  UNSUPPORTED_FONT_TYPE: t('This text uses a font type that Edit Content does not support.'),
+  NESTED_CONTENT_SCOPE: t('This text sits inside a nested drawing group and is view-only.'),
+  CLIPPED_TEXT: t('This text is clipped by a shape and is view-only.'),
+  UNSUPPORTED_RENDER_MODE: t('This text uses an outline or invisible rendering mode and is view-only.'),
+  NEW_LINE: t('New lines cannot be added in Edit Content.'),
+  COMPLEX_SCRIPT: t('Text in this script needs shaping that Edit Content does not support.'),
+  INVISIBLE_TEXT: t('This text is invisible (a hidden layer over an image), so editing it would not change what you see.'),
+  OBJECT_NOT_EDITABLE: t('This text object is view-only.'),
+  SELECTION_EXPIRED: t('This selection is out of date. Select the text again.'),
+  INVALID_REQUEST: t('This change could not be checked.'),
 };
 
 /** Characters named in a missing-glyph message, capped so the line stays short. */
@@ -161,7 +162,7 @@ export function formatMissingCharacters(codePoints: number[]): string {
 export function explainPreflight(result: PreflightResult): string {
   if (result.detailCodes.includes('MISSING_GLYPH')) {
     const characters = formatMissingCharacters(result.unsupportedCodePoints);
-    return `This PDF font has no glyph for ${characters || 'one of the new characters'}. Use characters that already appear in this font.`;
+    return t('This PDF font has no glyph for {characters}. Use characters that already appear in this font.', { characters: characters || t('one of the new characters') });
   }
   const detail = result.detailCodes.find((code) => DETAIL_MESSAGES[code]);
   if (detail) return DETAIL_MESSAGES[detail];

@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t } from '../i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ export function ProtectPage() {
   const loadFile = useCallback(
     (f: File) => {
       if (!f.name.toLowerCase().endsWith('.pdf')) {
-        showToast({ type: 'error', title: 'Invalid file', message: 'Only PDF files are accepted.' });
+        showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
         return;
       }
       setFile(f);
@@ -103,9 +104,9 @@ export function ProtectPage() {
 
   // ── Submit: Add Password ────────────────────────────────────────────────────
   const handleProtect = async () => {
-    if (!file) { showToast({ type: 'error', title: 'No file', message: 'Please select a PDF file first.' }); return; }
-    if (!userPw) { showToast({ type: 'error', title: 'No password', message: 'User password is required to encrypt the document.' }); return; }
-    if (userPw !== confirmPw) { showToast({ type: 'error', title: 'Passwords do not match', message: 'Re-enter the password in both fields.' }); return; }
+    if (!file) { showToast({ type: 'error', title: t('No file'), message: t('Please select a PDF file first.') }); return; }
+    if (!userPw) { showToast({ type: 'error', title: t('No password'), message: t('User password is required to encrypt the document.') }); return; }
+    if (userPw !== confirmPw) { showToast({ type: 'error', title: t('Passwords do not match'), message: t('Re-enter the password in both fields.') }); return; }
     
     setIsLoading(true);
     setResult(null);
@@ -133,13 +134,13 @@ export function ProtectPage() {
       addHistoryEntry({ filename, action: 'Protected PDF', size: blob.size });
       showToast({
         type: 'success',
-        title: 'PDF Protected!',
-        message: `${filename} — AES-256 encrypted`,
-        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        title: t('PDF Protected!'),
+        message: t('{name} — AES-256 encrypted', { name: filename }),
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
         duration: 8000,
       });
     } catch (err: unknown) {
-      let msg = err instanceof Error ? err.message : 'Unknown error';
+      let msg = err instanceof Error ? err.message : t('Unknown error');
       // Parse Axios error response
       if (axios.isAxiosError(err) && err.response?.data) {
         try {
@@ -152,7 +153,7 @@ export function ProtectPage() {
           }
         } catch { /* ignore parse errors */ }
       }
-      showToast({ type: 'error', title: 'Protection failed', message: msg });
+      showToast({ type: 'error', title: t('Protection failed'), message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -160,8 +161,8 @@ export function ProtectPage() {
 
   // ── Submit: Remove Password ─────────────────────────────────────────────────
   const handleRemovePassword = async () => {
-    if (!file) { showToast({ type: 'error', title: 'No file', message: 'Please select an encrypted PDF file.' }); return; }
-    if (!removePw) { showToast({ type: 'error', title: 'No password', message: 'Enter the current PDF password to remove it.' }); return; }
+    if (!file) { showToast({ type: 'error', title: t('No file'), message: t('Please select an encrypted PDF file.') }); return; }
+    if (!removePw) { showToast({ type: 'error', title: t('No password'), message: t('Enter the current PDF password to remove it.') }); return; }
 
     setIsLoading(true);
     setResult(null);
@@ -184,13 +185,13 @@ export function ProtectPage() {
       addHistoryEntry({ filename, action: 'Removed Password', size: blob.size });
       showToast({
         type: 'success',
-        title: 'Password Removed!',
-        message: `${filename} is now unprotected`,
-        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        title: t('Password Removed!'),
+        message: t('{name} is now unprotected', { name: filename }),
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
         duration: 8000,
       });
     } catch (err: unknown) {
-      let msg = err instanceof Error ? err.message : 'Unknown error';
+      let msg = err instanceof Error ? err.message : t('Unknown error');
       if (axios.isAxiosError(err) && err.response?.data) {
         try {
           const responseData = err.response.data;
@@ -202,7 +203,7 @@ export function ProtectPage() {
           }
         } catch { /* ignore */ }
       }
-      showToast({ type: 'error', title: 'Password removal failed', message: msg });
+      showToast({ type: 'error', title: t('Password removal failed'), message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -215,17 +216,17 @@ export function ProtectPage() {
     <div className="feature-page">
       <PageHeader
         icon={Shield}
-        title="Protect PDF"
-        description="Add or remove AES-256 password protection from PDF files"
+        title={t('Protect PDF')}
+        description={t('Add or remove AES-256 password protection from PDF files')}
       />
 
       <Tabs
-        ariaLabel="Protect mode"
+        ariaLabel={t('Protect mode')}
         value={mode}
         onChange={(next) => { setMode(next); setResult(null); }}
         items={[
-          { value: 'add', id: 'protect-tab-add', label: 'Add Password', icon: <Lock size={15} aria-hidden="true" /> },
-          { value: 'remove', id: 'protect-tab-remove', label: 'Remove Password', icon: <LockOpen size={15} aria-hidden="true" /> },
+          { value: 'add', id: 'protect-tab-add', label: t('Add Password'), icon: <Lock size={15} aria-hidden="true" /> },
+          { value: 'remove', id: 'protect-tab-remove', label: t('Remove Password'), icon: <LockOpen size={15} aria-hidden="true" /> },
         ]}
       />
 
@@ -255,9 +256,9 @@ export function ProtectPage() {
               />
               <Upload className="drop-zone-icon" />
               <p className="drop-zone-title">
-                {mode === 'add' ? 'Drop a PDF to encrypt' : 'Drop an encrypted PDF to unlock'}
+                {mode === 'add' ? t('Drop a PDF to encrypt') : t('Drop an encrypted PDF to unlock')}
               </p>
-              <p className="drop-zone-sub">or click to browse · Single PDF</p>
+              <p className="drop-zone-sub">{t('or click to browse · Single PDF')}</p>
             </div>
           ) : (
             <div className="card file-card">
@@ -282,35 +283,35 @@ export function ProtectPage() {
           {file && mode === 'add' && (
             <div className="card">
               <div className="card-title-row">
-                <Lock size={16} color="var(--accent)" /> Encryption Settings
+                <Lock size={16} color="var(--accent)" /> {t('Encryption Settings')}
               </div>
               
               <div className="stack-16">
                 <PasswordField
                   id="protect-user-pw"
-                  label="User Password (Required to Open)"
+                  label={t('User Password (Required to Open)')}
                   value={userPw}
                   onChange={setUserPw}
-                  placeholder="Password to open document"
+                  placeholder={t('Password to open document')}
                 />
                 <PasswordField
                   id="protect-confirm-pw"
-                  label="Confirm Password"
+                  label={t('Confirm Password')}
                   value={confirmPw}
                   onChange={setConfirmPw}
-                  placeholder="Re-enter the password"
-                  error={confirmPw && userPw !== confirmPw ? 'Passwords do not match.' : undefined}
+                  placeholder={t('Re-enter the password')}
+                  error={confirmPw && userPw !== confirmPw ? t('Passwords do not match.') : undefined}
                 />
                 <PasswordField
                   id="protect-owner-pw"
-                  label="Owner Password (Optional, Required to Edit)"
+                  label={t('Owner Password (Optional, Required to Edit)')}
                   value={ownerPw}
                   onChange={setOwnerPw}
-                  placeholder="Password to restrict permissions"
+                  placeholder={t('Password to restrict permissions')}
                   autoComplete="new-password"
                 />
                 <div className="field-gap">
-                  <label className="input-label">Output Filename (optional)</label>
+                  <label className="input-label">{t('Output Filename (optional)')}</label>
                   <input
                     className="input"
                     type="text"
@@ -320,23 +321,23 @@ export function ProtectPage() {
                   />
                 </div>
                 <div className="field-gap">
-                  <label className="input-label input-label--spaced">Permissions (require Owner Password to change)</label>
+                  <label className="input-label input-label--spaced">{t('Permissions (require Owner Password to change)')}</label>
                   <div className="check-row-group">
                     <label className="check-row">
                       <input type="checkbox" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
-                      Allow Printing
+                      {t('Allow Printing')}
                     </label>
                     <label className="check-row">
                       <input type="checkbox" checked={allowCopy} onChange={(e) => setAllowCopy(e.target.checked)} />
-                      Allow Copying
+                      {t('Allow Copying')}
                     </label>
                     <label className="check-row">
                       <input type="checkbox" checked={allowModify} onChange={(e) => setAllowModify(e.target.checked)} />
-                      Allow Modifying
+                      {t('Allow Modifying')}
                     </label>
                   </div>
                   <p className="text-muted text-body-sm hint-gap">
-                    If an owner password is not set, some PDF readers may ignore these restrictions.
+                    {t('If an owner password is not set, some PDF readers may ignore these restrictions.')}
                   </p>
                 </div>
               </div>
@@ -347,15 +348,15 @@ export function ProtectPage() {
           {file && mode === 'remove' && (
             <div className="card">
               <div className="card-title-row">
-                <LockOpen size={16} color="var(--accent)" /> Remove Encryption
+                <LockOpen size={16} color="var(--accent)" /> {t('Remove Encryption')}
               </div>
               <div className="stack-16">
                 <PasswordField
                   id="protect-remove-pw"
-                  label="Current Password (to verify and unlock)"
+                  label={t('Current Password (to verify and unlock)')}
                   value={removePw}
                   onChange={setRemovePw}
-                  placeholder="Enter existing PDF password"
+                  placeholder={t('Enter existing PDF password')}
                   autoComplete="current-password"
                 />
               </div>
@@ -368,7 +369,7 @@ export function ProtectPage() {
               <CheckCircle size={28} className="result-card-icon" />
               <div className="grow">
                 <div className="result-card-title">
-                  {result.mode === 'add' ? 'Download started — PDF encrypted' : 'Download started — Password removed'}
+                  {result.mode === 'add' ? t('PDF encrypted and saved') : t('Password removed and saved')}
                 </div>
                 <div className="result-card-meta">
                   <Filename name={result.filename} />
@@ -377,10 +378,10 @@ export function ProtectPage() {
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => openOutputFolder()}
-                title="Open download folder"
+                title={t('Open folder')}
               >
                 <FolderOpen size={14} />
-                Open Folder
+                {t('Open Folder')}
               </button>
             </div>
           )}
@@ -393,7 +394,7 @@ export function ProtectPage() {
                 onClick={clearFile}
                 disabled={isLoading}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               {mode === 'add' ? (
                 <button
@@ -405,12 +406,12 @@ export function ProtectPage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      Encrypting…
+                      {t('Encrypting…')}
                     </>
                   ) : (
                     <>
                       <Shield size={15} />
-                      Protect & Download
+                      {t('Protect PDF')}
                     </>
                   )}
                 </button>
@@ -424,12 +425,12 @@ export function ProtectPage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      Removing…
+                      {t('Removing…')}
                     </>
                   ) : (
                     <>
                       <LockOpen size={15} />
-                      Remove & Download
+                      {t('Remove Password')}
                     </>
                   )}
                 </button>

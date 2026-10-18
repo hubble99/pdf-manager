@@ -19,6 +19,7 @@
  * and the capability scope, so any change fails CI.
  */
 import { APP_SOURCE_URL } from './app';
+import { t } from '../i18n';
 import paypalImage from '../assets/donation-paypal.jpeg';
 import qrisImage from '../assets/donation-qris.jpeg';
 
@@ -47,23 +48,22 @@ export const QRIS_IS_PLACEHOLDER = false;
 const OFFICIAL_SOURCE_HOST = APP_SOURCE_URL.replace(/^https?:\/\//, '');
 
 export const DONATION_TEXTS = {
-  title: 'Support this app',
-  summary:
-    'This app is free to use. Donations are completely voluntary and help keep '
-    + 'development going.',
-  domesticTitle: 'Indonesia - QRIS',
-  domesticHint: 'Scan with any QRIS-capable app, such as ShopeePay or your bank app.',
-  internationalTitle: 'International - PayPal',
-  internationalHint: 'Scan the code with the PayPal app, or open the link below.',
-  recipientLabel: 'Recipient',
-  recipientCheck: 'Before you pay, check that your payment app shows this name.',
-  safetyNote:
-    'PDF Manager never asks for payment details, or for donations by email or '
-    + `chat. The only official source is ${OFFICIAL_SOURCE_HOST}.`,
-  copy: 'Copy link',
-  open: 'Open PayPal',
-  copied: 'Link copied to the clipboard.',
-  qrisPlaceholderNote: 'Placeholder image - the real QRIS code will be added later.',
-  qrisAlt: 'QRIS payment code',
-  paypalAlt: 'PayPal payment QR code',
+  title: t('Support this app'),
+  summary: t('This app is free to use. Donations are completely voluntary and help keep development going.'),
+  domesticTitle: t('Indonesia - QRIS'),
+  domesticHint: t('Scan with any QRIS-capable app, such as ShopeePay or your bank app.'),
+  internationalTitle: t('International - PayPal'),
+  internationalHint: t('Scan the code with the PayPal app, or open the link below.'),
+  recipientLabel: t('Recipient'),
+  recipientCheck: t('Before you pay, check that your payment app shows this name.'),
+  safetyNote: t(
+    'PDF Manager never asks for payment details, or for donations by email or chat. The only official source is {host}.',
+    { host: OFFICIAL_SOURCE_HOST },
+  ),
+  copy: t('Copy link'),
+  open: t('Open PayPal'),
+  copied: t('Link copied to the clipboard.'),
+  qrisPlaceholderNote: t('Placeholder image - the real QRIS code will be added later.'),
+  qrisAlt: t('QRIS payment code'),
+  paypalAlt: t('PayPal payment QR code'),
 };

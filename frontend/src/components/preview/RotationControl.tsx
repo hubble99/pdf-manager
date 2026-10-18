@@ -1,4 +1,5 @@
 import { RotateCcw, RotateCw } from 'lucide-react';
+import { t } from '../../i18n';
 
 export interface RotationControlProps {
   rotation: 0 | 90 | 180 | 270;
@@ -21,7 +22,7 @@ export function RotationControl({ rotation, onChange }: RotationControlProps) {
         90°
       </button>
       <div style={{ fontSize: 13, color: 'var(--on-surface-variant)' }}>
-        Current: <span style={{ fontWeight: 500, color: 'var(--on-surface)' }}>{rotation}°</span>
+        {t('Current:')} <span style={{ fontWeight: 500, color: 'var(--on-surface)' }}>{rotation}°</span>
       </div>
       <button className="btn btn-secondary btn-sm" onClick={handleRotateRight}>
         90°

@@ -4,6 +4,7 @@ import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
 import { openInSystemBrowser } from '../utils/openExternal';
+import { t } from '../i18n';
 
 type Method = 'qris' | 'paypal';
 
@@ -33,7 +34,7 @@ export function DonationPage() {
       }
       showToast({ type: 'success', title: DONATION_TEXTS.copied });
     } catch {
-      showToast({ type: 'error', title: 'Could not copy', message: 'Copy the link manually.' });
+      showToast({ type: 'error', title: t('Could not copy'), message: t('Copy the link manually.') });
     }
   }, [showToast]);
 
@@ -42,7 +43,7 @@ export function DonationPage() {
     try {
       await openInSystemBrowser(DONATION.paypalUrl);
     } catch {
-      showToast({ type: 'error', title: 'Could not open the link' });
+      showToast({ type: 'error', title: t('Could not open the link') });
     } finally {
       setIsOpening(false);
     }
@@ -62,12 +63,12 @@ export function DonationPage() {
       <PageHeader icon={Heart} title={DONATION_TEXTS.title} description={DONATION_TEXTS.summary} />
 
       <Tabs
-        ariaLabel="Donation method"
+        ariaLabel={t('Donation method')}
         value={method}
         onChange={setMethod}
         items={[
-          { value: 'qris', id: 'donation-tab-qris', controls: 'donation-panel-qris', label: 'Indonesia', icon: <Flag size={15} aria-hidden="true" /> },
-          { value: 'paypal', id: 'donation-tab-paypal', controls: 'donation-panel-paypal', label: 'International', icon: <Globe size={15} aria-hidden="true" /> },
+          { value: 'qris', id: 'donation-tab-qris', controls: 'donation-panel-qris', label: t('Indonesia'), icon: <Flag size={15} aria-hidden="true" /> },
+          { value: 'paypal', id: 'donation-tab-paypal', controls: 'donation-panel-paypal', label: t('International'), icon: <Globe size={15} aria-hidden="true" /> },
         ]}
       />
 
@@ -92,9 +93,9 @@ export function DonationPage() {
               )}
               <p className="donation-hint">{DONATION_TEXTS.domesticHint}</p>
               <ol className="donation-steps">
-                <li>Open your e-wallet or banking app</li>
-                <li>Scan the QR code</li>
-                <li>Enter an amount and confirm</li>
+                <li>{t('Open your e-wallet or banking app')}</li>
+                <li>{t('Scan the QR code')}</li>
+                <li>{t('Enter an amount and confirm')}</li>
               </ol>
             </div>
           </section>
@@ -133,7 +134,7 @@ export function DonationPage() {
                   <ExternalLink size={13} aria-hidden="true" /> {DONATION_TEXTS.open}
                 </button>
               </div>
-              <small className="hint">Opens PayPal in your system browser.</small>
+              <small className="hint">{t('Opens PayPal in your system browser.')}</small>
             </div>
           </section>
 

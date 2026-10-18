@@ -19,7 +19,9 @@ import { isTauri } from './utils/tauriDialog';
 import { ToastProvider } from './context/ToastContext';
 import { FileProvider } from './context/FileContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { LanguageProvider, SKIP_SPLASH_KEY } from './i18n/LanguageProvider';
 import { ToastContainer } from './components/ToastContainer';
+import { t } from './i18n';
 type AppState = 'splash' | 'ready' | 'error';
 type BackendStatus = 'checking' | 'online' | 'offline';
 
@@ -33,7 +35,7 @@ const EditContentPage = lazy(() =>
 function RouteFallback() {
   return (
     <div className="page-body" role="status" aria-live="polite">
-      Loading PDF editor…
+      {t('Loading PDF editor…')}
     </div>
   );
 }
@@ -73,8 +75,8 @@ function BackendStatusBar({ status }: { status: BackendStatus }) {
         }}
       />
       {isChecking
-        ? 'Connecting to PDF Manager backend...'
-        : 'Backend offline — Start the Python server: cd backend && .venv\\Scripts\\uvicorn main:app --reload'}
+        ? t('Connecting to PDF Manager backend...')
+        : t('Backend offline — Start the Python server: cd backend && .venv\\Scripts\\uvicorn main:app --reload')}
     </div>
   );
 }
@@ -82,9 +84,19 @@ function BackendStatusBar({ status }: { status: BackendStatus }) {
 export default function App() {
   // In browser/dev mode: skip splash (backend already running via uvicorn)
   // In Tauri production: show splash while sidecar boots up
-  const [appState, setAppState] = useState<AppState>(() =>
-    isTauri() ? 'splash' : 'ready'
-  );
+  const [appState, setAppState] = useState<AppState>(() => {
+    if (!isTauri()) return 'ready';
+    // A language switch reloads the app while the backend is already running.
+    try {
+      if (window.sessionStorage.getItem(SKIP_SPLASH_KEY)) {
+        window.sessionStorage.removeItem(SKIP_SPLASH_KEY);
+        return 'ready';
+      }
+    } catch {
+      // Fall through to the splash.
+    }
+    return 'splash';
+  });
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
 
   useEffect(() => {
@@ -129,6 +141,7 @@ export default function App() {
     <ThemeProvider>
       <ToastProvider>
         <FileProvider>
+          <LanguageProvider>
           <BrowserRouter>
             <BackendStatusBar status={backendStatus} />
           <div
@@ -177,6 +190,7 @@ export default function App() {
             }
           `}</style>
         </BrowserRouter>
+          </LanguageProvider>
       </FileProvider>
     </ToastProvider>
     </ThemeProvider>

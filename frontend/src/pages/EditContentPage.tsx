@@ -52,6 +52,7 @@ import type {
   Point,
 } from '../features/edit-content/types';
 import { buildEditCommand, explainGuard, explainPreflight } from '../features/edit-content/workflow';
+import { t } from '../i18n';
 
 
 type Phase = 'idle' | 'opening' | 'rendering' | 'selecting' | 'applying' | 'saving' | 'history' | 'closing';
@@ -69,11 +70,11 @@ function replyError(reply: ContentReply): string {
 
 function EditContentLimits() {
   return (
-    <aside className="edit-content-limits" aria-label="Edit Content V1 limits">
-      <strong>Edit Content V1 limits</strong>
-      <p>Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.</p>
-      <p>These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.</p>
-      <p>Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.</p>
+    <aside className="edit-content-limits" aria-label={t('Edit Content V1 limits')}>
+      <strong>{t('Edit Content V1 limits')}</strong>
+      <p>{t('Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.')}</p>
+      <p>{t('These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.')}</p>
+      <p>{t('Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.')}</p>
     </aside>
   );
 }
@@ -193,7 +194,7 @@ export function EditContentPage() {
       setPageIndex((value) => Math.min(value, Math.max(0, reply.result.discovery.pages.length - 1)));
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not refresh the accepted checkpoint.');
+      setError(caught instanceof Error ? caught.message : t('Could not refresh the accepted checkpoint.'));
       return false;
     } finally {
       if (sequence === inspectSequence.current) setPhase('idle');
@@ -226,7 +227,7 @@ export function EditContentPage() {
       }
     }).catch((caught) => {
       if (!controller.signal.aborted && sequence === renderSequence.current) {
-        setError(caught instanceof Error ? caught.message : 'Native page rendering failed.');
+        setError(caught instanceof Error ? caught.message : t('Native page rendering failed.'));
       }
     });
     return () => controller.abort();
@@ -255,7 +256,7 @@ export function EditContentPage() {
 
   const openFile = useCallback(async (nextFile: File) => {
     if (!nextFile.name.toLowerCase().endsWith('.pdf')) {
-      setError('Edit Content accepts PDF files only.');
+      setError(t('Edit Content accepts PDF files only.'));
       return;
     }
     setPhase('opening');
@@ -275,7 +276,7 @@ export function EditContentPage() {
       zoomedByUser.current = false;
       selectTarget(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Edit Content engine is unavailable.');
+      setError(caught instanceof Error ? caught.message : t('Edit Content engine is unavailable.'));
     } finally {
       setPhase('idle');
     }
@@ -292,7 +293,7 @@ export function EditContentPage() {
     }
     if (action.kind === 'history' && currentSession) {
       const requestId = contentRequestId(action.action);
-      setActiveRequest({ id: requestId, label: action.action === 'undo' ? 'Restoring previous checkpoint' : 'Restoring next checkpoint' });
+      setActiveRequest({ id: requestId, label: action.action === 'undo' ? t('Restoring previous checkpoint') : t('Restoring next checkpoint') });
       setPhase('history');
       setError(null);
       try {
@@ -308,9 +309,9 @@ export function EditContentPage() {
         }
         setSession(reply.result.state);
         await refreshAcceptedCheckpoint(reply.result.state);
-        setNotice(action.action === 'undo' ? 'Previous verified checkpoint restored.' : 'Next verified checkpoint restored.');
+        setNotice(action.action === 'undo' ? t('Previous verified checkpoint restored.') : t('Next verified checkpoint restored.'));
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : 'History could not be changed safely.');
+        setError(caught instanceof Error ? caught.message : t('History could not be changed safely.'));
       } finally {
         setActiveRequest(null);
         setPhase('idle');
@@ -355,11 +356,11 @@ export function EditContentPage() {
     if (!session || !selected || !draftDirty) return false;
     const edit = buildEditCommand(selected.text, draft);
     if (!edit) {
-      setError('This change could not be converted into a valid edit. Adjust the text and try again.');
+      setError(t('This change could not be converted into a valid edit. Adjust the text and try again.'));
       return false;
     }
     const requestId = contentRequestId('apply');
-    setActiveRequest({ id: requestId, label: 'Regenerating and verifying the PDF' });
+    setActiveRequest({ id: requestId, label: t('Regenerating and verifying the PDF') });
     setCancelRequested(false);
     setPhase('applying');
     setError(null);
@@ -371,21 +372,21 @@ export function EditContentPage() {
         const reason = replyError(reply);
         const refreshed = await refreshAcceptedCheckpoint(session);
         setError(refreshed
-          ? `${reason} The selection and draft were cleared because the target identity expired. Select the text again before retrying.`
-          : `${reason} The selection and draft were cleared. Refresh the page, then select the text again before retrying.`);
+          ? t('{reason} The selection and draft were cleared because the target identity expired. Select the text again before retrying.', { reason })
+          : t('{reason} The selection and draft were cleared. Refresh the page, then select the text again before retrying.', { reason }));
         return false;
       }
       setSession(reply.result.state);
       await refreshAcceptedCheckpoint(reply.result.state);
       if (after?.kind === 'select') {
-        setNotice('Edit accepted and the page was refreshed. Select the next text object again.');
+        setNotice(t('Edit accepted and the page was refreshed. Select the next text object again.'));
       } else {
-        setNotice('Edit accepted after save, close, reopen, and integrity verification.');
+        setNotice(t('Edit accepted after save, close, reopen, and integrity verification.'));
         if (after) await executePending(after, reply.result.state);
       }
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The edit could not be verified safely.');
+      setError(caught instanceof Error ? caught.message : t('The edit could not be verified safely.'));
       return false;
     } finally {
       setActiveRequest(null);
@@ -398,11 +399,11 @@ export function EditContentPage() {
     if (!session) return false;
     const edit = selected && draftDirty ? buildEditCommand(selected.text, draft) ?? undefined : undefined;
     if (selected && draftDirty && !edit) {
-      setError('This change could not be converted into a valid edit. Adjust the text and try again.');
+      setError(t('This change could not be converted into a valid edit. Adjust the text and try again.'));
       return false;
     }
     const requestId = contentRequestId('save');
-    setActiveRequest({ id: requestId, label: 'Verifying and publishing the PDF' });
+    setActiveRequest({ id: requestId, label: t('Verifying and publishing the PDF') });
     setCancelRequested(false);
     setPhase('saving');
     setError(null);
@@ -420,7 +421,7 @@ export function EditContentPage() {
       }
       setSession(reply.result.state);
       if (edit) await refreshAcceptedCheckpoint(reply.result.state);
-      setNotice('Verified output published.');
+      setNotice(t('Verified output published.'));
       try {
         const blob = await downloadContentOutput(session.sessionId, reply.result.outputId);
         const finalName = buildOutputFilename(outputName.trim() || `${defaultStem}-edited`, 'pdf');
@@ -428,22 +429,22 @@ export function EditContentPage() {
         setSavedName(finalName);
         showToast({
           type: 'success',
-          title: 'PDF saved',
+          title: t('PDF saved'),
           message: finalName,
-          action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
           duration: 8000,
         });
       } catch {
         showToast({
           type: 'info',
-          title: 'Output published',
-          message: 'The PDF is saved, but the browser download could not start. Use Save again to create another output.',
+          title: t('Output published'),
+          message: t('The PDF was created, but the file could not be written to your device. Use Save again to create another output.'),
         });
       }
       if (after) await executePending(after, reply.result.state);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The verified PDF could not be published.');
+      setError(caught instanceof Error ? caught.message : t('The verified PDF could not be published.'));
       return false;
     } finally {
       setActiveRequest(null);
@@ -485,7 +486,7 @@ export function EditContentPage() {
           else requestAction({ kind: 'deselect' });
         } else {
           setAmbiguous(candidates);
-          setNotice('Several native text objects overlap here. Choose the exact object from the list.');
+          setNotice(t('Several native text objects overlap here. Choose the exact object from the list.'));
         }
       } else if (hit.outcome === 'viewOnly') {
         setNotice(explainGuard(hit.reason));
@@ -495,7 +496,7 @@ export function EditContentPage() {
         setError(explainGuard(hit.reason));
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Text selection failed.');
+      setError(caught instanceof Error ? caught.message : t('Text selection failed.'));
     } finally {
       setPhase('idle');
     }
@@ -544,26 +545,26 @@ export function EditContentPage() {
     <div className="feature-page edit-content-page">
       <PageHeader
         icon={FilePenLine}
-        title="Edit Content"
-        description="Correct supported native PDF text with guarded regeneration and verification"
+        title={t('Edit Content')}
+        description={t('Correct supported native PDF text with guarded regeneration and verification')}
         badge={{ label: 'BETA', title: BETA_TOOLTIP }}
         actions={session ? (
           <>
             <span className={`badge ${unsaved ? 'badge-warning' : 'badge-success'}`}>
-              {unsaved ? 'Unsaved changes' : 'Saved checkpoint'}
+              {unsaved ? t('Unsaved changes') : t('Saved checkpoint')}
             </span>
             <input
               id="edit-content-output-name"
               className="input edit-content-header-name"
               type="text"
-              aria-label="Output filename"
-              title="Output filename. The .pdf extension is added automatically; the original file is never overwritten."
+              aria-label={t('Output filename')}
+              title={t('Output filename. The .pdf extension is added automatically; the original file is never overwritten.')}
               value={outputName}
               onChange={(event) => setOutputName(event.target.value)}
               placeholder={`${defaultStem}-edited`}
             />
             <button className="btn btn-primary" onClick={() => void saveSession()} disabled={busy} id="edit-content-save">
-              <Save size={16} aria-hidden="true" /> Save and download
+              <Save size={16} aria-hidden="true" /> {t('Save PDF')}
             </button>
           </>
         ) : undefined}
@@ -586,7 +587,7 @@ export function EditContentPage() {
                 const next = event.dataTransfer.files[0];
                 if (next) void openFile(next);
               }}
-              aria-label="Open a PDF in Edit Content"
+              aria-label={t('Open a PDF in Edit Content')}
             >
               <input
                 ref={fileInputRef}
@@ -600,48 +601,48 @@ export function EditContentPage() {
                 }}
               />
               {phase === 'opening' ? <Loader2 className="drop-zone-icon spin" aria-hidden="true" /> : <Upload className="drop-zone-icon" aria-hidden="true" />}
-              <p className="drop-zone-title">Open one PDF</p>
-              <p className="drop-zone-sub">Native text stays local. The original file is never overwritten.</p>
-              <span className="badge badge-neutral">PDF · up to 16 MiB</span>
+              <p className="drop-zone-title">{t('Open one PDF')}</p>
+              <p className="drop-zone-sub">{t('Native text stays local. The original file is never overwritten.')}</p>
+              <span className="badge badge-neutral">{t('PDF · up to 16 MiB')}</span>
             </div>
             <div className="edit-content-safety-note">
               <Check size={18} aria-hidden="true" />
               <div>
-                <strong>Verified before acceptance</strong>
-                <p>Every supported edit is regenerated privately, reopened, and checked before it enters history or becomes downloadable.</p>
+                <strong>{t('Verified before acceptance')}</strong>
+                <p>{t('Every supported edit is regenerated privately, reopened, and checked before it enters history or can be saved.')}</p>
               </div>
             </div>
-            <div className="edit-content-limits edit-content-beta-notice" role="note" aria-label="Beta feature">
-              <strong>Beta feature</strong>
-              <p>Edit Content is still in beta and may be unstable. Some edits can fail or look different from what you expect. Your original file is never overwritten, so check the result before you use it.</p>
+            <div className="edit-content-limits edit-content-beta-notice" role="note" aria-label={t('Beta feature')}>
+              <strong>{t('Beta feature')}</strong>
+              <p>{t('Edit Content is still in beta and may be unstable. Some edits can fail or look different from what you expect. Your original file is never overwritten, so check the result before you use it.')}</p>
             </div>
             <EditContentLimits />
             {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} />{error}</div>}
           </div>
         ) : (
           <div className="feature-split-layout edit-content-layout">
-            <section className="feature-controls edit-content-controls" aria-label="Edit Content controls">
+            <section className="feature-controls edit-content-controls" aria-label={t('Edit Content controls')}>
               <div className="edit-content-file-row">
                 <FileText size={20} aria-hidden="true" />
                 <div>
                   <Filename name={file.name} className="file-item-name" />
-                  <span className="file-item-meta">Revision {session.acceptedRevision} · {totalPages} pages</span>
+                  <span className="file-item-meta">{t('Revision')} {session.acceptedRevision} · {totalPages} {t('pages')}</span>
                 </div>
-                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'leave' })} aria-label="Close PDF">
+                <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'leave' })} aria-label={t('Close PDF')}>
                   <X size={15} aria-hidden="true" />
                 </button>
               </div>
 
               {pending && (
                 <div className="edit-content-decision" role="alert" aria-live="assertive">
-                  <strong>{pending.kind === 'leave' ? 'Save changes before leaving?' : 'Keep the current draft?'}</strong>
-                  <p>{pending.kind === 'leave' ? 'Save publishes exact verified bytes. Discard closes only this Content session.' : 'Apply verifies the draft. Discard restores the accepted text.'}</p>
+                  <strong>{pending.kind === 'leave' ? t('Save changes before leaving?') : t('Keep the current draft?')}</strong>
+                  <p>{pending.kind === 'leave' ? t('Save publishes exact verified bytes. Discard closes only this Content session.') : t('Apply verifies the draft. Discard restores the accepted text.')}</p>
                   <div className="edit-content-decision-actions">
                     <button className="btn btn-primary btn-sm" onClick={() => void resolvePendingPrimary()}>
-                      {pending.kind === 'leave' ? 'Save & continue' : 'Apply & continue'}
+                      {pending.kind === 'leave' ? t('Save & continue') : t('Apply & continue')}
                     </button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => void resolvePendingDiscard()}>Discard</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setPending(null)}>Cancel</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => void resolvePendingDiscard()}>{t('Discard')}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setPending(null)}>{t('Cancel')}</button>
                   </div>
                 </div>
               )}
@@ -649,8 +650,8 @@ export function EditContentPage() {
               {activeRequest && (
                 <div className="edit-content-progress" role="status" aria-live="polite">
                   <Loader2 size={16} aria-hidden="true" />
-                  <div><strong>{activeRequest.label}</strong><span>{cancelRequested ? 'Cancellation requested…' : 'Source and last accepted checkpoint remain unchanged until commit.'}</span></div>
-                  <button className="btn btn-secondary btn-sm" onClick={() => void cancelActive()} disabled={cancelRequested}>Cancel</button>
+                  <div><strong>{activeRequest.label}</strong><span>{cancelRequested ? t('Cancellation requested…') : t('Source and last accepted checkpoint remain unchanged until commit.')}</span></div>
+                  <button className="btn btn-secondary btn-sm" onClick={() => void cancelActive()} disabled={cancelRequested}>{t('Cancel')}</button>
                 </div>
               )}
 
@@ -661,21 +662,21 @@ export function EditContentPage() {
                 <div className="card status-card status-card--ok" id="edit-content-saved">
                   <Check size={22} aria-hidden="true" />
                   <div className="status-card-copy">
-                    <p className="merge-result" role="status">Saved <span className="merge-tree-name">{savedName}</span></p>
+                    <p className="merge-result" role="status">{t('Saved')} <span className="merge-tree-name">{savedName}</span></p>
                   </div>
-                  <button className="btn btn-ghost btn-sm" id="edit-content-open-folder-btn" onClick={() => openOutputFolder()} title="Open download folder">
-                    <FolderOpen size={14} aria-hidden="true" /> Open Folder
+                  <button className="btn btn-ghost btn-sm" id="edit-content-open-folder-btn" onClick={() => openOutputFolder()} title={t('Open folder')}>
+                    <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
                   </button>
                 </div>
               )}
 
               {ambiguous.length > 0 && (
                 <div className="edit-content-section">
-                  <h2>Choose the exact object</h2>
+                  <h2>{t('Choose the exact object')}</h2>
                   <div className="edit-content-object-list">
                     {ambiguous.map((object) => (
                       <button key={object.targetId} className="edit-content-object-option" onClick={() => requestAction({ kind: 'select', target: object })}>
-                        <span>{object.text || 'Empty text object'}</span>
+                        <span>{object.text || t('Empty text object')}</span>
                         <small>{object.font.family} · {object.fontSizePt.toFixed(1)} pt</small>
                       </button>
                     ))}
@@ -686,20 +687,20 @@ export function EditContentPage() {
               <div className="edit-content-section edit-content-editor-section">
                 <div className="edit-content-section-heading">
                   <div>
-                    <h2>{selected ? 'Selected native text' : 'Select text on the page'}</h2>
-                    <p>{selected ? 'Edit the text only. Position, font, and styling remain owned by the PDF.' : 'Click a supported native text object in the document.'}</p>
+                    <h2>{selected ? t('Selected native text') : t('Select text on the page')}</h2>
+                    <p>{selected ? t('Edit the text only. Position, font, and styling remain owned by the PDF.') : t('Click a supported native text object in the document.')}</p>
                   </div>
-                  {selected && <span className="badge badge-info">Exact object</span>}
+                  {selected && <span className="badge badge-info">{t('Exact object')}</span>}
                 </div>
                 <EditContentLimits />
                 {pickableObjects.length > 0 && (
                   <div className="edit-content-object-picker">
-                    <span className="input-label">Native text object</span>
+                    <span className="input-label">{t('Native text object')}</span>
                     <button
                       ref={pickerTriggerRef}
                       type="button"
                       className="input edit-content-object-trigger"
-                      aria-label="Native text object"
+                      aria-label={t('Native text object')}
                       aria-expanded={pickerOpen && !busy}
                       aria-controls={pickerOpen && !busy ? 'edit-content-object-options' : undefined}
                       onClick={() => {
@@ -709,7 +710,7 @@ export function EditContentPage() {
                       }}
                       disabled={busy}
                     >
-                      <span>{selected?.text.trim() || 'Choose supported text…'}</span>
+                      <span>{selected?.text.trim() || t('Choose supported text…')}</span>
                       <ChevronDown size={16} aria-hidden="true" />
                     </button>
                     {pickerOpen && !busy && (
@@ -723,14 +724,14 @@ export function EditContentPage() {
                           ref={pickerSearchRef}
                           className="input"
                           type="search"
-                          aria-label="Filter native text objects"
-                          placeholder={`Find text on this page (${pickableObjects.length})`}
+                          aria-label={t('Filter native text objects')}
+                          placeholder={t('Find text on this page ({count})', { count: pickableObjects.length })}
                           value={pickerQuery}
                           onChange={(event) => setPickerQuery(event.target.value)}
                         />
                         <select
                           className="input edit-content-object-listbox"
-                          aria-label="Native text options"
+                          aria-label={t('Native text options')}
                           size={6}
                           value={selected?.targetId ?? ''}
                           onChange={(event) => {
@@ -740,21 +741,21 @@ export function EditContentPage() {
                             if (target) requestAction({ kind: 'select', target });
                           }}
                         >
-                          <option value="">Choose supported text…</option>
+                          <option value="">{t('Choose supported text…')}</option>
                           {filteredPageObjects.map((object) => (
                             <option key={object.targetId} value={object.targetId}>
                               {object.text.trim()}
                             </option>
                           ))}
                         </select>
-                        {filteredPageObjects.length === 0 && <p>No matching text on this page.</p>}
+                        {filteredPageObjects.length === 0 && <p>{t('No matching text on this page.')}</p>}
                       </div>
                     )}
                   </div>
                 )}
                 {selected ? (
                   <>
-                    <label className="input-label" htmlFor="edit-content-draft">Replacement text</label>
+                    <label className="input-label" htmlFor="edit-content-draft">{t('Replacement text')}</label>
                     <textarea
                       ref={editorRef}
                       id="edit-content-draft"
@@ -776,45 +777,45 @@ export function EditContentPage() {
                         role="status"
                         aria-live="polite"
                       >
-                        {check.state === 'checking' && 'Checking this edit…'}
-                        {check.state === 'ok' && 'This edit passes the engine checks. Final verification runs when you apply.'}
+                        {check.state === 'checking' && t('Checking this edit…')}
+                        {check.state === 'ok' && t('This edit passes the engine checks. Final verification runs when you apply.')}
                         {check.state === 'blocked' && check.message}
                       </p>
                     )}
                     <div className="edit-content-editor-actions">
                       <button className="btn btn-primary" onClick={() => void applyDraft()} disabled={!draftDirty || busy || check.state === 'blocked'} id="edit-content-apply">
-                        <RotateCcw size={15} aria-hidden="true" /> Apply & verify
+                        <RotateCcw size={15} aria-hidden="true" /> {t('Apply & verify')}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => requestAction({ kind: 'deselect' })} disabled={busy}>Deselect</button>
+                      <button className="btn btn-ghost" onClick={() => requestAction({ kind: 'deselect' })} disabled={busy}>{t('Deselect')}</button>
                     </div>
-                    <p className="edit-content-hint">Typing changes this draft only. The PDF is regenerated once when you Apply or Save.</p>
+                    <p className="edit-content-hint">{t('Typing changes this draft only. The PDF is regenerated once when you Apply or Save.')}</p>
                   </>
                 ) : (
-                  <StateView icon={FilePenLine} title="No text selected" description="Scanned, outlined, Type 3, split, hidden, or uncertain text remains view-only." />
+                  <StateView icon={FilePenLine} title={t('No text selected')} description={t('Scanned, outlined, Type 3, split, hidden, or uncertain text remains view-only.')} />
                 )}
               </div>
 
-              <div className="edit-content-history-actions" aria-label="Edit Content history">
+              <div className="edit-content-history-actions" aria-label={t('Edit Content history')}>
                 <button className="btn btn-secondary" onClick={() => requestAction({ kind: 'history', action: 'undo' })} disabled={!session.canUndo || busy}>
-                  <Undo2 size={15} aria-hidden="true" /> Undo
+                  <Undo2 size={15} aria-hidden="true" /> {t('Undo')}
                 </button>
                 <button className="btn btn-secondary" onClick={() => requestAction({ kind: 'history', action: 'redo' })} disabled={!session.canRedo || busy}>
-                  <Redo2 size={15} aria-hidden="true" /> Redo
+                  <Redo2 size={15} aria-hidden="true" /> {t('Redo')}
                 </button>
               </div>
             </section>
 
-            <section className="feature-preview edit-content-preview" aria-label="Native PDF preview">
+            <section className="feature-preview edit-content-preview" aria-label={t('Native PDF preview')}>
               <div className="edit-content-toolbar">
-                <div className="edit-content-toolbar-group" aria-label="Page navigation">
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'page', pageIndex: pageIndex - 1 })} disabled={pageIndex <= 0 || busy} aria-label="Previous page"><ChevronLeft size={16} /></button>
-                  <span className="text-mono">Page {pageIndex + 1} / {totalPages}</span>
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'page', pageIndex: pageIndex + 1 })} disabled={pageIndex + 1 >= totalPages || busy} aria-label="Next page"><ChevronRight size={16} /></button>
+                <div className="edit-content-toolbar-group" aria-label={t('Page navigation')}>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'page', pageIndex: pageIndex - 1 })} disabled={pageIndex <= 0 || busy} aria-label={t('Previous page')}><ChevronLeft size={16} /></button>
+                  <span className="text-mono">{t('Page')} {pageIndex + 1} / {totalPages}</span>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => requestAction({ kind: 'page', pageIndex: pageIndex + 1 })} disabled={pageIndex + 1 >= totalPages || busy} aria-label={t('Next page')}><ChevronRight size={16} /></button>
                 </div>
-                <div className="edit-content-toolbar-group" aria-label="Zoom controls">
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.max(0.2, value - 0.1)); }} aria-label="Zoom out"><ZoomOut size={16} /></button>
+                <div className="edit-content-toolbar-group" aria-label={t('Zoom controls')}>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.max(0.2, value - 0.1)); }} aria-label={t('Zoom out')}><ZoomOut size={16} /></button>
                   <span className="text-mono">{Math.round(zoom * 100)}%</span>
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.min(1.5, value + 0.1)); }} aria-label="Zoom in"><ZoomIn size={16} /></button>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { zoomedByUser.current = true; setZoom((value) => Math.min(1.5, value + 0.1)); }} aria-label={t('Zoom in')}><ZoomIn size={16} /></button>
                 </div>
               </div>
               <EditContentViewport
@@ -827,9 +828,9 @@ export function EditContentPage() {
                 onPoint={(point, viewportSize) => void handleViewportPoint(point, viewportSize)}
               />
               <div className="edit-content-preview-footer">
-                <span>Native PDFium render</span>
-                <span>{pageObjects.length} native text objects on this page</span>
-                {session.lastOutputId && <span><Download size={13} aria-hidden="true" /> Published output available</span>}
+                <span>{t('Native PDFium render')}</span>
+                <span>{pageObjects.length} {t('native text objects on this page')}</span>
+                {session.lastOutputId && <span><Download size={13} aria-hidden="true" /> {t('Published output available')}</span>}
               </div>
             </section>
           </div>

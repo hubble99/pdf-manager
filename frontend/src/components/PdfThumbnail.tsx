@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '../i18n';
 import { FileText, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import apiClient from '../api/client';
@@ -71,7 +72,7 @@ export function PdfThumbnail({ file, page = 1, dpi = 72, className = '', style }
       {loading ? (
         <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
       ) : url ? (
-        <img src={url} alt={`Page ${page}`} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <img src={url} alt={t('Page {n}', { n: page })} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
       ) : (
         <FileText size={18} />
       )}

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 export type QuarterTurn = 0 | 90 | 180 | 270;
 
 export interface ConverterImage {
@@ -56,21 +57,21 @@ export function addConverterFiles(
 
   const kinds = incoming.map(classifyConverterFile);
   if (kinds.some((kind) => kind === null)) {
-    return reject('Use a PDF or JPG, JPEG, PNG, WEBP, BMP, or TIFF images. No files were added.');
+    return reject(t('Use a PDF or JPG, JPEG, PNG, WEBP, BMP, or TIFF images. No files were added.'));
   }
   if (new Set(kinds).size !== 1) {
-    return reject('PDFs and images cannot share a batch. Choose one PDF or only images.');
+    return reject(t('PDFs and images cannot share a batch. Choose one PDF or only images.'));
   }
   const kind = kinds[0];
   if (kind === 'pdf' && incoming.length > 1) {
-    return reject('Choose one PDF at a time. No files were added.');
+    return reject(t('Choose one PDF at a time. No files were added.'));
   }
   const currentKind = converterKind(current);
   if (currentKind !== 'empty' && currentKind !== kind) {
-    return reject('PDFs and images cannot share a batch. Clear the current files before changing direction.');
+    return reject(t('PDFs and images cannot share a batch. Clear the current files before changing direction.'));
   }
   if (currentKind === 'pdf') {
-    return reject('Remove the current PDF before adding another. Only one PDF is supported at a time.');
+    return reject(t('Remove the current PDF before adding another. Only one PDF is supported at a time.'));
   }
   if (kind === 'pdf') return { input: incoming[0], error: null };
 

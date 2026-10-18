@@ -8,6 +8,7 @@ import {
   CHOOSE_FOLDER_AGAIN, describeFiles, inspectFiles, listFolder, mergeFolderFiles, registerFolder, releaseFolder,
   type FileInfo, type FolderFileNode, type FolderListing, type MergeProblem, type RegisteredRoot,
 } from './api';
+import { t, tn } from '../../i18n';
 
 export interface FolderMergeState {
   folderModeAvailable: boolean;
@@ -114,13 +115,13 @@ export function useFolderMerge(): FolderMergeState {
     if (!mountedRef.current) return;
     setListing(data);
     setExpanded(new Set(data.root.folders.map((child) => child.relative_path)));
-    setNotice(data.skipped > 0 ? `${data.skipped} item${data.skipped === 1 ? '' : 's'} could not be read` : null);
+    setNotice(data.skipped > 0 ? tn(data.skipped, '{n} item could not be read', '{n} items could not be read') : null);
   }, []);
 
   const chooseFolder = useCallback(async () => {
     if (busyRef.current) return;
     setError(null);
-    const path = await chooseFolderDialog({ title: 'Choose a folder of PDFs' });
+    const path = await chooseFolderDialog({ title: t('Choose a folder of PDFs') });
     if (!path) return;
 
     // Choosing a folder replaces any previous root; the queue is never filled.
@@ -141,7 +142,7 @@ export function useFolderMerge(): FolderMergeState {
     } catch (thrown) {
       if (!mountedRef.current) return;
       forgetRoot();
-      setError(describeError(thrown, 'That folder could not be read.'));
+      setError(describeError(thrown, t('That folder could not be read.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -157,7 +158,7 @@ export function useFolderMerge(): FolderMergeState {
       await loadListing(root.rootId);
     } catch (thrown) {
       if (!mountedRef.current) return;
-      setError(describeError(thrown, 'That folder could not be read.'));
+      setError(describeError(thrown, t('That folder could not be read.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -235,14 +236,16 @@ export function useFolderMerge(): FolderMergeState {
       addHistoryEntry({ filename: merged.filename, action: 'Merge PDF', size: merged.blob.size });
       showToast({
         type: 'success',
-        title: 'Merge complete',
-        message: `${merged.merged} files merged${merged.skipped ? `, ${merged.skipped} skipped` : ''}`,
-        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        title: t('Merge complete'),
+        message: merged.skipped
+          ? tn(merged.merged, '{n} file merged, {skipped} skipped', '{n} files merged, {skipped} skipped', { skipped: merged.skipped })
+          : tn(merged.merged, '{n} file merged', '{n} files merged'),
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
         duration: 8000,
       });
     } catch (thrown) {
       if (!mountedRef.current) return;
-      setError(describeError(thrown, 'The merge failed.'));
+      setError(describeError(thrown, t('The merge failed.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -266,7 +269,7 @@ export function useFolderMerge(): FolderMergeState {
       setProblems(found);
     } catch (thrown) {
       if (!mountedRef.current) return;
-      setError(describeError(thrown, 'The files could not be checked.'));
+      setError(describeError(thrown, t('The files could not be checked.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
@@ -279,7 +282,7 @@ export function useFolderMerge(): FolderMergeState {
     const remaining = queue.filter((entry) => !blocked.has(entry));
     setProblems(null);
     if (remaining.length < 2) {
-      setError('Fewer than 2 files can be merged after skipping the reported problems.');
+      setError(t('Fewer than 2 files can be merged after skipping the reported problems.'));
       return;
     }
     await runMerge(true, remaining);

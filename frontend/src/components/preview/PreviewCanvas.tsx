@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { FileX, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import apiClient from '../../api/client';
+import { t } from '../../i18n';
 
 export interface PreviewCanvasProps {
   file?: File;
@@ -232,8 +233,8 @@ export function PreviewCanvas({
           {file && file.size > 50 * 1024 * 1024 ? (
             <div style={{ textAlign: 'center' }}>
               <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
-              <p style={{ fontWeight: 500 }}>Large file detected</p>
-              <p style={{ fontSize: 13, opacity: 0.7 }}>Rendering preview may take longer...</p>
+              <p style={{ fontWeight: 500 }}>{t('Large file detected')}</p>
+              <p style={{ fontSize: 13, opacity: 0.7 }}>{t('Rendering preview may take longer...')}</p>
             </div>
           ) : null}
         </div>
@@ -252,7 +253,7 @@ export function PreviewCanvas({
           }}
         >
           <FileX size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
-          <span>Preview unavailable</span>
+          <span>{t('Preview unavailable')}</span>
         </div>
       ) : (
         <div
@@ -269,7 +270,7 @@ export function PreviewCanvas({
             key={displayKey}
             ref={imgRef}
             src={displayUrl}
-            alt="Preview"
+            alt={t('Preview')}
             onLoad={handleImageLoad}
             style={{
               display: 'block',
@@ -286,7 +287,7 @@ export function PreviewCanvas({
           />
           {displayLoading && (
             <div
-              aria-label="Loading preview"
+              aria-label={t('Loading preview')}
               style={{
                 position: 'absolute',
                 inset: 0,

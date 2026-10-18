@@ -1,4 +1,5 @@
 import { createContext } from 'react';
+import { t } from '../i18n';
 
 export type Theme = 'light' | 'dark' | 'dusty-rose' | 'steel-blue';
 
@@ -7,10 +8,10 @@ export const DEFAULT_THEME: Theme = 'light';
 
 /** Ordered for the Settings > Appearance picker. */
 export const THEME_OPTIONS: { id: Theme; label: string }[] = [
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
-  { id: 'dusty-rose', label: 'Dusty Rose' },
-  { id: 'steel-blue', label: 'Steel Blue' },
+  { id: 'light', label: t('Light') },
+  { id: 'dark', label: t('Dark') },
+  { id: 'dusty-rose', label: t('Dusty Rose') },
+  { id: 'steel-blue', label: t('Steel Blue') },
 ];
 
 /**

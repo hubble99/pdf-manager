@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-  ExternalLink,
   FolderOpen,
   HardDrive,
   Heart,
   History,
   Info,
+  Languages,
   Loader2,
   Palette,
   Settings,
@@ -17,17 +17,15 @@ import apiClient from '../api/client';
 import { getHistory, clearHistory, removeHistoryEntry } from '../utils/historyStore';
 import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
-import { chooseFolderDialog, isTauri, openOutputFolder } from '../utils/tauriDialog';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import { THEME_OPTIONS, THEME_SWATCH } from '../context/ThemeContext.context';
-import { PageHeader } from '../components/ui';
+import { PageHeader, SegmentedControl } from '../components/ui';
+import { useLanguage } from '../i18n/useLanguage';
 import {
   APP_NAME, APP_PRIVACY_NOTE, APP_SOURCE_URL, APP_TECH_STACK, APP_VERSION,
 } from '../config/app';
-
-const OUTDIR_KEY = 'pdf_manager_outdir';
-const DEFAULT_OUTDIR = 'Documents/PDF Manager';
+import { LANGUAGE_OPTIONS, t, tn } from '../i18n';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -39,18 +37,18 @@ function formatBytes(bytes: number): string {
 /** Short relative time for the session-only output list. */
 function timeAgo(timestamp: number): string {
   const minutes = Math.round((Date.now() - timestamp) / 60_000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t('Just now');
+  if (minutes < 60) return t('{n} min ago', { n: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
+  if (hours < 24) return t('{n} h ago', { n: hours });
+  return t('{n} d ago', { n: Math.round(hours / 24) });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function SettingsPage() {
   const { showToast } = useToast();
   const { theme, setTheme } = useTheme();
-  const [outDir, setOutDir] = useState(() => localStorage.getItem(OUTDIR_KEY) || '');
+  const { language, setLanguage } = useLanguage();
   const [isClearing, setIsClearing] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
@@ -61,33 +59,6 @@ export function SettingsPage() {
     return () => window.removeEventListener('history-updated', updateHistory);
   }, []);
 
-  const handleSaveOutDir = () => {
-    localStorage.setItem(OUTDIR_KEY, outDir);
-    showToast({ type: 'success', title: 'Settings saved', message: 'Default output folder updated.' });
-  };
-
-  const handleBrowseOutput = async () => {
-    if (!isTauri()) {
-      showToast({ type: 'info', title: 'Browser mode', message: 'Native folder picker is only available in the desktop app.' });
-      return;
-    }
-    const folder = await chooseFolderDialog({ title: 'Select output folder' });
-    if (folder) setOutDir(folder);
-  };
-
-  const handleResetOutDir = () => {
-    localStorage.removeItem(OUTDIR_KEY);
-    setOutDir('');
-    showToast({ type: 'success', title: 'Settings saved', message: 'Output folder reset to the default location.' });
-  };
-
-  const handleOpenOutDir = async () => {
-    const opened = await openOutputFolder();
-    if (!opened && !isTauri()) {
-      showToast({ type: 'info', title: 'Browser mode', message: 'The output folder can only be opened in the desktop app.' });
-    }
-  };
-
   const handleClearTemp = async () => {
     setIsClearing(true);
     try {
@@ -95,12 +66,12 @@ export function SettingsPage() {
       const { files_deleted, bytes_freed } = resp.data.data;
       showToast({
         type: 'success',
-        title: 'Temp files cleared',
-        message: `Deleted ${files_deleted} files, freed ${formatBytes(bytes_freed)}.`,
+        title: t('Temp files cleared'),
+        message: tn(files_deleted, 'Deleted {n} file, freed {size}.', 'Deleted {n} files, freed {size}.', { size: formatBytes(bytes_freed) }),
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      showToast({ type: 'error', title: 'Clear failed', message: msg });
+      const msg = err instanceof Error ? err.message : t('Unknown error');
+      showToast({ type: 'error', title: t('Clear failed'), message: msg });
     } finally {
       setIsClearing(false);
     }
@@ -110,14 +81,12 @@ export function SettingsPage() {
     removeHistoryEntry(id);
   };
 
-  const displayDir = outDir || DEFAULT_OUTDIR;
-
   return (
     <div className="feature-page">
       <PageHeader
         icon={Settings}
-        title="Settings"
-        description="Appearance, output folder, and app information"
+        title={t('Settings')}
+        description={t('Appearance, language, and app information')}
       />
 
       <div className="page-body">
@@ -127,10 +96,10 @@ export function SettingsPage() {
           <section className="card settings-card">
             <div className="settings-card-head">
               <Palette size={16} aria-hidden="true" />
-              <h2>Appearance</h2>
+              <h2>{t('Appearance')}</h2>
             </div>
             <div className="settings-card-body">
-              <div className="theme-grid" role="radiogroup" aria-label="Theme">
+              <div className="theme-grid" role="radiogroup" aria-label={t('Theme')}>
                 {THEME_OPTIONS.map((option) => {
                   const swatch = THEME_SWATCH[option.id];
                   const selected = theme === option.id;
@@ -166,53 +135,27 @@ export function SettingsPage() {
                 })}
               </div>
               <p className="settings-hint">
-                {APP_NAME} starts in Light. Your choice is remembered on this device.
+                {t('{app} starts in Light. Your choice is remembered on this device.', { app: APP_NAME })}
               </p>
             </div>
           </section>
 
-          {/* Output folder */}
+          {/* Language */}
           <section className="card settings-card">
             <div className="settings-card-head">
-              <FolderOpen size={16} aria-hidden="true" />
-              <h2>Output folder</h2>
-              <span className="settings-card-actions">
-                {outDir && (
-                  <button type="button" className="link-btn" onClick={handleResetOutDir}>
-                    Reset to default
-                  </button>
-                )}
-              </span>
+              <Languages size={16} aria-hidden="true" />
+              <h2>{t('Language')}</h2>
             </div>
             <div className="settings-card-body">
-              <div className="dir-box" title={displayDir}>
-                <FolderOpen size={15} aria-hidden="true" />
-                <input
-                  type="text"
-                  value={outDir}
-                  onChange={(event) => setOutDir(event.target.value)}
-                  placeholder={DEFAULT_OUTDIR}
-                  aria-label="Output folder"
-                  id="settings-output-path"
-                  spellCheck={false}
-                />
-              </div>
-              <div className="settings-actions-left">
-                <button type="button" className="btn btn-secondary" onClick={handleBrowseOutput} id="settings-browse-output">
-                  <FolderOpen size={14} /> Change folder
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={handleOpenOutDir} id="settings-open-output">
-                  <ExternalLink size={14} /> Open folder
-                </button>
-                <button type="button" className="btn btn-primary" onClick={handleSaveOutDir} id="settings-save-output">
-                  Save
-                </button>
-              </div>
-              <p className="settings-hint">
-                {isTauri()
-                  ? 'Files created by every tool are saved here.'
-                  : 'Running in browser mode — type a path and save it. The Browse button requires the desktop app.'}
-              </p>
+              <SegmentedControl
+                equal
+                ariaLabel={t('Language')}
+                idPrefix="settings-language"
+                value={language}
+                onChange={setLanguage}
+                options={LANGUAGE_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+              />
+              <p className="settings-hint">{t('The app restarts its screens when you switch. Your choice is remembered on this device.')}</p>
             </div>
           </section>
 
@@ -220,16 +163,16 @@ export function SettingsPage() {
           <section className="card settings-card">
             <div className="settings-card-head">
               <HardDrive size={16} aria-hidden="true" />
-              <h2>Temporary storage</h2>
+              <h2>{t('Temporary storage')}</h2>
             </div>
             <div className="settings-card-body">
               <p className="settings-hint">
-                Temporary files and generated outputs from backend operations can accumulate over time.
+                {t('Temporary files and generated outputs from backend operations can accumulate over time.')}
               </p>
               <div className="settings-actions-left">
                 <button className="btn btn-secondary" onClick={handleClearTemp} disabled={isClearing}>
                   {isClearing ? <Loader2 size={15} className="converter-spin" /> : <Trash2 size={15} />}
-                  Clear temp files
+                  {t('Clear temp files')}
                 </button>
               </div>
             </div>
@@ -239,17 +182,17 @@ export function SettingsPage() {
           <section className="card settings-card">
             <div className="settings-card-head">
               <History size={16} aria-hidden="true" />
-              <h2>Recent output files</h2>
+              <h2>{t('Recent output files')}</h2>
               <span className="settings-card-actions">
                 {history.length > 0 && (
                   <button type="button" className="link-btn" onClick={clearHistory} id="settings-clear-history">
-                    Clear list
+                    {t('Clear list')}
                   </button>
                 )}
               </span>
             </div>
             {history.length === 0 ? (
-              <div className="settings-empty">Files you create will appear here.</div>
+              <div className="settings-empty">{t('Files you create will appear here.')}</div>
             ) : (
               <ul className="settings-file-list">
                 {history.map((entry) => (
@@ -260,14 +203,14 @@ export function SettingsPage() {
                     <span className="settings-file-copy">
                       <Filename name={entry.filename} className="settings-file-name" />
                       <span className="settings-file-meta">
-                        {entry.action} · {formatBytes(entry.size)} · {timeAgo(entry.timestamp)}
+                        {t(entry.action)} · {formatBytes(entry.size)} · {timeAgo(entry.timestamp)}
                       </span>
                     </span>
                     <button
                       type="button"
                       className="btn btn-ghost btn-icon btn-sm text-error"
                       onClick={() => handleRemoveHistory(entry.id)}
-                      aria-label={`Remove ${entry.filename} from the list`}
+                      aria-label={t('Remove {name} from the list', { name: entry.filename })}
                     >
                       <X size={14} />
                     </button>
@@ -276,7 +219,7 @@ export function SettingsPage() {
               </ul>
             )}
             <div className="settings-card-foot">
-              Shown for this session only. The list clears when you close the app.
+              {t('Shown for this session only. The list clears when you close the app.')}
             </div>
           </section>
 
@@ -286,17 +229,17 @@ export function SettingsPage() {
               <Heart size={20} />
             </span>
             <span className="settings-support-copy">
-              <strong>Support this app</strong>
-              <p>{APP_NAME} is independent, private, and offline software. Donations help keep it going.</p>
+              <strong>{t('Support this app')}</strong>
+              <p>{t('{app} is independent, private, and offline software. Donations help keep it going.', { app: APP_NAME })}</p>
             </span>
-            <Link to="/donation" className="btn btn-primary" id="settings-donate">Donate</Link>
+            <Link to="/donation" className="btn btn-primary" id="settings-donate">{t('Donate')}</Link>
           </section>
 
           {/* About */}
           <section className="card settings-card">
             <div className="settings-card-head">
               <Info size={16} aria-hidden="true" />
-              <h2>About</h2>
+              <h2>{t('About')}</h2>
             </div>
             <div className="about-head">
               <span className="about-logo" aria-hidden="true">
@@ -308,19 +251,19 @@ export function SettingsPage() {
               </span>
             </div>
             <p className="about-description">
-              Local document tools that keep your files on your device.
+              {t('Local document tools that keep your files on your device.')}
             </p>
             <dl className="about-rows">
               <div className="about-row">
-                <dt>Version</dt>
+                <dt>{t('Version')}</dt>
                 <dd>{APP_VERSION}</dd>
               </div>
               <div className="about-row">
-                <dt>Built with</dt>
+                <dt>{t('Built with')}</dt>
                 <dd>{APP_TECH_STACK}</dd>
               </div>
               <div className="about-row">
-                <dt>Source code</dt>
+                <dt>{t('Source code')}</dt>
                 <dd>
                   <a className="link-btn" href={APP_SOURCE_URL} target="_blank" rel="noreferrer">
                     github.com/hubble99/pdf-manager
@@ -328,7 +271,7 @@ export function SettingsPage() {
                 </dd>
               </div>
               <div className="about-row">
-                <dt>Feedback</dt>
+                <dt>{t('Feedback')}</dt>
                 <dd>
                   <a
                     className="link-btn"
@@ -336,17 +279,17 @@ export function SettingsPage() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Report an issue
+                    {t('Report an issue')}
                   </a>
                 </dd>
               </div>
               <div className="about-row">
-                <dt>Privacy</dt>
+                <dt>{t('Privacy')}</dt>
                 <dd>{APP_PRIVACY_NOTE}</dd>
               </div>
             </dl>
             <div className="settings-card-foot">
-              Every tool runs locally. Nothing is uploaded and nothing is kept after you close the app.
+              {t('Every tool runs locally. Nothing is uploaded and nothing is kept after you close the app.')}
             </div>
           </section>
 

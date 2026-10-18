@@ -14,6 +14,8 @@ import logging
 from pathlib import Path
 
 import fitz
+
+from core import render_color  # noqa: F401  (switches on ICC colour management)
 from PIL import Image, ImageOps
 
 logger = logging.getLogger("pdf_manager.core.organize_thumbnails")

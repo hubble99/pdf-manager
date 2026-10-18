@@ -15,6 +15,7 @@ import {
   initialPageSelection, pageSelectionReducer, resolvePageSelection, serializePageSelection,
   type ResolvedSelection,
 } from './pageSelection';
+import { t, tn } from '../../i18n';
 
 export interface ConverterResult {
   filename: string;
@@ -178,17 +179,17 @@ export function useConverterWorkflow(): ConverterWorkflow {
       });
       if (wrongTab) {
         const message = expected === 'pdf'
-          ? 'This tab takes one PDF. To combine images into a PDF, use the Images to PDF tab.'
-          : 'This tab takes images. To export PDF pages as images, use the PDF to Images tab.';
+          ? t('This tab takes one PDF. To combine images into a PDF, use the Images to PDF tab.')
+          : t('This tab takes images. To export PDF pages as images, use the PDF to Images tab.');
         setBatchError(message);
-        showToast({ type: 'error', title: 'Files not added', message });
+        showToast({ type: 'error', title: t('Files not added'), message });
         return;
       }
     }
     const addition = addConverterFiles(input, incoming);
     if (addition.error) {
       setBatchError(addition.error);
-      showToast({ type: 'error', title: 'Files not added', message: addition.error });
+      showToast({ type: 'error', title: t('Files not added'), message: addition.error });
       return;
     }
     if (addition.input === input) return;
@@ -202,7 +203,7 @@ export function useConverterWorkflow(): ConverterWorkflow {
     const addition = addConverterFiles(null, incoming);
     if (addition.error) {
       setBatchError(addition.error);
-      showToast({ type: 'error', title: 'Files not added', message: addition.error });
+      showToast({ type: 'error', title: t('Files not added'), message: addition.error });
       return;
     }
     if (addition.input === null) return;
@@ -290,9 +291,9 @@ export function useConverterWorkflow(): ConverterWorkflow {
   const setImageOutputName = useCallback((value: string) => { setImageOutputNameState(value); invalidateResult(); }, [invalidateResult]);
 
   const pdfBlockReason = useMemo(() => {
-    if (kind !== 'pdf') return 'Add a PDF to export images.';
-    if (pdfInfoState === 'loading') return 'Reading the PDF page count…';
-    if (pdfInfoState === 'error') return 'The PDF page count could not be read. Remove and add the PDF again.';
+    if (kind !== 'pdf') return t('Add a PDF to export images.');
+    if (pdfInfoState === 'loading') return t('Reading the PDF page count…');
+    if (pdfInfoState === 'error') return t('The PDF page count could not be read. Remove and add the PDF again.');
     if (!selection.valid) return selection.error;
     return null;
   }, [kind, pdfInfoState, selection]);
@@ -327,21 +328,21 @@ export function useConverterWorkflow(): ConverterWorkflow {
         setResult({
           filename,
           isZip,
-          detail: `${pagesExported} page${pagesExported === 1 ? '' : 's'} · ${resFormat} · ${resDpi} DPI${isZip ? ' (ZIP archive)' : ''}`,
+          detail: `${tn(pagesExported, '{n} page', '{n} pages')} · ${resFormat} · ${resDpi} DPI${isZip ? t(' (ZIP archive)') : ''}`,
         });
         addHistoryEntry({ filename, action: 'PDF to Image', size: 0 });
         showToast({
           type: 'success',
-          title: 'Conversion complete',
-          message: `${pagesExported} pages exported to ${resFormat}`,
-          action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+          title: t('Conversion complete'),
+          message: tn(pagesExported, '{n} page exported to {format}', '{n} pages exported to {format}', { format: resFormat }),
+          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
           duration: 8000,
         });
       } catch (err: unknown) {
         if (!isCurrent()) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : t('Unknown error');
         setError(message);
-        showToast({ type: 'error', title: 'Conversion failed', message });
+        showToast({ type: 'error', title: t('Conversion failed'), message });
       } finally {
         convertingRef.current = false;
         if (mountedRef.current) setIsConverting(false);
@@ -377,21 +378,21 @@ export function useConverterWorkflow(): ConverterWorkflow {
         setResult({
           filename,
           isZip: false,
-          detail: `${total} page${total === 1 ? '' : 's'} · ${resPageSize} · ${formatBytes(blob.size)}`,
+          detail: `${tn(total, '{n} page', '{n} pages')} · ${resPageSize} · ${formatBytes(blob.size)}`,
         });
         addHistoryEntry({ filename, action: 'Image to PDF', size: blob.size });
         showToast({
           type: 'success',
-          title: 'Conversion complete',
-          message: `${total} images converted`,
-          action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+          title: t('Conversion complete'),
+          message: tn(total, '{n} image converted', '{n} images converted'),
+          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
           duration: 8000,
         });
       } catch (err: unknown) {
         if (!isCurrent()) return;
-        const message = err instanceof Error ? err.message : 'Unknown error';
+        const message = err instanceof Error ? err.message : t('Unknown error');
         setError(message);
-        showToast({ type: 'error', title: 'Conversion failed', message });
+        showToast({ type: 'error', title: t('Conversion failed'), message });
       } finally {
         convertingRef.current = false;
         if (mountedRef.current) setIsConverting(false);

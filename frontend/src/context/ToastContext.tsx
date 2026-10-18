@@ -15,7 +15,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const dismissToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => prev.filter((item) => item.id !== id));
   };
 
   return (

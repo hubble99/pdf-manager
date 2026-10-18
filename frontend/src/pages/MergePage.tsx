@@ -20,6 +20,7 @@ import { FolderWorkspace } from '../features/merge/FolderWorkspace';
 import { isTauri } from '../utils/tauriDialog';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t, tn } from '../i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ export function MergePage() {
     async (incoming: File[]) => {
       const pdfs = incoming.filter((f) => f.name.toLowerCase().endsWith('.pdf'));
       if (pdfs.length !== incoming.length) {
-        showToast({ type: 'error', title: 'Invalid files', message: 'Only PDF files are accepted.' });
+        showToast({ type: 'error', title: t('Invalid files'), message: t('Only PDF files are accepted.') });
       }
       if (pdfs.length === 0) return;
       
@@ -154,7 +155,7 @@ export function MergePage() {
   // ── Submit — single-step: process & download immediately ───────────────────
   const handleMerge = async () => {
     if (files.length < 2) {
-      showToast({ type: 'error', title: 'Not enough files', message: 'Add at least 2 PDF files to merge.' });
+      showToast({ type: 'error', title: t('Not enough files'), message: t('Add at least 2 PDF files to merge.') });
       return;
     }
     setIsLoading(true);
@@ -181,14 +182,14 @@ export function MergePage() {
       addHistoryEntry({ filename, action: 'Merged PDF', size: sizeBytes });
       showToast({
         type: 'success',
-        title: 'Merge complete!',
-        message: `${filename} — ${totalPages} pages, ${formatBytes(sizeBytes)}`,
-        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        title: t('Merge complete!'),
+        message: `${filename} — ${tn(totalPages, '{n} page', '{n} pages')}, ${formatBytes(sizeBytes)}`,
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
         duration: 8000,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      showToast({ type: 'error', title: 'Merge failed', message: msg });
+      const msg = err instanceof Error ? err.message : t('Unknown error');
+      showToast({ type: 'error', title: t('Merge failed'), message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -204,27 +205,27 @@ export function MergePage() {
     <div className="feature-page">
       <PageHeader
         icon={Merge}
-        title="Merge PDF"
-        description="Combine multiple PDF files into one document"
+        title={t('Merge PDF')}
+        description={t('Combine multiple PDF files into one document')}
       />
 
       <Tabs
-        ariaLabel="Merge mode"
+        ariaLabel={t('Merge mode')}
         value={mode}
         onChange={setMode}
         items={[
-          { value: 'quick', id: 'merge-mode-quick', label: 'Quick' },
+          { value: 'quick', id: 'merge-mode-quick', label: t('Quick') },
           {
             value: 'folder',
             id: 'merge-mode-folder',
-            label: 'Folder',
+            label: t('Folder'),
             disabled: !folderModeAvailable,
-            title: folderModeAvailable ? undefined : 'Folder mode requires the desktop app',
+            title: folderModeAvailable ? undefined : t('Folder mode requires the desktop app'),
           },
         ]}
       >
         {!folderModeAvailable && (
-          <span className="organize-help">Folder mode requires the desktop app</span>
+          <span className="organize-help">{t('Folder mode requires the desktop app')}</span>
         )}
       </Tabs>
 
@@ -254,14 +255,14 @@ export function MergePage() {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-              aria-label="Drop PDF files here or click to browse"
+              aria-label={t('Drop PDF files here or click to browse')}
             >
               <Upload className="drop-zone-icon" />
-              <p className="drop-zone-title">Drop PDF files here</p>
-              <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
+              <p className="drop-zone-title">{t('Drop PDF files here')}</p>
+              <p className="drop-zone-sub">{t('or click to browse · Multiple files supported')}</p>
               <div className="badge-row">
                 <span className="badge badge-neutral">PDF</span>
-                <span className="badge badge-neutral">Multiple files</span>
+                <span className="badge badge-neutral">{t('Multiple files')}</span>
               </div>
             </div>
           </div>
@@ -271,20 +272,20 @@ export function MergePage() {
             <div className="card merge-quick-files">
               <div className="card-title-row card-title-row--wrap">
                 <FileText size={16} color="var(--accent)" />
-                <span className="card-title-text">Files to Merge</span>
-                <span className="badge badge-info">{files.length} file{files.length !== 1 ? 's' : ''}</span>
+                <span className="card-title-text">{t('Files to Merge')}</span>
+                <span className="badge badge-info">{tn(files.length, '{n} file', '{n} files')}</span>
                 {duplicateOf.size > 0 && (
                   <span className="badge badge-warning" id="merge-duplicate-note">
-                    {duplicateOf.size} duplicate{duplicateOf.size !== 1 ? 's' : ''} added
+                    {tn(duplicateOf.size, '{n} duplicate added', '{n} duplicates added')}
                   </span>
                 )}
                 <span className="grow-spacer" />
-                <span className="text-muted card-title-note">Drag the previews to reorder</span>
+                <span className="text-muted card-title-note">{t('Drag the previews to reorder')}</span>
               </div>
               <SortableCardGrid
                 idPrefix="merge"
                 compact
-                ariaLabel="Files to merge, in merge order"
+                ariaLabel={t('Files to merge, in merge order')}
                 disabled={isLoading}
                 onReorder={reorderFiles}
                 onRemove={removeFile}
@@ -302,12 +303,12 @@ export function MergePage() {
                     meta: (
                       <>
                         <span>{formatBytes(entry.file.size)}</span>
-                        {entry.pages !== undefined && <span>{entry.pages} page{entry.pages !== 1 ? 's' : ''}</span>}
+                        {entry.pages !== undefined && <span>{tn(entry.pages, '{n} page', '{n} pages')}</span>}
                       </>
                     ),
                     warning: first === undefined
                       ? undefined
-                      : `Same name and size as #${first + 1}. It is still included in the merge.`,
+                      : t('Same name and size as #{n}. It is still included in the merge.', { n: first + 1 }),
                   };
                 })}
               />
@@ -325,15 +326,15 @@ export function MergePage() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                aria-label="Drop PDF files here or click to browse"
+                aria-label={t('Drop PDF files here or click to browse')}
               >
                 <Upload className="drop-zone-icon" />
-                <p className="drop-zone-title">Add more PDFs</p>
-                <p className="drop-zone-sub">Drop here or click to browse</p>
+                <p className="drop-zone-title">{t('Add more PDFs')}</p>
+                <p className="drop-zone-sub">{t('Drop here or click to browse')}</p>
               </div>
 
               <div className="card">
-                <label className="input-label" htmlFor="merge-output-name">Output Filename</label>
+                <label className="input-label" htmlFor="merge-output-name">{t('Output Filename')}</label>
                 <input
                   id="merge-output-name"
                   className="input"
@@ -343,7 +344,7 @@ export function MergePage() {
                   placeholder="merged_output.pdf"
                 />
                 <p className="text-muted text-body-sm hint-gap-sm">
-                  The .pdf extension will be added automatically if omitted.
+                  {t('The .pdf extension will be added automatically if omitted.')}
                 </p>
               </div>
 
@@ -352,20 +353,20 @@ export function MergePage() {
                   <CheckCircle size={24} className="result-card-icon" />
                   <div className="grow">
                     <div className="result-card-title">
-                      Download started automatically
+                      {t('Saved to your Downloads folder')}
                     </div>
                     <div className="result-card-meta">
-                      <Filename name={result.filename} /> · {result.totalPages} pages · {formatBytes(result.sizeBytes)}
+                      <Filename name={result.filename} /> · {tn(result.totalPages, '{n} page', '{n} pages')} · {formatBytes(result.sizeBytes)}
                     </div>
                   </div>
                   <button
                     className="btn btn-ghost btn-sm"
                     id="merge-open-folder-btn"
                     onClick={() => openOutputFolder()}
-                    title="Open download folder"
+                    title={t('Open folder')}
                   >
                     <FolderOpen size={14} />
-                    Open Folder
+                    {t('Open Folder')}
                   </button>
                 </div>
               )}
@@ -378,7 +379,7 @@ export function MergePage() {
                   disabled={isLoading}
                 >
                   <Trash2 size={15} />
-                  Clear All
+                  {t('Clear All')}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -389,12 +390,12 @@ export function MergePage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      Merging…
+                      {t('Merging…')}
                     </>
                   ) : (
                     <>
                       <Merge size={15} />
-                      Merge & Download
+                      {t('Merge PDF')}
                     </>
                   )}
                 </button>

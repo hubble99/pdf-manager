@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { t } from '../i18n';
 import * as fabric from 'fabric';
 import type {
   CanvasObject, 
@@ -1329,7 +1330,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       <img 
         ref={backgroundImageRef}
         src={page.imageUrl} 
-        alt={`Page ${page.index}`} 
+        alt={t('Page {n}', { n: page.index })} 
         style={{
           position: 'absolute',
           top: 0,

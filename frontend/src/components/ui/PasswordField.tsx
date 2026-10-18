@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useId, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -46,7 +47,7 @@ export function PasswordField({
           type="button"
           className="password-field-toggle"
           onClick={() => setVisible((current) => !current)}
-          aria-label={visible ? `Hide ${label}` : `Show ${label}`}
+          aria-label={visible ? t('Hide {label}', { label }) : t('Show {label}', { label })}
           aria-pressed={visible}
         >
           {visible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}

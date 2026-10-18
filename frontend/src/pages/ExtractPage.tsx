@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t, tn } from '../i18n';
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -41,10 +42,10 @@ interface ExtractResult {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const OUTPUT_MODE_OPTIONS: { value: OutputMode; label: string; desc: string }[] = [
-  { value: 'combine', label: 'Combine into one PDF', desc: 'All selected pages → single PDF' },
-  { value: 'separate_page', label: 'Separate per page', desc: 'Each page → individual PDF (ZIP)' },
-  { value: 'separate_range', label: 'Separate per range', desc: 'Each range group → individual PDF (ZIP)' },
-  { value: 'split_all', label: 'Split all pages', desc: 'Every page → its own PDF (ZIP)' },
+  { value: 'combine', label: t('Combine into one PDF'), desc: t('All selected pages → single PDF') },
+  { value: 'separate_page', label: t('Separate per page'), desc: t('Each page → individual PDF (ZIP)') },
+  { value: 'separate_range', label: t('Separate per range'), desc: t('Each range group → individual PDF (ZIP)') },
+  { value: 'split_all', label: t('Split all pages'), desc: t('Every page → its own PDF (ZIP)') },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ export function ExtractPage() {
   const loadFile = useCallback(
     async (f: File) => {
       if (!f.name.toLowerCase().endsWith('.pdf')) {
-        showToast({ type: 'error', title: 'Invalid file', message: 'Only PDF files are accepted.' });
+        showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
         return;
       }
       setFile(f);
@@ -85,7 +86,7 @@ export function ExtractPage() {
         const resp = await apiClient.post<{ status: string; data: PdfInfo }>('/api/v1/pdf-info/', form);
         setPdfInfo(resp.data.data);
       } catch {
-        showToast({ type: 'info', title: 'PDF info unavailable', message: 'Could not read page count — backend may be offline.' });
+        showToast({ type: 'info', title: t('PDF info unavailable'), message: t('Could not read page count — backend may be offline.') });
       } finally {
         setInfoLoading(false);
       }
@@ -116,9 +117,9 @@ export function ExtractPage() {
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   const handleExtract = async () => {
-    if (!file) { showToast({ type: 'error', title: 'No file', message: 'Please select a PDF file first.' }); return; }
+    if (!file) { showToast({ type: 'error', title: t('No file'), message: t('Please select a PDF file first.') }); return; }
     if (outputMode !== 'split_all' && !pageRanges.trim()) {
-      showToast({ type: 'error', title: 'No pages specified', message: 'Enter page ranges, e.g. 1-3,5,7-9' });
+      showToast({ type: 'error', title: t('No pages specified'), message: t('Enter page ranges, e.g. 1-3,5,7-9') });
       return;
     }
     setIsLoading(true);
@@ -146,14 +147,14 @@ export function ExtractPage() {
       addHistoryEntry({ filename, action: 'Extracted Pages', size: 0 });
       showToast({
         type: 'success',
-        title: 'Extraction complete!',
-        message: `${pagesExtracted} pages extracted`,
-        action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+        title: t('Extraction complete!'),
+        message: tn(pagesExtracted, '{n} page extracted', '{n} pages extracted'),
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
         duration: 8000,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      showToast({ type: 'error', title: 'Extraction failed', message: msg });
+      const msg = err instanceof Error ? err.message : t('Unknown error');
+      showToast({ type: 'error', title: t('Extraction failed'), message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -196,15 +197,15 @@ export function ExtractPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const selectionNote = outputMode === 'split_all'
-    ? 'Every page becomes its own PDF'
-    : `${selectedPages.size} of ${totalPages} page${totalPages === 1 ? '' : 's'} selected`;
+    ? t('Every page becomes its own PDF')
+    : tn(totalPages, '{count} of {n} page selected', '{count} of {n} pages selected', { count: selectedPages.size });
 
   return (
     <div className="feature-page">
       <PageHeader
         icon={Scissors}
-        title="Split PDF"
-        description="Take out the pages or ranges you need as a new document"
+        title={t('Split PDF')}
+        description={t('Take out the pages or ranges you need as a new document')}
       />
 
       <div className="page-body">
@@ -220,7 +221,7 @@ export function ExtractPage() {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-              aria-label="Drop a PDF file here or click to browse"
+              aria-label={t('Drop a PDF file here or click to browse')}
             >
               <input
                 ref={fileInputRef}
@@ -231,11 +232,11 @@ export function ExtractPage() {
                 id="extract-file-input"
               />
               <Upload className="drop-zone-icon" />
-              <p className="drop-zone-title">Drop a PDF here</p>
-              <p className="drop-zone-sub">or click to browse · One file at a time</p>
+              <p className="drop-zone-title">{t('Drop a PDF here')}</p>
+              <p className="drop-zone-sub">{t('or click to browse · One file at a time')}</p>
               <span className="badge badge-neutral">PDF</span>
             </div>
-            <p className="empty-hint">Every page will appear here so you can pick what to split.</p>
+            <p className="empty-hint">{t('Every page will appear here so you can pick what to split.')}</p>
           </div>
         ) : (
           <div className="form-col form-col--split">
@@ -245,15 +246,15 @@ export function ExtractPage() {
                 <span className="card-head-title">
                   <FileText size={16} className="card-head-icon" aria-hidden="true" />
                   <Filename name={file.name} className="file-item-name" />
-                  {pdfInfo && <span className="chip">{pdfInfo.total_pages} pages</span>}
+                  {pdfInfo && <span className="chip">{pdfInfo.total_pages} {t('pages')}</span>}
                   {infoLoading && <Loader2 size={12} className="spin" aria-hidden="true" />}
                 </span>
                 <span className="card-head-actions">
                   {totalPages > 0 && <span>{selectionNote}</span>}
                   {gridEditable && totalPages > 0 && (
                     <>
-                      <button type="button" className="link-btn" onClick={selectAllPages}>Select all</button>
-                      <button type="button" className="link-btn" onClick={clearPages}>Clear</button>
+                      <button type="button" className="link-btn" onClick={selectAllPages}>{t('Select all')}</button>
+                      <button type="button" className="link-btn" onClick={clearPages}>{t('Clear')}</button>
                     </>
                   )}
                   <ChangeFileControls
@@ -275,7 +276,7 @@ export function ExtractPage() {
                 />
               ) : (
                 <p className="empty-hint">
-                  {infoLoading ? 'Reading the document…' : 'Pages are unavailable. You can still type the pages to split.'}
+                  {infoLoading ? t('Reading the document…') : t('Pages are unavailable. You can still type the pages to split.')}
                 </p>
               )}
             </div>
@@ -286,10 +287,10 @@ export function ExtractPage() {
                 <div className="card-head">
                   <span className="card-head-title">
                     <Scissors size={16} className="card-head-icon" aria-hidden="true" />
-                    Split mode
+                    {t('Split mode')}
                   </span>
                 </div>
-                <div role="radiogroup" aria-label="Output mode">
+                <div role="radiogroup" aria-label={t('Output mode')}>
                   {OUTPUT_MODE_OPTIONS.map((opt) => (
                     <label
                       key={opt.value}
@@ -317,7 +318,7 @@ export function ExtractPage() {
               <div className="card card--flush">
                 <div className="card-body">
                   <div className="field">
-                    <label htmlFor="extract-page-ranges">Page Ranges</label>
+                    <label htmlFor="extract-page-ranges">{t('Page Ranges')}</label>
                     <input
                       id="extract-page-ranges"
                       className="input"
@@ -329,12 +330,12 @@ export function ExtractPage() {
                     />
                     <small>
                       {outputMode === 'split_all'
-                        ? 'Split all pages exports every page individually.'
-                        : 'Click pages on the left, or type pages and ranges separated by commas.'}
+                        ? t('Split all pages exports every page individually.')
+                        : t('Click pages on the left, or type pages and ranges separated by commas.')}
                     </small>
                   </div>
                   <div className="field">
-                    <label htmlFor="extract-output-name">Output Filename</label>
+                    <label htmlFor="extract-output-name">{t('Output Filename')}</label>
                     <input
                       id="extract-output-name"
                       className="input"
@@ -343,7 +344,7 @@ export function ExtractPage() {
                       onChange={(e) => setOutputFilename(e.target.value)}
                       placeholder="extracted"
                     />
-                    <small>Extension (.pdf or .zip) is added automatically.</small>
+                    <small>{t('Extension (.pdf or .zip) is added automatically.')}</small>
                   </div>
                 </div>
               </div>
@@ -352,20 +353,20 @@ export function ExtractPage() {
                 <div className="card status-card status-card--ok">
                   <CheckCircle size={22} aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>Download started automatically</b>
+                    <b>{t('Saved to your Downloads folder')}</b>
                     <small>
-                      <Filename name={result.filename} /> · {result.pagesExtracted} page{result.pagesExtracted !== 1 ? 's' : ''} extracted
-                      {result.isZip ? ' · ZIP archive' : ''}
+                      <Filename name={result.filename} /> · {tn(result.pagesExtracted, '{n} page extracted', '{n} pages extracted')}
+                      {result.isZip ? t(' · ZIP archive') : ''}
                     </small>
                   </div>
                   <button
                     className="btn btn-ghost btn-sm"
                     id="extract-open-folder-btn"
                     onClick={() => openOutputFolder()}
-                    title="Open download folder"
+                    title={t('Open folder')}
                   >
                     <FolderOpen size={14} />
-                    Open Folder
+                    {t('Open Folder')}
                   </button>
                 </div>
               )}
@@ -380,12 +381,12 @@ export function ExtractPage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      Splitting…
+                      {t('Splitting…')}
                     </>
                   ) : (
                     <>
                       <Scissors size={15} />
-                      Split &amp; Download
+                      {t('Split PDF')}
                     </>
                   )}
                 </button>

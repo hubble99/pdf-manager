@@ -1,5 +1,6 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from './config';
+import { t } from '../i18n';
 
 // ── Axios instance ──────────────────────────────────────────────────────────
 const apiClient = axios.create({
@@ -23,7 +24,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<unknown>) => {
-    let message = error.message || 'An unexpected error occurred';
+    let message = error.message || t('An unexpected error occurred');
     
     if (error.response?.data) {
       const data = error.response.data;

@@ -5,6 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 import { APP_NAME, APP_VERSION } from '../../config/app';
 import { BETA_TOOLTIP, DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
 import type { NavItemId } from '../../types';
+import { t } from '../../i18n';
 
 interface NavEntryProps {
   id: NavItemId;
@@ -73,7 +74,7 @@ export function Sidebar() {
   return (
     <nav
       className={`sidebar ${collapsed ? 'collapsed' : 'expanded'}`}
-      aria-label="Main navigation"
+      aria-label={t('Main navigation')}
     >
       {/* ── Header / Logo ── */}
       <div className="sidebar-header">
@@ -131,7 +132,7 @@ export function Sidebar() {
         />
         <NavEntry
           id="settings"
-          label="Settings"
+          label={t('Settings')}
           icon={Settings}
           path="/settings"
           collapsed={collapsed}
@@ -142,8 +143,8 @@ export function Sidebar() {
       <button
         className="sidebar-collapse-btn"
         onClick={toggleCollapsed}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
+        aria-label={collapsed ? t('Expand sidebar') : t('Collapse sidebar')}
         id="sidebar-collapse-btn"
       >
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}

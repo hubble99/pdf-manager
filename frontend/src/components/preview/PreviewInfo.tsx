@@ -1,4 +1,5 @@
 import { Filename } from '../Filename';
+import { t } from '../../i18n';
 
 export interface PreviewInfoProps {
   filename: string;
@@ -22,7 +23,7 @@ export function PreviewInfo({
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: 'var(--on-surface-variant)' }}>
         {currentPage !== undefined && totalPages !== undefined && (
-          <span>Page {currentPage}/{totalPages}</span>
+          <span>{t('Page')} {currentPage}/{totalPages}</span>
         )}
         {width !== undefined && height !== undefined && (
           <span>{width}×{height}px</span>

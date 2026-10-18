@@ -1,5 +1,6 @@
 import apiClient from '../../api/client';
 import { getFilenameFromHeaders } from '../../utils/downloadHelper';
+import { t } from '../../i18n';
 
 export interface FolderFileNode {
   name: string;
@@ -37,7 +38,7 @@ export interface FolderMergeResult {
 }
 
 /** The message the backend uses when a registration has lapsed. */
-export const CHOOSE_FOLDER_AGAIN = 'Choose folder again.';
+export const CHOOSE_FOLDER_AGAIN = t('Choose folder again.');
 
 export async function registerFolder(path: string): Promise<RegisteredRoot> {
   const response = await apiClient.post<{ status: string; data: Record<string, string> }>(

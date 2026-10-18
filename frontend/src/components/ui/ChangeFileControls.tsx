@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Trash2 } from 'lucide-react';
+import { t } from '../../i18n';
 
 export interface ChangeFileControlsProps {
   /** Value for the file input's accept attribute, e.g. ".pdf". */
@@ -44,7 +45,7 @@ export function ChangeFileControls({ accept, onPick, onClear, disabled = false, 
         onClick={() => inputRef.current?.click()}
         disabled={disabled}
       >
-        Change file
+        {t('Change file')}
       </button>
       <button
         type="button"
@@ -52,8 +53,8 @@ export function ChangeFileControls({ accept, onPick, onClear, disabled = false, 
         id={`${idPrefix}-remove-file`}
         onClick={onClear}
         disabled={disabled}
-        aria-label="Remove file"
-        title="Remove file"
+        aria-label={t('Remove file')}
+        title={t('Remove file')}
       >
         <Trash2 size={14} aria-hidden="true" />
       </button>

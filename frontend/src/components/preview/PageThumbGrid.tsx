@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Check } from 'lucide-react';
 import apiClient from '../../api/client';
+import { t } from '../../i18n';
 
 /**
  * A grid of page thumbnails the user can pick from.
@@ -94,7 +95,7 @@ function PageThumb({ file, page, selected, interactive, dpi, onToggle }: PageThu
       type="button"
       className={`thumb${selected ? ' active' : ''}${interactive ? '' : ' thumb--fixed'}`}
       aria-pressed={interactive ? selected : undefined}
-      aria-label={`Page ${page}${selected ? ', selected' : ''}`}
+      aria-label={selected ? t('Page {n}, selected', { n: page }) : t('Page {n}', { n: page })}
       disabled={!interactive}
       onClick={() => onToggle(page)}
     >
@@ -121,7 +122,7 @@ export function PageThumbGrid({
   file, totalPages, selected, interactive = true, onToggle, dpi = 40,
 }: PageThumbGridProps) {
   return (
-    <div className="thumb-grid" role="group" aria-label="Pages">
+    <div className="thumb-grid" role="group" aria-label={t('Pages')}>
       {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
         <PageThumb
           key={page}

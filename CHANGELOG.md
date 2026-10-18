@@ -5,6 +5,15 @@
 > 1.8.0 is the first published release since 1.2.4, so it carries everything in
 > the 1.7.0 section below plus the changes here.
 
+**UAT feedback (October 18)**
+
+- **Language:** Settings now has a Language option, English or Bahasa Indonesia. The choice is remembered on the device and applied by reloading the app once. Every screen, message, tooltip and accessibility label is translated; any text without a translation falls back to English. A test fails if a new string is added without an Indonesian entry.
+- **Settings:** removed the Output folder card. It never changed anything, because finished files always go to the Downloads folder.
+- **Wording:** actions no longer say "download", since this is a desktop app. Merge & Download is now **Merge PDF**, and the other tools use their plain action names (Save PDF, Save PNG, and so on). Messages say a file was saved to your Downloads folder.
+- **Canvas PDF:** the left panel is tidier. Tool icons and controls are larger and laid out symmetrically, using the free space below and beside them.
+- **Canvas PDF colours:** pages are now rendered with colour management and at a higher resolution (up to 500 DPI, capped by a pixel budget so large pages stay safe), so the canvas matches the original PDF's colours closely, including CMYK content.
+- **QR & Barcode:** the preview has far less empty padding around the code.
+
 **Edit Content**
 
 - Fixed edits on signature-stamped (BSrE) PDFs: text drawn with a bare `Td` position and text whose font is bound by an unnamed slot can now be verified, so replacements on such government documents are accepted instead of rejected.
@@ -31,11 +40,11 @@
 
 **Layout (second UAT pass)**
 
-- Quick Merge with files is now two panels: previews on the left, and Add more PDFs, Output Filename, Clear All and Merge & Download on the right, so long lists need less scrolling. The empty state is just the centered drop zone.
+- Quick Merge with files is now two panels: previews on the left, and Add more PDFs, Output Filename, Clear All and Merge PDF on the right, so long lists need less scrolling. The empty state is just the centered drop zone.
 - Content shorter than the page now sits in the vertical middle on every tool (upload screens and loaded forms alike); content that is taller still scrolls from the top. Mode tabs stay at the top. This also centers the PDF & Image uploader, which was stuck at the top.
 - Merge Folder: the empty Folder and Files to Merge cards center their content before a folder is chosen.
 - Images to PDF previews now fit their card at any rotation, so landscape or rotated images are no longer cropped.
-- Edit Content: the Output filename field now sits in the header next to **Save and download**, where it is visible without scrolling the control panel.
+- Edit Content: the Output filename field now sits in the header next to **Save PDF**, where it is visible without scrolling the control panel.
 
 **UI consistency and accessibility**
 

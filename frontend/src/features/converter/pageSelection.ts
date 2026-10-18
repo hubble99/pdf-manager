@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 export interface PageSelection {
   mode: 'all' | 'selected';
   draft: string;
@@ -32,7 +33,7 @@ export function resolvePageSelection(selection: PageSelection, total: number): R
     valid: false, pages: new Set<number>(), pageRanges: null, error,
   });
   if (!Number.isSafeInteger(total) || total < 1) {
-    return invalid('Load a readable PDF before choosing pages.');
+    return invalid(t('Load a readable PDF before choosing pages.'));
   }
   if (selection.mode === 'all') {
     return {
@@ -43,18 +44,18 @@ export function resolvePageSelection(selection: PageSelection, total: number): R
     };
   }
   if (!selection.draft.trim()) {
-    return invalid('Choose at least one page. Enter a page or range, such as 2, 4-7.');
+    return invalid(t('Choose at least one page. Enter a page or range, such as 2, 4-7.'));
   }
   const pages = new Set<number>();
   for (const token of selection.draft.split(',')) {
     const match = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(token.trim());
-    if (!match) return invalid('Use page numbers or ranges separated by commas, such as 2, 4-7.');
+    if (!match) return invalid(t('Use page numbers or ranges separated by commas, such as 2, 4-7.'));
     const start = Number(match[1]);
     const end = Number(match[2] ?? match[1]);
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end > total) {
-      return invalid(`Pages must be between 1 and ${total}.`);
+      return invalid(t('Pages must be between 1 and {total}.', { total }));
     }
-    if (start > end) return invalid('A page range must start before it ends.');
+    if (start > end) return invalid(t('A page range must start before it ends.'));
     for (let page = start; page <= end; page++) pages.add(page);
   }
   return { valid: true, pages, pageRanges: formatPageNumbers(pages), error: null };

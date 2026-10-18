@@ -2,6 +2,8 @@ from pathlib import Path
 
 import fitz
 
+from core import render_color  # noqa: F401  (switches on ICC colour management)
+
 
 class PreviewError(Exception):
     pass

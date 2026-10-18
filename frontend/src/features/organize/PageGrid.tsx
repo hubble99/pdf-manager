@@ -10,6 +10,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Copy, FlipHorizontal2, RotateCw, Trash2 } from 'lucide-react';
 import { sourceLetter } from './pageList';
 import type { InsertPosition, PageRef, SourceHandle } from './types';
+import { t } from '../../i18n';
 
 export interface PageGridProps {
   pages: PageRef[];
@@ -75,7 +76,7 @@ function PageCell({
       data-page-key={page.key}
     >
       <div className="organize-cell-head">
-        <label className="organize-cell-select" title={`Select page at position ${position + 1}`}>
+        <label className="organize-cell-select" title={t('Select page at position {position}', { position: position + 1 })}>
           <input
             type="checkbox"
             checked={selected}
@@ -84,7 +85,7 @@ function PageCell({
               toggle: true,
               range: (event.nativeEvent as MouseEvent).shiftKey === true,
             })}
-            aria-label={`Select page at position ${position + 1}`}
+            aria-label={t('Select page at position {position}', { position: position + 1 })}
           />
         </label>
         <span className="organize-cell-position">{position + 1}</span>
@@ -96,7 +97,7 @@ function PageCell({
         {...attributes}
         {...listeners}
         className="organize-cell-body"
-        aria-label={`Page at position ${position + 1}`}
+        aria-label={t('Page at position {position}', { position: position + 1 })}
         aria-pressed={selected}
         disabled={disabled}
         onClick={(event) => onSelect(position, {
@@ -122,8 +123,8 @@ function PageCell({
           className="btn btn-ghost btn-icon btn-sm"
           onClick={() => onRotate(position)}
           disabled={disabled}
-          aria-label={`Rotate page at position ${position + 1}`}
-          title="Rotate 90°"
+          aria-label={t('Rotate page at position {position}', { position: position + 1 })}
+          title={t('Rotate 90°')}
         >
           <RotateCw size={13} aria-hidden="true" />
         </button>
@@ -132,8 +133,8 @@ function PageCell({
           className="btn btn-ghost btn-icon btn-sm"
           onClick={() => onFlip(position)}
           disabled={disabled}
-          aria-label={`Mirror page at position ${position + 1}`}
-          title="Mirror horizontally"
+          aria-label={t('Mirror page at position {position}', { position: position + 1 })}
+          title={t('Mirror horizontally')}
         >
           <FlipHorizontal2 size={13} aria-hidden="true" />
         </button>
@@ -142,8 +143,8 @@ function PageCell({
           className="btn btn-ghost btn-icon btn-sm"
           onClick={() => onDuplicate(position)}
           disabled={disabled}
-          aria-label={`Duplicate page at position ${position + 1}`}
-          title="Duplicate"
+          aria-label={t('Duplicate page at position {position}', { position: position + 1 })}
+          title={t('Duplicate')}
         >
           <Copy size={13} aria-hidden="true" />
         </button>
@@ -152,8 +153,8 @@ function PageCell({
           className="btn btn-ghost btn-icon btn-sm organize-danger"
           onClick={() => onRemove(position)}
           disabled={disabled}
-          aria-label={`Delete page at position ${position + 1}`}
-          title="Delete"
+          aria-label={t('Delete page at position {position}', { position: position + 1 })}
+          title={t('Delete')}
         >
           <Trash2 size={13} aria-hidden="true" />
         </button>
@@ -184,7 +185,7 @@ export function PageGrid({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={keys} strategy={rectSortingStrategy}>
-        <div className="organize-grid" role="group" aria-label="Page grid">
+        <div className="organize-grid" role="group" aria-label={t('Page grid')}>
           {pages.map((page, index) => (
             <PageCell
               key={page.key}

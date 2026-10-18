@@ -1,5 +1,6 @@
+import { t } from '../i18n';
 export const EMPTY_TEXT_SENTINEL = ' ';
-export const TEXT_PLACEHOLDER_LABEL = 'Enter text here';
+export const TEXT_PLACEHOLDER_LABEL = t('Enter text here');
 export const TEXT_PLACEHOLDER_COLOR = '#9898B8';
 
 export function isEmptyTextState(text: string | null | undefined): boolean {

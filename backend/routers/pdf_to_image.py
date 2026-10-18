@@ -9,6 +9,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from core.pdf_to_image import pdf_to_image, PdfToImageError
+from core.render_color import safe_dpi
 from models.common import ErrorResponse
 from utils.file_utils import cleanup_temp_file, save_upload
 from utils.filename_utils import sanitize_filename, sanitize_stem
@@ -128,11 +129,12 @@ async def pdf_to_image_pages_endpoint(
         pages_data = []
         total_pages = doc.page_count
         
-        dpi = max(72, min(400, dpi))
+        dpi = max(72, min(500, dpi))
         for i in range(total_pages):
             page = doc[i]
             # Render to pixmap with white background
-            pix = page.get_pixmap(dpi=dpi, alpha=False)
+            page_dpi = safe_dpi(page, dpi)
+            pix = page.get_pixmap(dpi=page_dpi, alpha=False)
             
             # Get PNG bytes
             img_bytes = pix.tobytes("png")
@@ -144,7 +146,7 @@ async def pdf_to_image_pages_endpoint(
                 "index": i,
                 "width": pix.width,
                 "height": pix.height,
-                "dpi": dpi,
+                "dpi": page_dpi,
                 "data": base64_data,
             })
             
@@ -188,7 +190,7 @@ async def pdf_to_image_page_endpoint(
         doc = fitz.open(str(temp_path))
         if not 0 <= page_index < doc.page_count:
             raise HTTPException(status_code=400, detail="Page index is out of range.")
-        dpi = max(72, min(400, dpi))
+        dpi = safe_dpi(doc[page_index], max(72, min(500, dpi)))
         pix = doc[page_index].get_pixmap(dpi=dpi, alpha=False)
         return {
             "index": page_index,

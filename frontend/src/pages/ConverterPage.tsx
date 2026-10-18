@@ -18,6 +18,7 @@ import { useConverterWorkflow } from '../features/converter/useConverterWorkflow
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
 import { DPI_OPTIONS, FORMAT_OPTIONS, PAGE_SIZE_OPTIONS, formatBytes } from '../features/converter/options';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t, tn } from '../i18n';
 
 function FlipIcon() {
   return (
@@ -31,13 +32,13 @@ type ConverterTab = 'pdf' | 'images';
 
 const TAB_COPY: Record<ConverterTab, { label: string; description: string; accept: string }> = {
   pdf: {
-    label: 'PDF to Images',
-    description: 'Export the pages you choose from one PDF as images',
+    label: t('PDF to Images'),
+    description: t('Export the pages you choose from one PDF as images'),
     accept: '.pdf',
   },
   images: {
-    label: 'Images to PDF',
-    description: 'Combine one or more images into a single PDF document',
+    label: t('Images to PDF'),
+    description: t('Combine one or more images into a single PDF document'),
     accept: '.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff',
   },
 };
@@ -122,7 +123,7 @@ export function ConverterPage() {
         <div className="converter-message converter-message--error" role="alert">
           <span>{error}</span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={converter.dismissError}>
-            Dismiss
+            {t('Dismiss')}
           </button>
         </div>
       )}
@@ -131,7 +132,7 @@ export function ConverterPage() {
         <div className="card status-card status-card--ok">
           <CheckCircle size={22} aria-hidden="true" />
           <div className="status-card-copy">
-            <b>Download started automatically</b>
+            <b>{t('Saved to your Downloads folder')}</b>
             <small><Filename name={result.filename} /> · {result.detail}</small>
           </div>
           <button
@@ -139,10 +140,10 @@ export function ConverterPage() {
             className="btn btn-ghost btn-sm"
             id="converter-open-folder"
             onClick={() => openOutputFolder()}
-            title="Open download folder"
+            title={t('Open folder')}
           >
             <FolderOpen size={14} aria-hidden="true" />
-            Open Folder
+            {t('Open Folder')}
           </button>
         </div>
       )}
@@ -159,7 +160,7 @@ export function ConverterPage() {
         disabled={isConverting}
       >
         {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
-        {kind === 'images' ? 'Clear All' : 'Clear'}
+        {kind === 'images' ? t('Clear All') : t('Clear')}
       </button>
       <button
         type="button"
@@ -167,17 +168,17 @@ export function ConverterPage() {
         id="converter-run"
         onClick={converter.convert}
         disabled={!canConvert}
-        title={canConvert ? undefined : pdfBlockReason ?? 'Add files to convert'}
+        title={canConvert ? undefined : pdfBlockReason ?? t('Add files to convert')}
       >
         {isConverting ? (
           <>
             <Loader2 size={15} className="converter-spin" aria-hidden="true" />
-            {kind === 'pdf' ? 'Exporting…' : 'Converting…'}
+            {kind === 'pdf' ? t('Exporting…') : t('Converting…')}
           </>
         ) : (
           <>
             <FileImage size={15} aria-hidden="true" />
-            {kind === 'pdf' ? 'Export & Download' : 'Convert & Download'}
+            {kind === 'pdf' ? t('Export Images') : t('Create PDF')}
           </>
         )}
       </button>
@@ -188,12 +189,12 @@ export function ConverterPage() {
     <div className="feature-page">
       <PageHeader
         icon={FileImage}
-        title="PDF & Image"
+        title={t('PDF & Image')}
         description={TAB_COPY[activeTab].description}
       />
 
       <Tabs
-        ariaLabel="Conversion direction"
+        ariaLabel={t('Conversion direction')}
         value={activeTab}
         onChange={(tab) => { converter.dismissBatchError(); setChosenTab(tab); }}
         items={(['pdf', 'images'] as const).map((tab) => {
@@ -203,7 +204,7 @@ export function ConverterPage() {
             id: `converter-tab-${tab}`,
             label: TAB_COPY[tab].label,
             disabled: locked || isConverting,
-            title: locked ? 'Clear the current files to switch direction' : undefined,
+            title: locked ? t('Clear the current files to switch direction') : undefined,
           };
         })}
       />
@@ -218,21 +219,21 @@ export function ConverterPage() {
               id="converter-drop-zone"
               className="drop-zone"
               aria-label={activeTab === 'pdf'
-                ? 'Drop a PDF here, or press Enter to browse'
-                : 'Drop images here, or press Enter to browse'}
+                ? t('Drop a PDF here, or press Enter to browse')
+                : t('Drop images here, or press Enter to browse')}
               {...dropProps}
             >
               <Upload className="drop-zone-icon" aria-hidden="true" />
               {activeTab === 'pdf' ? (
                 <>
-                  <p className="drop-zone-title">Drop a PDF here</p>
-                  <p className="drop-zone-sub">or click to browse · One file at a time</p>
+                  <p className="drop-zone-title">{t('Drop a PDF here')}</p>
+                  <p className="drop-zone-sub">{t('or click to browse · One file at a time')}</p>
                   <span className="badge badge-neutral">PDF</span>
                 </>
               ) : (
                 <>
-                  <p className="drop-zone-title">Drop images here</p>
-                  <p className="drop-zone-sub">or click to browse · Multiple files supported</p>
+                  <p className="drop-zone-title">{t('Drop images here')}</p>
+                  <p className="drop-zone-sub">{t('or click to browse · Multiple files supported')}</p>
                   <div className="converter-badges">
                     <span className="badge badge-neutral">PNG</span>
                     <span className="badge badge-neutral">JPG</span>
@@ -246,8 +247,8 @@ export function ConverterPage() {
             )}
             <p className="empty-hint">
               {activeTab === 'pdf'
-                ? 'Every page will appear here so you can choose which ones to convert.'
-                : 'Add images, put them in order, and save them as one PDF.'}
+                ? t('Every page will appear here so you can choose which ones to convert.')
+                : t('Add images, put them in order, and save them as one PDF.')}
             </p>
           </div>
         )}
@@ -265,9 +266,9 @@ export function ConverterPage() {
                     <Loader2 size={12} className="converter-spin" aria-hidden="true" />
                   )}
                   {pdfInfoState === 'ready' && (
-                    <span className="chip">Total: {totalPages} pages</span>
+                    <span className="chip">{t('Total:')} {totalPages} {t('pages')}</span>
                   )}
-                  {pdfInfoState === 'error' && <span className="badge badge-error">Page count unavailable</span>}
+                  {pdfInfoState === 'error' && <span className="badge badge-error">{t('Page count unavailable')}</span>}
                 </span>
                 <span className="card-head-actions">
                   <button
@@ -277,17 +278,17 @@ export function ConverterPage() {
                     disabled={isConverting}
                     id="converter-replace-file"
                   >
-                    Replace
+                    {t('Replace')}
                   </button>
                   <button
                     type="button"
                     className="link-btn"
                     onClick={converter.clear}
                     disabled={isConverting}
-                    aria-label="Remove PDF"
+                    aria-label={t('Remove PDF')}
                     id="converter-remove-file"
                   >
-                    Remove
+                    {t('Remove')}
                   </button>
                 </span>
               </div>
@@ -301,7 +302,7 @@ export function ConverterPage() {
                 />
               ) : (
                 <p className="empty-hint">
-                  {pdfInfoState === 'loading' ? 'Reading the document…' : 'Pages are unavailable for this file.'}
+                  {pdfInfoState === 'loading' ? t('Reading the document…') : t('Pages are unavailable for this file.')}
                 </p>
               )}
             </div>
@@ -309,9 +310,9 @@ export function ConverterPage() {
             <div className="col-stack">
               <div className="card card--flush">
                 <div className="card-head">
-                  <span className="card-head-title" id="converter-pages-label">Pages</span>
+                  <span className="card-head-title" id="converter-pages-label">{t('Pages')}</span>
                   <span className="card-head-actions">
-                    {pdfInfoState === 'ready' && <span>{selection.pages.size} of {totalPages} selected</span>}
+                    {pdfInfoState === 'ready' && <span>{selection.pages.size} {t('of')} {totalPages} {t('selected')}</span>}
                   </span>
                 </div>
                 <div role="radiogroup" aria-labelledby="converter-pages-label">
@@ -331,9 +332,9 @@ export function ConverterPage() {
                         disabled={pdfInfoState !== 'ready' || isConverting}
                       />
                       <span className="radio-copy">
-                        <span className="radio-title">{mode === 'all' ? 'All pages' : 'Selected pages'}</span>
+                        <span className="radio-title">{mode === 'all' ? t('All pages') : t('Selected pages')}</span>
                         <span className="radio-desc">
-                          {mode === 'all' ? 'Export every page' : 'Choose pages or ranges'}
+                          {mode === 'all' ? t('Export every page') : t('Choose pages or ranges')}
                         </span>
                       </span>
                     </label>
@@ -341,7 +342,7 @@ export function ConverterPage() {
                 </div>
                 <div className="card-body">
                   <div className="field">
-                    <label htmlFor="converter-page-ranges">Selected pages</label>
+                    <label htmlFor="converter-page-ranges">{t('Selected pages')}</label>
                     <input
                       id="converter-page-ranges"
                       className="input"
@@ -363,8 +364,8 @@ export function ConverterPage() {
                       {showSelectionError
                         ? selection.error
                         : selectionMode === 'all'
-                          ? `All ${totalPages} pages will be exported.`
-                          : `Selected: ${selection.pages.size} of ${totalPages} pages`}
+                          ? t('All {total} pages will be exported.', { total: totalPages })
+                          : t('Selected: {count} of {total} pages', { count: selection.pages.size, total: totalPages })}
                     </small>
                   </div>
                 </div>
@@ -374,12 +375,12 @@ export function ConverterPage() {
                 <div className="card-head">
                   <span className="card-head-title">
                     <Images size={16} className="card-head-icon" aria-hidden="true" />
-                    Output settings
+                    {t('Output settings')}
                   </span>
                 </div>
                 <div className="card-body">
                   <div className="setting-row">
-                    <span className="setting-label" id="converter-format-label">Format</span>
+                    <span className="setting-label" id="converter-format-label">{t('Format')}</span>
                     <SegmentedControl
                       ariaLabelledBy="converter-format-label"
                       idPrefix="converter-format"
@@ -390,7 +391,7 @@ export function ConverterPage() {
                     />
                   </div>
                   <div className="setting-row">
-                    <span className="setting-label" id="converter-dpi-label">Resolution</span>
+                    <span className="setting-label" id="converter-dpi-label">{t('Resolution')}</span>
                     <SegmentedControl
                       ariaLabelledBy="converter-dpi-label"
                       idPrefix="converter-dpi"
@@ -410,7 +411,7 @@ export function ConverterPage() {
               <div className="card card--flush">
                 <div className="card-body">
                   <div className="field">
-                    <label htmlFor="converter-pdf-output">Output Filename</label>
+                    <label htmlFor="converter-pdf-output">{t('Output Filename')}</label>
                     <input
                       id="converter-pdf-output"
                       className="input"
@@ -420,7 +421,7 @@ export function ConverterPage() {
                       placeholder="export"
                       disabled={isConverting}
                     />
-                    <small>The .png, .jpg or .zip extension is added automatically.</small>
+                    <small>{t('The .png, .jpg or .zip extension is added automatically.')}</small>
                   </div>
                 </div>
               </div>
@@ -438,9 +439,9 @@ export function ConverterPage() {
               <div className="card-head">
                 <span className="card-head-title">
                   <Images size={16} className="card-head-icon" aria-hidden="true" />
-                  <span id="converter-images-label">Images to Convert</span>
+                  <span id="converter-images-label">{t('Images to Convert')}</span>
                   <span className="chip">
-                    {images.length} file{images.length === 1 ? '' : 's'}
+                    {tn(images.length, '{n} file', '{n} files')}
                   </span>
                 </span>
                 <span className="card-head-actions">
@@ -451,7 +452,7 @@ export function ConverterPage() {
                     disabled={isConverting}
                     id="converter-add-images"
                   >
-                    Add images
+                    {t('Add images')}
                   </button>
                 </span>
               </div>
@@ -465,7 +466,7 @@ export function ConverterPage() {
               >
                 <SortableCardGrid
                   idPrefix="converter"
-                  ariaLabel="Images to Convert"
+                  ariaLabel={t('Images to Convert')}
                   disabled={isConverting}
                   onReorder={converter.reorderImages}
                   onRemove={converter.removeImage}
@@ -483,8 +484,8 @@ export function ConverterPage() {
                           className="btn btn-ghost btn-icon btn-sm"
                           onClick={() => converter.rotateImage(entry.id)}
                           disabled={isConverting}
-                          aria-label={`Rotate ${entry.file.name} 90 degrees`}
-                          title="Rotate 90°"
+                          aria-label={t('Rotate {name} 90 degrees', { name: entry.file.name })}
+                          title={t('Rotate 90°')}
                         >
                           <RotateCw size={14} aria-hidden="true" />
                         </button>
@@ -493,8 +494,8 @@ export function ConverterPage() {
                           className="btn btn-ghost btn-icon btn-sm"
                           onClick={() => converter.flipImage(entry.id)}
                           disabled={isConverting}
-                          aria-label={`Mirror ${entry.file.name} horizontally`}
-                          title="Mirror horizontally"
+                          aria-label={t('Mirror {name} horizontally', { name: entry.file.name })}
+                          title={t('Mirror horizontally')}
                         >
                           <FlipIcon />
                         </button>
@@ -510,7 +511,7 @@ export function ConverterPage() {
               <div className="card-head">
                 <span className="card-head-title" id="converter-page-size-label">
                   <FileText size={16} className="card-head-icon" aria-hidden="true" />
-                  Page Size · applies to all images
+                  {t('Page Size · applies to all images')}
                 </span>
               </div>
               <div className="card-body">
@@ -529,7 +530,7 @@ export function ConverterPage() {
                   onChange={converter.setPageSize}
                 />
                 <div className="field">
-                  <label htmlFor="converter-image-output">Output Filename</label>
+                  <label htmlFor="converter-image-output">{t('Output Filename')}</label>
                   <input
                     id="converter-image-output"
                     className="input"
@@ -539,7 +540,7 @@ export function ConverterPage() {
                     placeholder="output.pdf"
                     disabled={isConverting}
                   />
-                  <small>The .pdf extension is added automatically if omitted.</small>
+                  <small>{t('The .pdf extension is added automatically if omitted.')}</small>
                 </div>
               </div>
             </div>

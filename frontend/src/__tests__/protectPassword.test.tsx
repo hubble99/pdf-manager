@@ -32,7 +32,7 @@ describe('Protect PDF password confirmation', () => {
 
   it('keeps Protect disabled until both passwords match', async () => {
     openWithPdf();
-    const protect = await screen.findByRole('button', { name: /Protect & Download/i });
+    const protect = await screen.findByRole('button', { name: /Protect PDF/i });
     expect(protect).toBeDisabled();
 
     fireEvent.change(document.getElementById('protect-user-pw') as HTMLInputElement, { target: { value: 'secret-1' } });

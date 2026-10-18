@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Minus, Plus, Maximize } from 'lucide-react';
 import { MAX_PREVIEW_ZOOM, MIN_PREVIEW_ZOOM } from '../../utils/previewZoom';
+import { t } from '../../i18n';
 
 export interface ZoomControlProps {
   zoom: number; // 0.05 - 3.0
@@ -80,7 +81,7 @@ export function ZoomControl({ zoom, onChange, onCommit = onChange, onInteraction
         style={{ marginLeft: 8 }}
       >
         <Maximize size={14} style={{ marginRight: 6 }} />
-        Fit
+        {t('Fit')}
       </button>
     </div>
   );

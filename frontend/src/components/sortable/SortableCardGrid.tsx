@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { AlertTriangle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { SortableArea } from './SortableArea';
+import { t } from '../../i18n';
 
 export interface SortableCard {
   id: string;
@@ -74,7 +75,7 @@ function Card({
         <span className="chip sort-card-index">#{index + 1}</span>
         {card.warning && (
           <span className="sort-card-warn" title={card.warning}>
-            <AlertTriangle size={11} aria-hidden="true" /> Duplicate
+            <AlertTriangle size={11} aria-hidden="true" /> {t('Duplicate')}
           </span>
         )}
         <button
@@ -82,8 +83,8 @@ function Card({
           className="btn btn-ghost btn-icon btn-sm sort-card-remove"
           onClick={() => onRemove(card.id)}
           disabled={disabled}
-          aria-label={`Remove ${card.title}`}
-          title="Remove"
+          aria-label={t('Remove {name}', { name: card.title })}
+          title={t('Remove')}
           id={`${idPrefix}-remove-${index}`}
         >
           <X size={13} aria-hidden="true" />
@@ -98,8 +99,8 @@ function Card({
         onKeyDown={handleKeyDown}
         className="sort-card-body"
         disabled={disabled}
-        title="Drag to reorder, or press Alt+Arrow"
-        aria-label={`Position ${index + 1}: ${card.title}. Drag to reorder, or press Alt and an arrow key.`}
+        title={t('Drag to reorder, or press Alt+Arrow')}
+        aria-label={t('Position {position}: {name}. Drag to reorder, or press Alt and an arrow key.', { position: index + 1, name: card.title })}
       >
         {card.thumbnail}
       </button>
@@ -114,7 +115,7 @@ function Card({
           className="btn btn-ghost btn-icon btn-sm"
           onClick={() => onReorder(index, index - 1)}
           disabled={disabled || index === 0}
-          aria-label={`Move ${card.title} earlier`}
+          aria-label={t('Move {name} earlier', { name: card.title })}
           id={`${idPrefix}-earlier-${index}`}
         >
           <ChevronLeft size={14} aria-hidden="true" />
@@ -124,7 +125,7 @@ function Card({
           className="btn btn-ghost btn-icon btn-sm"
           onClick={() => onReorder(index, index + 1)}
           disabled={disabled || index === total - 1}
-          aria-label={`Move ${card.title} later`}
+          aria-label={t('Move {name} later', { name: card.title })}
           id={`${idPrefix}-later-${index}`}
         >
           <ChevronRight size={14} aria-hidden="true" />

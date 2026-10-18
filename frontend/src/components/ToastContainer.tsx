@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useToast } from '../hooks/useToast';
 import { CheckCircle, AlertCircle, Info, AlertTriangle, FolderCheck, FolderX, LoaderCircle, X } from 'lucide-react';
+import { t } from '../i18n';
 
 type ActionState = 'idle' | 'opening' | 'opened' | 'failed';
 
@@ -22,31 +23,31 @@ export const ToastContainer: React.FC = () => {
 
   return (
     <div className="toast-container" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.type}`}>
+      {toasts.map((toast) => (
+        <div key={toast.id} className={`toast toast-${toast.type}`}>
           <span className="toast-icon">
-            {t.type === 'success' && <CheckCircle size={20} />}
-            {t.type === 'error' && <AlertCircle size={20} />}
-            {t.type === 'info' && <Info size={20} />}
-            {t.type === 'warning' && <AlertTriangle size={20} />}
+            {toast.type === 'success' && <CheckCircle size={20} />}
+            {toast.type === 'error' && <AlertCircle size={20} />}
+            {toast.type === 'info' && <Info size={20} />}
+            {toast.type === 'warning' && <AlertTriangle size={20} />}
           </span>
           <div className="toast-body">
-            <div className="toast-title">{t.title}</div>
-            {t.message && <div className="toast-message">{t.message}</div>}
-            {t.action && (() => {
-              const state = actionStates[t.id] ?? 'idle';
+            <div className="toast-title">{toast.title}</div>
+            {toast.message && <div className="toast-message">{toast.message}</div>}
+            {toast.action && (() => {
+              const state = actionStates[toast.id] ?? 'idle';
               const label = state === 'opening'
-                ? 'Opening folder…'
+                ? t('Opening folder…')
                 : state === 'opened'
-                  ? 'Folder opened'
+                  ? t('Folder opened')
                   : state === 'failed'
-                    ? 'Try again'
-                    : t.action.label;
+                    ? t('Try again')
+                    : toast.action.label;
 
               return (
                 <button
                   className={`toast-action-btn toast-action-${state}`}
-                  onClick={() => void handleAction(t.id, t.action!.onClick)}
+                  onClick={() => void handleAction(toast.id, toast.action!.onClick)}
                   disabled={state === 'opening' || state === 'opened'}
                   aria-live="polite"
                 >
@@ -60,8 +61,8 @@ export const ToastContainer: React.FC = () => {
           </div>
           <button
             className="toast-close"
-            onClick={() => dismissToast(t.id)}
-            aria-label="Close"
+            onClick={() => dismissToast(toast.id)}
+            aria-label={t('Close')}
           >
             <X size={16} />
           </button>

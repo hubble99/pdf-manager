@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 /**
  * Strict page-expression parsing shared by the insert "Pick" field and the bulk
  * delete field.
@@ -21,32 +22,32 @@ export function parsePageExpression(input: string, total: number): PageExpressio
   const invalid = (error: string): PageExpressionResult => ({ valid: false, pages: [], error });
 
   if (!Number.isSafeInteger(total) || total < 1) {
-    return invalid('Load a document before choosing pages.');
+    return invalid(t('Load a document before choosing pages.'));
   }
   if (!input.trim()) {
-    return invalid('Choose at least one page. Enter a page or range, such as 2, 4-7.');
+    return invalid(t('Choose at least one page. Enter a page or range, such as 2, 4-7.'));
   }
 
   const pages: number[] = [];
   for (const rawToken of input.split(',')) {
     const token = rawToken.trim();
     if (!token) {
-      return invalid('Choose at least one page. Enter a page or range, such as 2, 4-7.');
+      return invalid(t('Choose at least one page. Enter a page or range, such as 2, 4-7.'));
     }
 
     const match = TOKEN.exec(token);
     if (!match) {
-      return invalid(`"${token}" is not a page or range. Use a form such as 2, 4-7.`);
+      return invalid(t('"{token}" is not a page or range. Use a form such as 2, 4-7.', { token }));
     }
 
     const start = Number(match[1]);
     const end = match[2] === undefined ? start : Number(match[2]);
 
     if (start < 1 || end > total) {
-      return invalid(`Pages must be between 1 and ${total}.`);
+      return invalid(t('Pages must be between 1 and {total}.', { total }));
     }
     if (start > end) {
-      return invalid(`"${token}" counts backwards. Write the smaller page first.`);
+      return invalid(t('"{token}" counts backwards. Write the smaller page first.', { token }));
     }
 
     for (let page = start; page <= end; page++) pages.push(page);

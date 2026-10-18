@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { triggerBlobDownload } from '../utils/downloadHelper';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { t, tn } from '../i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,10 +41,10 @@ function formatBytes(bytes: number): string {
 
 
 function qualityLabel(q: number): string {
-  if (q >= 75) return 'High quality';
-  if (q >= 50) return 'Balanced';
-  if (q >= 35) return 'Low quality';
-  return 'Maximum compression';
+  if (q >= 75) return t('High quality');
+  if (q >= 50) return t('Balanced');
+  if (q >= 35) return t('Low quality');
+  return t('Maximum compression');
 }
 
 function qualityColor(q: number): string {
@@ -70,7 +71,7 @@ export function CompressPage() {
   // ── File handling ───────────────────────────────────────────────────────────
   const loadFile = useCallback((f: File) => {
     if (!f.name.toLowerCase().endsWith('.pdf')) {
-      showToast({ type: 'error', title: 'Invalid file', message: 'Only PDF files are accepted.' });
+      showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
       return;
     }
     setFile(f);
@@ -94,7 +95,7 @@ export function CompressPage() {
 
   // ── Submit — single-step: compress & auto-download ─────────────────────────
   const handleCompress = async () => {
-    if (!file) { showToast({ type: 'error', title: 'No file', message: 'Please select a PDF file first.' }); return; }
+    if (!file) { showToast({ type: 'error', title: t('No file'), message: t('Please select a PDF file first.') }); return; }
     setIsLoading(true);
     setResult(null);
     setProgress(null);
@@ -155,9 +156,9 @@ export function CompressPage() {
                 addHistoryEntry({ filename: data.filename, action: 'Compressed PDF', size: data.size_after });
                 showToast({
                   type: 'success',
-                  title: 'Compression complete!',
-                  message: `Reduced by ${data.reduction_pct}% — ${data.images_processed} image${data.images_processed !== 1 ? 's' : ''} re-encoded`,
-                  action: { label: 'Open Folder', onClick: () => openOutputFolder() },
+                  title: t('Compression complete!'),
+                  message: tn(data.images_processed, 'Reduced by {pct}% — {n} image re-encoded', 'Reduced by {pct}% — {n} images re-encoded', { pct: data.reduction_pct }),
+                  action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
                   duration: 8000,
                 });
               } else if (data.type === 'error') {
@@ -170,8 +171,8 @@ export function CompressPage() {
         }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      showToast({ type: 'error', title: 'Compression failed', message: msg });
+      const msg = err instanceof Error ? err.message : t('Unknown error');
+      showToast({ type: 'error', title: t('Compression failed'), message: msg });
     } finally {
       setIsLoading(false);
       setProgress(null);
@@ -182,18 +183,18 @@ export function CompressPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const preset = [
-    { value: 25, label: 'Maximum' },
-    { value: 40, label: 'Low quality' },
-    { value: 55, label: 'Balanced' },
-    { value: 80, label: 'High quality' },
+    { value: 25, label: t('Maximum') },
+    { value: 40, label: t('Low quality') },
+    { value: 55, label: t('Balanced') },
+    { value: 80, label: t('High quality') },
   ];
 
   return (
     <div className="feature-page">
       <PageHeader
         icon={Minimize2}
-        title="Compress PDF"
-        description="Reduce file size while keeping the document readable"
+        title={t('Compress PDF')}
+        description={t('Reduce file size while keeping the document readable')}
       />
 
       <div className="page-body">
@@ -211,7 +212,7 @@ export function CompressPage() {
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                aria-label="Drop a PDF file here or click to browse"
+                aria-label={t('Drop a PDF file here or click to browse')}
               >
                 <input
                   ref={fileInputRef}
@@ -222,11 +223,11 @@ export function CompressPage() {
                   id="compress-file-input"
                 />
                 <Upload className="drop-zone-icon" />
-                <p className="drop-zone-title">Drop a PDF here</p>
-                <p className="drop-zone-sub">or click to browse · One file at a time</p>
+                <p className="drop-zone-title">{t('Drop a PDF here')}</p>
+                <p className="drop-zone-sub">{t('or click to browse · One file at a time')}</p>
                 <span className="badge badge-neutral">PDF</span>
               </div>
-              <p className="empty-hint">You will see the file size before and after compressing.</p>
+              <p className="empty-hint">{t('You will see the file size before and after compressing.')}</p>
             </>
           ) : (
             <>
@@ -255,7 +256,7 @@ export function CompressPage() {
                 <div className="card-head">
                   <span className="card-head-title">
                     <SlidersHorizontal size={16} className="card-head-icon" aria-hidden="true" />
-                    <label htmlFor="compress-quality-slider">Quality</label>
+                    <label htmlFor="compress-quality-slider">{t('Quality')}</label>
                   </span>
                   <span className="card-head-actions">
                     <b className="card-head-value" style={{ color: qualityColor(quality) }}>
@@ -275,15 +276,15 @@ export function CompressPage() {
                     onChange={setQuality}
                     scale={(
                       <>
-                        <span>Smaller file</span>
+                        <span>{t('Smaller file')}</span>
                         <b>{quality}</b>
-                        <span>Better quality</span>
+                        <span>{t('Better quality')}</span>
                       </>
                     )}
                   />
                   <SegmentedControl
                     equal
-                    ariaLabel="Quality preset"
+                    ariaLabel={t('Quality preset')}
                     options={preset}
                     value={quality}
                     disabled={isLoading}
@@ -291,10 +292,10 @@ export function CompressPage() {
                   />
                   <small className="hint">
                     {quality < 50
-                      ? 'Aggressive compression. Smallest file, some image quality loss expected.'
+                      ? t('Aggressive compression. Smallest file, some image quality loss expected.')
                       : quality < 75
-                      ? 'Balanced compression. Good size reduction with acceptable quality.'
-                      : 'Conservative compression. Minimal quality loss, smaller size reduction.'}
+                      ? t('Balanced compression. Good size reduction with acceptable quality.')
+                      : t('Conservative compression. Minimal quality loss, smaller size reduction.')}
                   </small>
                 </div>
               </div>
@@ -304,24 +305,24 @@ export function CompressPage() {
                 <div className="card-head">
                   <span className="card-head-title">
                     <Minimize2 size={16} className="card-head-icon" aria-hidden="true" />
-                    Size
+                    {t('Size')}
                   </span>
                   {result && (
                     <span className="card-head-actions status-ok">
-                      <CheckCircle size={14} aria-hidden="true" /> Compression complete
+                      <CheckCircle size={14} aria-hidden="true" /> {t('Compression complete')}
                     </span>
                   )}
                 </div>
                 <div className="card-body">
                   <div className="size-compare">
                     <div className="size-box">
-                      <small>Before</small>
+                      <small>{t('Before')}</small>
                       <b>{formatBytes(file.size)}</b>
                       <div className="size-bar"><i style={{ width: '100%' }} /></div>
                     </div>
                     <ArrowRight size={16} className="size-arrow" aria-hidden="true" />
                     <div className={`size-box${result ? ' ok' : ''}`}>
-                      <small>After</small>
+                      <small>{t('After')}</small>
                       <b>{result ? formatBytes(result.sizeAfter) : '—'}</b>
                       <div className="size-bar">
                         <i style={{ width: result ? `${Math.max(2, Math.min(100, (result.sizeAfter / Math.max(1, result.sizeBefore)) * 100))}%` : '0%' }} />
@@ -336,7 +337,7 @@ export function CompressPage() {
               <div className="card card--flush">
                 <div className="card-body">
                   <div className="field">
-                    <label htmlFor="compress-output-name">Output Filename</label>
+                    <label htmlFor="compress-output-name">{t('Output Filename')}</label>
                     <input
                       id="compress-output-name"
                       className="input"
@@ -355,20 +356,19 @@ export function CompressPage() {
                 <div className="card status-card status-card--ok">
                   <CheckCircle size={22} aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>Download started automatically</b>
+                    <b>{t('Saved to your Downloads folder')}</b>
                     <small>
-                      <Filename name={result.filename} /> · {result.imagesProcessed} image{result.imagesProcessed !== 1 ? 's' : ''} re-encoded
-                      · saved {formatBytes(result.sizeBefore - result.sizeAfter)}
+                      <Filename name={result.filename} /> · {tn(result.imagesProcessed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}
                     </small>
                   </div>
                   <button
                     className="btn btn-ghost btn-sm"
                     id="compress-open-folder-btn"
                     onClick={() => openOutputFolder()}
-                    title="Open download folder"
+                    title={t('Open folder')}
                   >
                     <FolderOpen size={14} />
-                    Open Folder
+                    {t('Open Folder')}
                   </button>
                 </div>
               )}
@@ -378,8 +378,8 @@ export function CompressPage() {
                 <div className="card status-card" role="status" aria-live="polite">
                   <Loader2 size={20} className="spin" aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>Compressing… {progress.percent}%</b>
-                    <small>Page {progress.page} of {progress.total}</small>
+                    <b>{t('Compressing…')} {progress.percent}%</b>
+                    <small>{t('Page')} {progress.page} {t('of')} {progress.total}</small>
                     <div className="size-bar size-bar--spaced">
                       <i style={{ width: `${progress.percent}%` }} />
                     </div>
@@ -397,12 +397,12 @@ export function CompressPage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={15} className="spin" />
-                      Compressing…
+                      {t('Compressing…')}
                     </>
                   ) : (
                     <>
                       <Minimize2 size={15} />
-                      Compress &amp; Download
+                      {t('Compress PDF')}
                     </>
                   )}
                 </button>
