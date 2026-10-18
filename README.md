@@ -31,15 +31,18 @@
 | 📎 **Merge PDF** | Combine multiple PDF files into one using drag & drop |
 | ✂️ **Split PDF** | Split a PDF or extract specific pages into separate files |
 | 🗜️ **Compress PDF** | Reduce PDF file size with adaptive image compression |
-| 🖼️ **PDF to Image** | Export PDF pages to PNG, JPEG, or WEBP formats |
-| 📄 **Image to PDF** | Convert images (JPG/PNG/WEBP/BMP) into a single PDF |
+| 🖼️ **PDF & Image** | Two tabs: export PDF pages to PNG, JPEG, or WEBP, or combine images (JPG/PNG/WEBP/BMP) into a single PDF |
 | 🔲 **QR & Barcode** | Generate QR codes and barcodes (Code128, EAN13, EAN8, Code39) |
 | 🗂️ **Organize Pages** | Rearrange, rotate, mirror, delete, and insert pages visually |
 | ✏️ **Canvas PDF** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
-| 🖊️ **Edit Content** | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
-| 🔒 **Protect/Unlock PDF** | Protect PDFs with a password or remove existing passwords |
+| 🖊️ **Edit Content** (beta) | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
+| 🔒 **Protect PDF** | Protect PDFs with a password or remove existing passwords |
+
+Dokuwu is available in **English** and **Bahasa Indonesia** (Settings → Language) and has four themes.
 
 > **All processing runs 100% offline on your machine. Your files are never sent to the internet. Temporary files are automatically cleaned up.**
+
+Read the [Privacy Policy](https://hubble99.github.io/pdf-manager/privacy.html) (English and Bahasa Indonesia).
 
 ### Edit Content V1 — what it can and cannot safely do
 
@@ -113,11 +116,14 @@ application failed.
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="docs/assets/screenshot-1.png" width="48%" alt="Screenshot 1">
-  <img src="docs/assets/screenshot-2.png" width="48%" alt="Screenshot 2">
+  <img src="docs/assets/screenshot-1.png" width="48%" alt="Dokuwu home screen with every tool grouped by task">
+  <img src="docs/assets/screenshot-2.png" width="48%" alt="Organize PDF: page thumbnails with insert, delete and save actions">
   <br>
-  <img src="docs/assets/screenshot-3.png" width="48%" alt="Screenshot 3">
-  <img src="docs/assets/screenshot-4.png" width="48%" alt="Screenshot 4">
+  <img src="docs/assets/screenshot-3.png" width="48%" alt="PDF &amp; Image: choose pages and export them as images">
+  <img src="docs/assets/screenshot-4.png" width="48%" alt="Canvas PDF: annotate a page with text, shapes and drawings">
+  <br>
+  <img src="docs/assets/screenshot-5.png" width="48%" alt="Edit Content: select native text and correct it with verification">
+  <img src="docs/assets/screenshot-6.png" width="48%" alt="Home screen in Bahasa Indonesia">
 </p>
 
 ---
