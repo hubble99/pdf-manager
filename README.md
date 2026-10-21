@@ -34,7 +34,7 @@
 | 🖼️ **PDF & Image** | Two tabs: export PDF pages to PNG, JPEG, or WEBP, or combine images (JPG/PNG/WEBP/BMP) into a single PDF |
 | 🔲 **QR & Barcode** | Generate QR codes and barcodes (Code128, EAN13, EAN8, Code39) |
 | 🗂️ **Organize Pages** | Rearrange, rotate, mirror, delete, and insert pages visually |
-| ✏️ **Canvas PDF** | Add native text overlays, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
+| ✏️ **Canvas PDF** | Add native text overlays, images, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
 | 🖊️ **Edit Content** (beta) | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
 | 🔒 **Protect PDF** | Protect PDFs with a password or remove existing passwords |
 

@@ -9,7 +9,7 @@
  * tools that are not about PDFs fit the same structure without regrouping.
  */
 import {
-  FileImage, FilePenLine, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
+  FileImage, FilePenLine, ImageDown, ImageMinus, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../types';
@@ -67,8 +67,12 @@ export const FEATURES: FeatureEntry[] = [
     description: t('Turn PDF pages into images, or images into a single PDF.'), route: '/converter',
   },
   {
+    id: 'image-format', name: t('WEBP to PNG/JPG'), group: 'convert', icon: ImageDown,
+    description: t('Convert WEBP images to PNG, JPG, or JPEG, many at once.'), route: '/image-format',
+  },
+  {
     id: 'edit-canvas', name: t('Canvas PDF'), group: 'edit', icon: PenLine,
-    description: t('Add text, shapes, drawings, and highlights onto a page.'), route: '/edit-canvas',
+    description: t('Add text, shapes, images, drawings, and highlights onto a page.'), route: '/edit-canvas',
   },
   {
     id: 'edit-content', name: t('Edit Content'), group: 'edit', icon: FilePenLine,
@@ -78,6 +82,10 @@ export const FEATURES: FeatureEntry[] = [
   {
     id: 'compress', name: t('Compress PDF'), group: 'optimize', icon: Minimize2,
     description: t('Reduce file size while keeping the document readable.'), route: '/compress',
+  },
+  {
+    id: 'photo-compress', name: t('Compress Photos'), group: 'optimize', icon: ImageMinus,
+    description: t('Make JPEG and PNG photos smaller, many at once.'), route: '/photo-compress',
   },
   {
     id: 'protect', name: t('Protect PDF'), group: 'protect', icon: Shield,

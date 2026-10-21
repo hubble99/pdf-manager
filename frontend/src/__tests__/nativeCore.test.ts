@@ -4,9 +4,12 @@ import {
   CORE_FINISHED_EVENT,
   CORE_PROGRESS_EVENT,
   NativeCoreError,
+  compressPhotos,
   computeFileChecksum,
+  convertWebpImages,
   getCoreInfo,
   isCoreCancelled,
+  revealPath,
   type CoreProgress,
 } from '../api/nativeCore';
 
@@ -129,5 +132,42 @@ describe('nativeCore', () => {
     invokeMock.mockResolvedValue(info);
     await expect(getCoreInfo()).resolves.toEqual(info);
     expect(invokeMock).toHaveBeenCalledWith('core_info');
+  });
+
+  it('converts WEBP images with paths and options', async () => {
+    const report = { files: [], succeeded: 2, failed: 0 };
+    invokeMock.mockImplementation(async (cmd) => {
+      if (cmd !== 'core_image_convert_start') throw new Error(`unexpected ${cmd}`);
+      setTimeout(() => emit(CORE_FINISHED_EVENT, { jobId: 3, kind: 'image_convert', status: 'succeeded', result: report }));
+      return 3;
+    });
+    const options = { format: 'jpg' as const, quality: 85, outputDir: 'C:/out' };
+
+    await expect(convertWebpImages(['C:/a.webp', 'C:/b.webp'], options)).resolves.toEqual(report);
+    expect(invokeMock).toHaveBeenCalledWith('core_image_convert_start', { inputs: ['C:/a.webp', 'C:/b.webp'], options });
+  });
+
+  it('compresses photos with paths and options', async () => {
+    const report = { files: [], succeeded: 1, failed: 0, originalBytes: 100, outputBytes: 40 };
+    invokeMock.mockImplementation(async (cmd) => {
+      if (cmd !== 'core_photo_compress_start') throw new Error(`unexpected ${cmd}`);
+      setTimeout(() => emit(CORE_FINISHED_EVENT, { jobId: 4, kind: 'photo_compress', status: 'succeeded', result: report }));
+      return 4;
+    });
+    const options = { quality: 70, maxSide: 1920, format: 'jpeg' as const, outputDir: 'C:/out' };
+
+    await expect(compressPhotos(['C:/a.jpg'], options)).resolves.toEqual(report);
+    expect(invokeMock).toHaveBeenCalledWith('core_photo_compress_start', { inputs: ['C:/a.jpg'], options });
+  });
+
+  it('reveals a path and maps its errors', async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await revealPath('C:/out/a.png');
+    expect(invokeMock).toHaveBeenCalledWith('core_reveal_path', { path: 'C:/out/a.png' });
+
+    invokeMock.mockRejectedValueOnce({ code: 'not_found', message: 'file not found: x' });
+    const err = await revealPath('x').catch((e) => e);
+    expect(err).toBeInstanceOf(NativeCoreError);
+    expect(err.code).toBe('not_found');
   });
 });

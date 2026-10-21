@@ -2,7 +2,7 @@
 name = "dokuwu-core"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 publish = false
 description = "Shared native engine for Dokuwu features, called from Tauri commands."
 
@@ -15,6 +15,7 @@ jpeg-encoder = "0.6"
 # cleaned file. AGPL-3.0, accepted for Dokuwu. Same feature set as the PDF to
 # Word engine so both share one MuPDF build.
 mupdf = { version = "0.8", default-features = false, features = ["base14-fonts"] }
+image = { version = "0.25", default-features = false, features = ["webp", "png", "jpeg"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
