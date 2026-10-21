@@ -1,3 +1,4 @@
 //! Operations exposed to the app. Each takes paths and a `JobContext`.
 
 pub mod checksum;
+pub mod pdf_to_word;

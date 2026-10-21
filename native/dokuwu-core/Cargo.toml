@@ -10,6 +10,14 @@ description = "Shared native engine for Dokuwu features, called from Tauri comma
 name = "dokuwu_core"
 
 [dependencies]
+crc32fast = "1"
+flate2 = "1"
+jpeg-encoder = "0.6"
+# MuPDF reads the PDF (text with fonts and positions, images, vector lines).
+# AGPL-3.0, which Dokuwu accepts as a free and open app. base14-fonts is needed
+# so text set in the standard PDF fonts (Helvetica, Times, ...) is not lost.
+mupdf = { version = "0.8", default-features = false, features = ["base14-fonts"] }
+png = "0.18"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }

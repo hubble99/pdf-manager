@@ -33,6 +33,10 @@ pub enum CoreError {
     #[error("unsupported: {0}")]
     Unsupported(String),
 
+    /// The document is encrypted with an open password.
+    #[error("the document is password protected")]
+    PasswordRequired,
+
     /// Free memory stayed below the job's floor for too long.
     #[error("not enough free memory (need {needed_bytes} bytes, {available_bytes} available)")]
     InsufficientMemory {
@@ -63,6 +67,7 @@ impl CoreError {
             CoreError::Io { .. } => "io",
             CoreError::InvalidInput(_) => "invalid_input",
             CoreError::Unsupported(_) => "unsupported",
+            CoreError::PasswordRequired => "password_required",
             CoreError::InsufficientMemory { .. } => "insufficient_memory",
             CoreError::Internal(_) => "internal",
         }
