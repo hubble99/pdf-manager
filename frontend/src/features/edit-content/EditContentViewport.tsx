@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { FileSearch, Loader2 } from 'lucide-react';
+import { AlertTriangle, FileSearch, Loader2, RotateCcw } from 'lucide-react';
 import { StateView } from '../../components/ui';
 import type { NativePageDescriptor, NativeRender, NativeTextObjectDescriptor, Point } from './types';
 import { selectionPolygon } from './workflow';
@@ -11,6 +11,9 @@ interface EditContentViewportProps {
   selected: NativeTextObjectDescriptor | null;
   zoom: number;
   loading: boolean;
+  /** Why the page render failed; shown with a retry instead of an endless spinner. */
+  error?: string | null;
+  onRetry?: () => void;
   onPoint: (point: Point, viewportSize: Point) => void;
   /** Zoom at which the rendered page exactly fits the viewport width. */
   onFitZoom?: (fitZoom: number) => void;
@@ -22,6 +25,8 @@ export function EditContentViewport({
   selected,
   zoom,
   loading,
+  error,
+  onRetry,
   onPoint,
   onFitZoom,
 }: EditContentViewportProps) {
@@ -42,6 +47,24 @@ export function EditContentViewport({
     observer.observe(node);
     return () => observer.disconnect();
   }, [onFitZoom, renderWidth]);
+
+  if (page && !render && error) {
+    return (
+      <div className="edit-content-viewport edit-content-viewport--empty">
+        <StateView
+          icon={AlertTriangle}
+          tone="danger"
+          title={t('This page could not be shown')}
+          description={error}
+          action={onRetry && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>
+              <RotateCcw size={14} aria-hidden="true" /> {t('Try again')}
+            </button>
+          )}
+        />
+      </div>
+    );
+  }
 
   if (!page || !render) {
     return (

@@ -357,62 +357,102 @@ describe('Edit Content page', () => {
     expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
   });
 
-  it('invalidates a rejected target and requires fresh selection before a valid retry', async () => {
+  it('keeps the target and draft after a guard rejection so the user can revise it', async () => {
+    const nextState = { ...state, acceptedRevision: 1, dirty: true, canUndo: true };
+    vi.mocked(contentApi.applyContentDraft)
+      .mockResolvedValueOnce({
+        schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+        status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_UNSUPPORTED_GLYPH',
+        error: 'The existing font cannot represent the replacement text.',
+        result: { state, clearDraft: false },
+      })
+      .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF-1.4'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(await screen.findByTestId('edit-content-page', {}, { timeout: 3000 }), { clientX: 10, clientY: 10 });
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+
+    // The page's own (translatable) guard text is shown, not the backend's English text.
+    expect(await screen.findByText(
+      'The existing PDF font cannot represent the replacement. Your text is kept. Change it and apply again.',
+    )).toBeInTheDocument();
+    expect(screen.getByLabelText('Replacement text')).toHaveValue('Press É to continue');
+    expect(screen.getByRole('heading', { name: 'Selected native text' })).toBeInTheDocument();
+    // The identical draft would be refused again, so Apply waits for a change.
+    expect(screen.getByRole('button', { name: /Apply & verify/i })).toBeDisabled();
+    expect(contentApi.inspectContentObjects).not.toHaveBeenCalled();
+    expect(screen.getByText(/Revision 0/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    const apply = screen.getByRole('button', { name: /Apply & verify/i });
+    await waitFor(() => expect(apply).toBeEnabled());
+    fireEvent.click(apply);
+
+    await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.');
+    expect(vi.mocked(contentApi.applyContentDraft).mock.calls.map((call) => call[2])).toEqual(['target-0', 'target-0']);
+    expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
+  });
+
+  it('asks for a fresh selection when a kept target has expired after all', async () => {
     const refreshedDiscovery = {
       ...discovery,
       textObjects: [{ ...discovery.textObjects[0], targetId: 'target-1', nativeObjectIdentity: 'native-1' }],
     };
-    const committedDiscovery = {
-      ...discovery,
-      textObjects: [{ ...discovery.textObjects[0], targetId: 'target-2', nativeObjectIdentity: 'native-2', text: 'Press B to continue' }],
-    };
-    const nextState = { ...state, acceptedRevision: 1, dirty: true, canUndo: true };
-    vi.mocked(contentApi.inspectContentObjects)
-      .mockResolvedValueOnce(accepted('inspect-rejected', { discovery: refreshedDiscovery }))
-      .mockResolvedValueOnce(accepted('inspect-accepted', { discovery: committedDiscovery }, 1));
+    vi.mocked(contentApi.inspectContentObjects).mockResolvedValueOnce(accepted('inspect-stale', { discovery: refreshedDiscovery }));
     vi.mocked(contentApi.applyContentDraft)
       .mockResolvedValueOnce({
-      schemaVersion: 'edit-content-reply/v1',
-      requestId: 'apply-request',
-      sessionId: 'session-1',
-      status: 'rejected',
-      acceptedRevision: 0,
-      guardReason: 'REJECTED_UNSUPPORTED_GLYPH',
-      error: 'The existing PDF font cannot represent the replacement text.',
-      result: { state, clearDraft: false },
+        schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+        status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_LAYOUT',
+        result: { state, clearDraft: false },
       })
-      .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
+      .mockResolvedValueOnce({
+        schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+        status: 'stale', acceptedRevision: 0, guardReason: 'REJECTED_STALE_TARGET',
+        error: 'The selected text is no longer current. Select it again.',
+        result: { state, clearDraft: false },
+      });
     const { container } = renderPage();
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    const file = new File(['%PDF-1.4'], 'source.pdf', { type: 'application/pdf' });
-    fireEvent.change(input, { target: { files: [file] } });
-
-    await waitFor(() => expect(contentApi.renderContentPage).toHaveBeenCalledTimes(1), { timeout: 3000 });
-    const viewport = await screen.findByTestId('edit-content-page', {}, { timeout: 3000 });
-    fireEvent.click(viewport, { clientX: 10, clientY: 10 });
-    const editor = await screen.findByLabelText('Replacement text');
-    fireEvent.change(editor, { target: { value: 'Press É to continue' } });
-    expect(contentApi.applyContentDraft).not.toHaveBeenCalled();
-
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press A to continue now' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
-    await screen.findByText(/The existing PDF font cannot represent the replacement text\..*selection and draft were cleared.*select the text again/i);
+    await screen.findByText(/unsupported layout changes\. Your text is kept/);
+
+    fireEvent.change(screen.getByLabelText('Replacement text'), { target: { value: 'Press A to go' } });
+    const apply = screen.getByRole('button', { name: /Apply & verify/i });
+    await waitFor(() => expect(apply).toBeEnabled());
+    fireEvent.click(apply);
+
+    await screen.findByText(/This selection is no longer current\. Select the text again\..*selection and draft were cleared/);
     expect(screen.queryByLabelText('Replacement text')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Apply & verify/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Revision 0/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Undo/i })).toBeDisabled();
     expect(contentApi.inspectContentObjects).toHaveBeenCalledWith('session-1', 0);
-    expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(1);
-
     await chooseNativeText('target-1');
-    const freshEditor = await screen.findByLabelText('Replacement text');
-    fireEvent.change(freshEditor, { target: { value: 'Press B to continue' } });
-    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
+  });
 
-    await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.');
-    expect(contentApi.applyContentDraft).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(contentApi.applyContentDraft).mock.calls[0][2]).toBe('target-0');
-    expect(vi.mocked(contentApi.applyContentDraft).mock.calls[1][2]).toBe('target-1');
-    expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
+  it('keeps the draft but drops the pending step when Apply & continue is refused by a guard', async () => {
+    vi.mocked(contentApi.applyContentDraft).mockResolvedValue({
+      schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+      status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_COLLATERAL_INTEGRITY',
+      result: { state, clearDraft: false },
+    });
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Deselect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply & continue' }));
+
+    await screen.findByText(/unexpected change elsewhere in the PDF\. Your text is kept/);
+    expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Replacement text')).toHaveValue('Press B to continue');
   });
 
   it('does not restore an expired selection from the old discovery while rejection refreshes', async () => {
@@ -540,4 +580,83 @@ describe('Edit Content page', () => {
 
     expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
   });
+  it('does not start Save or Undo from the keyboard while Apply is running', async () => {
+    let finish!: (reply: Awaited<ReturnType<typeof contentApi.applyContentDraft>>) => void;
+    vi.mocked(contentApi.applyContentDraft).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    await screen.findByText('Regenerating and verifying the PDF');
+
+    fireEvent.keyDown(window, { key: 's', ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(contentApi.saveContentSession).not.toHaveBeenCalled();
+    expect(contentApi.moveContentHistory).not.toHaveBeenCalled();
+    expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
+
+    finish(accepted('apply-request', { state: { ...state, acceptedRevision: 1, dirty: true, canUndo: true }, clearDraft: true }, 1));
+    await screen.findByText('Edit accepted after save, close, reopen, and integrity verification.');
+  });
+
+  it('leaves Ctrl+Z in the text box to the text box', async () => {
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    const editor = await screen.findByLabelText('Replacement text');
+    fireEvent.change(editor, { target: { value: 'Press B to continue' } });
+    fireEvent.keyDown(editor, { key: 'z', ctrlKey: true });
+    expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
+    expect(contentApi.moveContentHistory).not.toHaveBeenCalled();
+
+    // Outside a text field the shortcut still reaches the document history.
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(await screen.findByText('Keep the current draft?')).toBeInTheDocument();
+  });
+
+  it('closes only the text picker when Escape is pressed in its search', async () => {
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    await chooseNativeText('target-0');
+    await screen.findByLabelText('Replacement text');
+    fireEvent.click(screen.getByRole('button', { name: 'Native text object' }));
+    fireEvent.keyDown(screen.getByRole('searchbox', { name: 'Filter native text objects' }), { key: 'Escape' });
+    expect(screen.queryByRole('searchbox', { name: 'Filter native text objects' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Replacement text')).toHaveValue('Press A to continue');
+  });
+
+  it('shows a failed page render with a way to try again', async () => {
+    vi.mocked(contentApi.renderContentPage)
+      .mockResolvedValueOnce({
+        schemaVersion: 'edit-content-reply/v1', requestId: 'render-request', sessionId: 'session-1',
+        status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_UNSUPPORTED_STRUCTURE',
+        result: {} as never,
+      });
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText('This page could not be shown')).toBeInTheDocument();
+    expect(screen.queryByText('Rendering verified PDF…')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
+    expect(await screen.findByTestId('edit-content-page')).toBeInTheDocument();
+    expect(contentApi.renderContentPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuses a PDF over the 16 MiB limit before uploading it', async () => {
+    const { container } = renderPage();
+    const large = new File(['%PDF'], 'large.pdf', { type: 'application/pdf' });
+    Object.defineProperty(large, 'size', { value: 16 * 1024 * 1024 + 1 });
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [large] } });
+    expect(await screen.findByText('This PDF is larger than the 16 MiB Edit Content limit.')).toBeInTheDocument();
+    expect(contentApi.openContentSession).not.toHaveBeenCalled();
+  });
 });
+

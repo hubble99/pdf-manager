@@ -31,6 +31,7 @@ import {
   AlignCenter,
   AlignRight,
   Pipette,
+  ImagePlus,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
@@ -42,14 +43,23 @@ import { Filename } from '../components/Filename';
 import * as fabric from 'fabric';
 import type {
   CanvasObject,
-  CanvasObjectType,
+  CanvasImageAsset,
+  EditorTool,
   FreehandObject,
+  ImageObject,
   LineObject,
   PageData,
   ShapeObject,
   TextObject,
 } from '../types/canvas';
 import { generateCanvasObjectId } from '../features/edit-canvas/ids';
+import {
+  addImageAsset,
+  CANVAS_IMAGE_ACCEPT,
+  collectImageAssets,
+  createImageObject,
+  isSupportedCanvasImage,
+} from '../features/edit-canvas/imageObjects';
 import {
   DEFAULT_LETTER_SPACING,
   formatLetterSpacing,
@@ -96,7 +106,7 @@ interface ConversionResponse {
   total: number;
 }
 
-type EditTool = 'select' | CanvasObjectType | 'eraser' | 'eyedropper';
+type EditTool = EditorTool;
 
 
 // ── Windows Font Options ──────────────────────────────────────────────────────
@@ -224,6 +234,9 @@ export function EditCanvasPage() {
 
   const fabricRefs = useRef<Record<number, fabric.Canvas>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  // Image bytes live here, outside page state, so history snapshots stay small.
+  const [imageAssets] = useState(() => new Map<string, CanvasImageAsset>());
   const canvasViewportRef = useRef<HTMLDivElement>(null);
   const debounceTimeoutRef = useRef<number | null>(null);
   const clipboardRef = useRef<{ objects: any[], sourcePageIndex: number, pasteCountByPage: Record<number, number> } | null>(null);
@@ -747,6 +760,95 @@ export function EditCanvasPage() {
     setFile(null);
     setPages([]);
     setSelectedObjectId(null);
+    imageAssets.clear();
+  };
+
+  useEffect(() => () => imageAssets.clear(), [imageAssets]);
+
+  // Adds image files as objects on one page, centred on `point` (page units) or on the page.
+  const insertImageFiles = useCallback(async (
+    files: File[],
+    pageIndex: number,
+    point?: { x: number; y: number },
+  ) => {
+    const page = pages[pageIndex];
+    if (!page || files.length === 0) return;
+
+    const supported = files.filter(isSupportedCanvasImage);
+    if (supported.length < files.length) {
+      showToast({
+        type: 'error',
+        title: t('Unsupported image'),
+        message: t('Choose a PNG, JPG, or WEBP image.'),
+      });
+    }
+
+    const created: ImageObject[] = [];
+    for (const imageFile of supported) {
+      try {
+        const assetId = await addImageAsset(imageAssets, imageFile);
+        const asset = imageAssets.get(assetId)!;
+        created.push(createImageObject(assetId, asset, page.width, page.height, point, created.length));
+      } catch {
+        showToast({
+          type: 'error',
+          title: t('Image could not be added'),
+          message: t('{name} could not be read as an image.', { name: imageFile.name }),
+        });
+      }
+    }
+    if (created.length === 0) return;
+
+    setPages(prev => prev.map((current, idx) => {
+      if (idx !== pageIndex) return current;
+      const nextObjects = [...current.objects, ...created];
+      const nextHistory = current.history.slice(0, current.historyIndex + 1);
+      nextHistory.push(nextObjects);
+      if (nextHistory.length > HISTORY_LIMIT) nextHistory.shift();
+      return { ...current, objects: nextObjects, history: nextHistory, historyIndex: nextHistory.length - 1 };
+    }));
+    setActivePageIndex(pageIndex);
+    setActiveTool('select');
+    setSelectedObjectId(created[created.length - 1].id);
+  }, [pages, showToast, imageAssets]);
+
+  const handleImageBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    void insertImageFiles(selected, activePageIndex);
+  };
+
+  // Dropping image files on a page places them where they were dropped.
+  const handleWorkspaceDragOver = (e: React.DragEvent) => {
+    if (pages.length > 0 && Array.from(e.dataTransfer.types).includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleWorkspaceDrop = (e: React.DragEvent) => {
+    if (pages.length === 0) return;
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+    e.preventDefault();
+
+    let targetIndex = activePageIndex;
+    let point: { x: number; y: number } | undefined;
+    for (const [index, canvas] of Object.entries(fabricRefs.current)) {
+      const element = canvas.upperCanvasEl;
+      const page = pages[Number(index)];
+      if (!element || !page) continue;
+      const rect = element.getBoundingClientRect();
+      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        targetIndex = Number(index);
+        point = {
+          x: ((e.clientX - rect.left) / rect.width) * page.width,
+          y: ((e.clientY - rect.top) / rect.height) * page.height,
+        };
+        break;
+      }
+    }
+    void insertImageFiles(droppedFiles, targetIndex, point);
   };
 
   const applyZoomWithScrollCompensation = useCallback((newZoom: number, cursor?: {x: number, y: number}) => {
@@ -1103,7 +1205,7 @@ export function EditCanvasPage() {
                     : undefined,
                 };
               }
-              if (obj.type === 'rect' || obj.type === 'circle') {
+              if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'image') {
                 return {
                   ...obj,
                   vectorCorners: fabricObject?.getCoords?.().map((point: fabric.Point) => [point.x, point.y]),
@@ -1168,6 +1270,7 @@ export function EditCanvasPage() {
           exportedPages.push({
             image_b64: fabricData,
             native_objects: nativeObjects,
+            image_assets: collectImageAssets(nativeObjects, imageAssets),
             canvas_width: pageData.width,
             canvas_height: pageData.height,
           });
@@ -1240,6 +1343,15 @@ export function EditCanvasPage() {
         onChange={handleFileBrowse}
         accept=".pdf"
         className="hidden"
+      />
+      <input
+        type="file"
+        ref={imageInputRef}
+        onChange={handleImageBrowse}
+        accept={CANVAS_IMAGE_ACCEPT}
+        multiple
+        className="hidden"
+        data-testid="canvas-image-input"
       />
 
       {/* ── Primary Horizontal Top Bar (Height: 52px) ───────────────────────── */}
@@ -1391,6 +1503,35 @@ export function EditCanvasPage() {
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={pages.length === 0}
+            title={t('Insert image')}
+            aria-label={t('Insert image')}
+            style={{
+              width: '32px',
+              height: '32px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: pages.length === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+              background: 'transparent',
+              color: 'var(--canvas-text-muted)',
+              opacity: pages.length === 0 ? 0.4 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (pages.length > 0) e.currentTarget.style.background = 'var(--surface-container-high)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <ImagePlus size={16} />
+          </button>
         </div>
 
         {/* Separator 2 */}
@@ -1978,6 +2119,41 @@ export function EditCanvasPage() {
               </div>
             )}
 
+            {/* IMAGE PROPERTIES */}
+            {selectedObject && selectedObject.type === 'image' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px 14px', flexWrap: 'wrap', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Opacity')}</span>
+                  <input
+                    type="range"
+                    aria-label={t('Image opacity')}
+                    min="0"
+                    max="100"
+                    value={Math.round(((selectedObject as ImageObject).opacity ?? 1) * 100)}
+                    onChange={(e) => updateSelectedObject({ opacity: Number(e.target.value) / 100 })}
+                    style={{ width: '80px', accentColor: 'var(--canvas-accent)', cursor: 'pointer' }}
+                  />
+                  <span className="text-[11px] font-mono font-semibold text-[var(--canvas-accent)] min-w-[32px]">
+                    {Math.round(((selectedObject as ImageObject).opacity ?? 1) * 100)}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="text-xs font-semibold text-[var(--canvas-text-muted)]" title={t('Rotation Angle')}>{t('Rot°')}</span>
+                  <input
+                    type="number"
+                    aria-label={t('Rotation angle in degrees')}
+                    step={1}
+                    value={Math.round((selectedObject.angle || 0) * 10) / 10}
+                    onChange={(e) => updateSelectedObject({ angle: Number(e.target.value) })}
+                    style={{ width: '55px', height: '28px', background: 'var(--canvas-input-bg)', border: '1px solid var(--canvas-input-border)', color: 'var(--canvas-text-primary)', padding: '2px 6px', borderRadius: '4px', outline: 'none', fontSize: '12px' }}
+                  />
+                </div>
+                <span className="text-[11px] text-[var(--canvas-text-muted)]">
+                  {t('Corners keep the proportions. Side handles or Shift stretch the image.')}
+                </span>
+              </div>
+            )}
+
             {/* LINE / FREEHAND PROPERTIES (line, pen, highlighter) */}
             {((selectedObject && (selectedObject.type === 'line' || selectedObject.type === 'pen' || selectedObject.type === 'highlighter')) ||
               (!selectedObject && (activeTool === 'line' || activeTool === 'pen' || activeTool === 'highlighter'))) && (
@@ -2048,6 +2224,8 @@ export function EditCanvasPage() {
           backgroundSize: '20px 20px',
         }}
         onScroll={handleWorkspaceScroll}
+        onDragOver={handleWorkspaceDragOver}
+        onDrop={handleWorkspaceDrop}
       >
         {pages.length === 0 ? (
           <div 
@@ -2136,6 +2314,7 @@ export function EditCanvasPage() {
                       hexToRgba={hexToRgba}
                       onSampleColor={handleSampledColor}
                       finalScale={finalScale}
+                      imageAssets={imageAssets}
                     />
                   </div>
                 </LazyPageContainer>
