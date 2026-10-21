@@ -461,7 +461,7 @@ impl Pipeline<'_> {
 // ── files ────────────────────────────────────────────────────────────────
 
 fn open_pdf(path: &Path) -> CoreResult<PdfDocument> {
-    PdfDocument::open(path).map_err(|e| CoreError::InvalidInput(format!("cannot open PDF: {e}")))
+    PdfDocument::open(path_str(path)?).map_err(|e| CoreError::InvalidInput(format!("cannot open PDF: {e}")))
 }
 
 fn is_encrypted(doc: &PdfDocument) -> CoreResult<bool> {
