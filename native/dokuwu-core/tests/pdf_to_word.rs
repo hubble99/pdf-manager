@@ -174,6 +174,11 @@ fn mixed_page_keeps_everything() {
     for s in ["Mixed layout", "Results", "Revenue", "140", "Appendix", "ACME Corp · Internal", "Page 2"] {
         assert!(text.contains(s), "{s}");
     }
+    // The page-2 footer sits near the bottom of the page: its space before must not be capped.
+    let xml = document(&files);
+    let before = xml.rfind("Page 2").map(|i| &xml[..i]).and_then(|h| h.rfind("w:before=\"")).map(|i| &xml[i + 10..]).unwrap();
+    let before: u32 = before[..before.find('"').unwrap()].parse().unwrap();
+    assert!(before > 12000, "footer spacing {before}");
 }
 
 #[test]

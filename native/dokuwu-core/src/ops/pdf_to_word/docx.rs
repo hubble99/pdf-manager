@@ -448,7 +448,7 @@ impl BodyWriter<'_> {
             }
             x.push_str("</w:tabs>");
         }
-        x.push_str(&format!(r#"<w:spacing w:before="{}" w:after="0""#, twips(p.space_before.min(400.0))));
+        x.push_str(&format!(r#"<w:spacing w:before="{}" w:after="0""#, twips(p.space_before.min(1584.0))));
         if let Some(pitch) = p.line_pitch {
             let line = (240.0 * line_multiple(pitch, p.size)).round() as i64;
             x.push_str(&format!(r#" w:line="{line}" w:lineRule="auto""#));
@@ -541,7 +541,7 @@ impl BodyWriter<'_> {
         let br = if column_break { r#"<w:r><w:br w:type="column"/></w:r>"# } else { "" };
         self.xml.push_str(&format!(
             r#"<w:p><w:pPr><w:spacing w:before="{}" w:after="0"/>{ind}<w:jc w:val="{jc}"/></w:pPr>{br}<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="{id}" name="Picture {id}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>{graphic}</wp:inline></w:drawing></w:r></w:p>"#,
-            twips(im.space_before.min(400.0))
+            twips(im.space_before.min(1584.0))
         ));
     }
 
