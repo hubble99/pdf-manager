@@ -3,6 +3,8 @@ use tauri::Manager;
 #[cfg(any(not(debug_assertions), test))]
 mod desktop_lifecycle;
 
+mod core_bridge;
+
 struct DesktopLifecycleToken(String);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -11,6 +13,12 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
+    .manage(core_bridge::CoreState::default())
+    .invoke_handler(tauri::generate_handler![
+      core_bridge::core_info,
+      core_bridge::core_checksum_start,
+      core_bridge::core_job_cancel,
+    ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Resized(size) = event {
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -78,6 +86,11 @@ pub fn run() {
 
   app.run(|app_handle, event| match event {
     tauri::RunEvent::Exit => {
+      // Stop native core jobs at their next checkpoint.
+      if let Some(core) = app_handle.try_state::<core_bridge::CoreState>() {
+        core.runner.cancel_all();
+      }
+
       // ── Graceful shutdown sequence ──────────────────────────────────────────
       // 1. Drain Content requests, then request the existing temp cleanup.
       // 2. Give the backend a short window to finish cleanup.

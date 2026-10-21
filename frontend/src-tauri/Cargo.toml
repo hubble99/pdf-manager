@@ -27,3 +27,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-opener = "2.5.4"
 uuid = { version = "1", features = ["v4"] }
+dokuwu-core = { path = "../../native/dokuwu-core" }
+
+[dev-dependencies]
+tauri = { version = "2.11.2", features = ["test"] }
