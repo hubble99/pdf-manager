@@ -4,6 +4,7 @@ use tauri::Manager;
 mod desktop_lifecycle;
 
 mod core_bridge;
+mod core_pdf_compress;
 
 struct DesktopLifecycleToken(String);
 
@@ -21,6 +22,8 @@ pub fn run() {
       core_bridge::core_photo_compress_start,
       core_bridge::core_reveal_path,
       core_bridge::core_job_cancel,
+      core_pdf_compress::core_pdf_probe,
+      core_pdf_compress::core_pdf_compress_start,
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Resized(size) = event {

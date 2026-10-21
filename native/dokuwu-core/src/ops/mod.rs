@@ -4,3 +4,4 @@ pub(crate) mod batch;
 pub mod checksum;
 pub mod image_convert;
 pub mod photo_compress;
+pub mod pdf_compress;

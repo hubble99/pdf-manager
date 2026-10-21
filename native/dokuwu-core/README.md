@@ -16,6 +16,7 @@ wraps each operation in a command, and tests call the operations directly.
 | `resources` | `worker_count` from free RAM and `MemoryBrake`, so memory use does not grow with file size |
 | `ops::checksum` | Streaming SHA-256 of a file; the first operation, used to prove the wiring |
 | `ops::image_convert` | WEBP to PNG / JPG / JPEG, batch, per-file report, never overwrites |
+| `ops::pdf_compress` | Compress PDF: JPEG re-encode of ordinary pictures, structural clean-up, batch flushes to a working copy so memory stays flat. CLI check: `cargo run --release --example pdf_compress -- in.pdf out.pdf 60` |
 
 ## Rules for new operations
 

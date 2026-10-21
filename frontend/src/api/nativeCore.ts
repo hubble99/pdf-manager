@@ -19,6 +19,7 @@ export type CoreErrorCode =
   | 'io'
   | 'invalid_input'
   | 'unsupported'
+  | 'password_required'
   | 'insufficient_memory'
   | 'internal';
 
