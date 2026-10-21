@@ -7,7 +7,9 @@ import {
   explainPreflight,
   formatMissingCharacters,
   isCurrentReply,
+  keepsDraftAfterRejection,
   projectNativePoint,
+  replyError,
 } from '../features/edit-content/workflow';
 
 
@@ -114,5 +116,30 @@ describe('Edit Content workflow contracts', () => {
 describe('invisible text', () => {
   it('explains that hidden text layers are view-only', () => {
     expect(explainGuard('INVISIBLE_TEXT')).toMatch(/invisible/i);
+  });
+});
+
+describe('refused replies', () => {
+  it('prefers the page text for a known guard over the backend English text', () => {
+    expect(replyError({ guardReason: 'REJECTED_LAYOUT', error: 'backend text' }))
+      .toBe('The replacement would require unsupported layout changes.');
+    expect(replyError({ guardReason: 'SOMETHING_NEW', error: 'backend text' })).toBe('backend text');
+    expect(replyError({ error: 'Cancelled safely.' })).toBe('Cancelled safely.');
+    expect(replyError({})).toBe('This text cannot be edited safely.');
+  });
+
+  it('keeps the draft only for guard verdicts on a candidate', () => {
+    expect(keepsDraftAfterRejection({ status: 'rejected', guardReason: 'REJECTED_UNSUPPORTED_GLYPH' })).toBe(true);
+    expect(keepsDraftAfterRejection({ status: 'rejected', guardReason: 'REJECTED_COLLATERAL_INTEGRITY' })).toBe(true);
+    for (const reply of [
+      { status: 'rejected' as const, guardReason: 'REJECTED_STALE_TARGET' },
+      { status: 'rejected' as const, guardReason: 'REJECTED_STALE_REVISION' },
+      { status: 'stale' as const, guardReason: 'REJECTED_STALE_TARGET' },
+      { status: 'unknown' as const },
+      { status: 'rejected' as const },
+      { status: 'rejected' as const, guardReason: 'worker exited unexpectedly' },
+    ]) {
+      expect(keepsDraftAfterRejection(reply)).toBe(false);
+    }
   });
 });

@@ -197,10 +197,14 @@ fn color(value: PdfColor) -> Value {
     json!([value.red(), value.green(), value.blue(), value.alpha()])
 }
 
-/// Capture only clip paths whose fill rule cannot affect their meaning: one
-/// closed, strictly convex polygon made exclusively from straight segments.
-/// All curves, multiple subpaths, open paths, and degenerate geometry remain
-/// unsupported because PDFium does not expose the clip fill rule.
+/// A clip is accepted only when its fill rule cannot affect its meaning: each
+/// clip path is one closed, strictly convex polygon made exclusively from
+/// straight segments. All curves, multiple subpaths, open paths, and degenerate
+/// geometry remain unsupported because PDFium does not expose the clip fill
+/// rule. PDF clips intersect, so several such paths (a page clip plus a
+/// producer's own clip, as macOS Quartz writes) are as unambiguous as one.
+const MAX_CLIP_PATHS: u16 = 8;
+
 fn simple_clip_path(object: &PdfPageObject<'_>) -> Result<Value, &'static str> {
     let Some(clip) = object.get_clip_path() else {
         return Ok(json!([]));
@@ -208,10 +212,20 @@ fn simple_clip_path(object: &PdfPageObject<'_>) -> Result<Value, &'static str> {
     if clip.is_empty() {
         return Ok(json!([]));
     }
-    if clip.len() != 1 {
+    if clip.len() > MAX_CLIP_PATHS {
         return Err(INTEGRITY);
     }
-    let path = clip.get(0).map_err(|_| INTEGRITY)?;
+    if clip.len() == 1 {
+        return convex_clip_polygon(&clip.get(0).map_err(|_| INTEGRITY)?);
+    }
+    let mut polygons = Vec::with_capacity(usize::from(clip.len()));
+    for index in 0..clip.len() {
+        polygons.push(convex_clip_polygon(&clip.get(index).map_err(|_| INTEGRITY)?)?);
+    }
+    Ok(json!({ "intersection": polygons }))
+}
+
+fn convex_clip_polygon(path: &PdfClipPathSegments<'_>) -> Result<Value, &'static str> {
     let segments = path.iter().collect::<Vec<_>>();
     if !(4..=33).contains(&segments.len())
         || segments[0].segment_type() != PdfPathSegmentType::MoveTo
@@ -693,11 +707,22 @@ pub fn compare(
             })
             .map(|(index, _)| index)
             .collect();
-        if matches.len() != 1 || used[matches[0]] {
+        // The edited object must map to exactly one candidate. Other objects may
+        // have identical twins (a path or text run the producer drew twice, as
+        // macOS Quartz does). Every twin matches on page, kind, text, style,
+        // payload and geometry, so they are interchangeable: pair them in
+        // document order. A missing or extra twin still leaves a candidate
+        // unused or an original unmatched, and is rejected.
+        let chosen = match matches.as_slice() {
+            [only] => Some(*only),
+            [_, ..] if index != target => matches.iter().copied().find(|candidate| !used[*candidate]),
+            _ => None,
+        };
+        let Some(chosen) = chosen.filter(|candidate| !used[*candidate]) else {
             return Err(INTEGRITY);
-        }
-        used[matches[0]] = true;
-        correspondence.push((index, matches[0]));
+        };
+        used[chosen] = true;
+        correspondence.push((index, chosen));
     }
     if used.iter().any(|used| !used) {
         return Err(INTEGRITY);
@@ -1062,7 +1087,10 @@ mod tests {
         assert!(compare(&before, &after, &edit).is_ok());
         after.objects[1].style["markedContentId"] = json!(8);
         assert!(compare(&before, &after, &edit).is_err());
+        // Fully identical untouched twins (same mark too) are interchangeable.
         before.objects[2].style["markedContentId"] = json!(8);
+        assert!(compare(&before, &after, &edit).is_ok());
+        after.objects.pop();
         assert!(compare(&before, &after, &edit).is_err());
     }
 
@@ -1317,7 +1345,7 @@ mod tests {
     }
 
     #[test]
-    fn renumbering_is_not_identity_but_ambiguous_correspondence_rejects() {
+    fn renumbering_is_not_identity_but_unprovable_correspondence_rejects() {
         let (baseline, edit) = fixture("word", "word", "text");
         let mut good = candidate(&baseline, &edit);
         good.objects[0].index = 900;
@@ -1338,7 +1366,15 @@ mod tests {
         ambiguous.objects.push(duplicate.clone());
         duplicate.index = 2;
         ambiguous.objects.push(duplicate);
-        assert!(compare(&ambiguous, &candidate(&ambiguous, &edit), &edit).is_err());
+        // Identical untouched twins (macOS Quartz repeats objects) pair in order.
+        assert!(compare(&ambiguous, &candidate(&ambiguous, &edit), &edit).is_ok());
+        // A lost or invented twin is still rejected.
+        let mut lost = candidate(&ambiguous, &edit);
+        lost.objects.pop();
+        assert!(compare(&ambiguous, &lost, &edit).is_err());
+        let mut extra = candidate(&ambiguous, &edit);
+        extra.objects.push(extra.objects[1].clone());
+        assert!(compare(&ambiguous, &extra, &edit).is_err());
     }
 
     #[test]

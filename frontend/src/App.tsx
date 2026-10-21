@@ -8,6 +8,8 @@ import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
 import { ConverterPage } from './pages/ConverterPage';
 import { PdfToWordPage } from './pages/PdfToWordPage';
+import { ImageFormatPage } from './pages/ImageFormatPage';
+import { PhotoCompressPage } from './pages/PhotoCompressPage';
 import { HomePage } from './pages/HomePage';
 import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
@@ -161,6 +163,8 @@ export default function App() {
                 <Route path="/pdf-to-word"   element={<PdfToWordPage />} />
                 <Route path="/pdf-to-image"  element={<Navigate to="/converter" replace />} />
                 <Route path="/image-to-pdf"  element={<Navigate to="/converter" replace />} />
+                <Route path="/image-format"  element={<ImageFormatPage />} />
+                <Route path="/photo-compress" element={<PhotoCompressPage />} />
                 <Route path="/organize"      element={<OrganizePage />} />
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />

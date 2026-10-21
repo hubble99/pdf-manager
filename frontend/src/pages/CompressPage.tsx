@@ -1,44 +1,34 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   CheckCircle,
   FileText,
   FolderOpen,
+  Info,
   Loader2,
   Minimize2,
   SlidersHorizontal,
+  Trash2,
   Upload,
 } from 'lucide-react';
-import apiClient from '../api/client';
-import { API_BASE_URL } from '../api/config';
 import { Filename } from '../components/Filename';
-import { ChangeFileControls, PageHeader, RangeField, SegmentedControl } from '../components/ui';
+import { PageHeader, RangeField, SegmentedControl } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
-import { useFeatureFile } from '../hooks/useFeatureFile';
-import { triggerBlobDownload } from '../utils/downloadHelper';
-import { openOutputFolder } from '../utils/tauriDialog';
+import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
+import { NativeCoreError, isCoreCancelled, type CoreProgress } from '../api/nativeCore';
+import {
+  MAX_COMPRESS_QUALITY,
+  MIN_COMPRESS_QUALITY,
+  compressPdf,
+  probePdf,
+  type PdfCompressReport,
+  type PdfProbe,
+} from '../api/pdfCompress';
+import { baseName, compressErrorMessage, formatBytes, stemOf } from '../utils/compressPdf';
 import { t, tn } from '../i18n';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-
-interface CompressResult {
-  filename: string;
-  sizeBefore: number;
-  sizeAfter: number;
-  reductionPct: number;
-  imagesProcessed: number;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 
 function qualityLabel(q: number): string {
   if (q >= 75) return t('High quality');
@@ -58,128 +48,128 @@ function qualityColor(q: number): string {
 
 export function CompressPage() {
   const { showToast } = useToast();
-  const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('compress');
+  const desktop = isTauri();
+  const [inputPath, setInputPath] = useState<string | null>(null);
+  const [probe, setProbe] = useState<PdfProbe | null>(null);
   const [quality, setQuality] = useState(70);
-  const [outputFilename, setOutputFilename] = useState('');
+  const [outputName, setOutputName] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState<{ page: number, total: number, percent: number } | null>(null);
-  const [result, setResult] = useState<CompressResult | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState<CoreProgress | null>(null);
+  const [result, setResult] = useState<PdfCompressReport | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   // ── File handling ───────────────────────────────────────────────────────────
-  const loadFile = useCallback((f: File) => {
-    if (!f.name.toLowerCase().endsWith('.pdf')) {
+  const loadPath = useCallback(async (path: string) => {
+    if (!/\.pdf$/i.test(path)) {
       showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
       return;
     }
-    setFile(f);
-    setResult(null);
-    setOutputFilename(`compressed_${f.name}`);
-  }, [setFile, showToast]);
+    try {
+      const info = await probePdf(path);
+      if (info.encrypted) {
+        showToast({ type: 'error', title: t('Compression failed'), message: compressErrorMessage(new NativeCoreError('password_required', '')) });
+        return;
+      }
+      setProbe(info);
+      setInputPath(path);
+      setResult(null);
+      setOutputName(`compressed_${stemOf(path)}`);
+    } catch (err) {
+      showToast({ type: 'error', title: t('Invalid file'), message: compressErrorMessage(err) });
+    }
+  }, [showToast]);
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragOver(true); };
-  const handleDragLeave = () => setIsDragOver(false);
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const dropped = e.dataTransfer.files[0];
-    if (dropped) loadFile(dropped);
-  };
-  const handleClick = () => fileInputRef.current?.click();
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) loadFile(e.target.files[0]);
-    e.target.value = '';
-  };
+  const pickFile = useCallback(async () => {
+    const picked = await openFilePicker({
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      title: t('Choose a PDF to compress'),
+    });
+    if (picked?.[0]) void loadPath(picked[0]);
+  }, [loadPath]);
 
-  // ── Submit — single-step: compress & auto-download ─────────────────────────
+  // The desktop window reports dropped files with their paths, which the
+  // native engine needs (a browser File has no path).
+  const runningRef = useRef(running);
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+  useEffect(() => {
+    if (!desktop) return undefined;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void import('@tauri-apps/api/webview')
+      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === 'over' || payload.type === 'enter') setIsDragOver(true);
+        else if (payload.type === 'leave') setIsDragOver(false);
+        else if (payload.type === 'drop') {
+          setIsDragOver(false);
+          const path = payload.paths[0];
+          if (path && !runningRef.current) void loadPath(path);
+        }
+      }))
+      .then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [desktop, loadPath]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  // ── Compress — the result is saved to the Downloads folder ─────────────────
   const handleCompress = async () => {
-    if (!file) { showToast({ type: 'error', title: t('No file'), message: t('Please select a PDF file first.') }); return; }
-    setIsLoading(true);
+    if (!inputPath) { showToast({ type: 'error', title: t('No file'), message: t('Please select a PDF file first.') }); return; }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRunning(true);
     setResult(null);
     setProgress(null);
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('quality', String(quality));
-    formData.append('output_filename', outputFilename || `compressed_${file.name}`);
-
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/compress/stream`, {
-        method: 'POST',
-        body: formData,
+      const report = await compressPdf(inputPath, quality, outputName, {
+        signal: controller.signal,
+        onProgress: setProgress,
       });
-
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+      setResult(report);
+      addHistoryEntry({ filename: baseName(report.outputPath), action: 'Compressed PDF', size: report.sizeAfter });
+      showToast({
+        type: 'success',
+        title: t('Compression complete!'),
+        message: report.keptOriginal
+          ? t('This PDF is already as small as it gets.')
+          : tn(report.imagesRecompressed, 'Reduced by {pct}% — {n} image re-encoded', 'Reduced by {pct}% — {n} images re-encoded', { pct: report.reductionPct }),
+        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
+        duration: 8000,
+      });
+    } catch (err) {
+      if (isCoreCancelled(err)) {
+        showToast({ type: 'info', title: t('Compression cancelled'), message: t('Nothing was saved.') });
+      } else {
+        showToast({ type: 'error', title: t('Compression failed'), message: compressErrorMessage(err) });
       }
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Stream reader not available');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || ''; // Keep the incomplete chunk in the buffer
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.substring(6);
-            try {
-              const data = JSON.parse(dataStr);
-              if (data.type === 'progress') {
-                setProgress({ page: data.page, total: data.total, percent: data.percent });
-              } else if (data.type === 'complete') {
-                // Fetch the actual file
-                const downloadRes = await apiClient.get(`/api/v1/compress/download/${data.download_id}`, {
-                  responseType: 'blob'
-                });
-                const blob = new Blob([downloadRes.data], { type: 'application/pdf' });
-                
-                triggerBlobDownload(blob, data.filename);
-                
-                setResult({
-                  filename: data.filename,
-                  sizeBefore: data.size_before,
-                  sizeAfter: data.size_after,
-                  reductionPct: data.reduction_pct,
-                  imagesProcessed: data.images_processed
-                });
-                
-                addHistoryEntry({ filename: data.filename, action: 'Compressed PDF', size: data.size_after });
-                showToast({
-                  type: 'success',
-                  title: t('Compression complete!'),
-                  message: tn(data.images_processed, 'Reduced by {pct}% — {n} image re-encoded', 'Reduced by {pct}% — {n} images re-encoded', { pct: data.reduction_pct }),
-                  action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
-                  duration: 8000,
-                });
-              } else if (data.type === 'error') {
-                throw new Error(data.message);
-              }
-            } catch (err) {
-              if (err instanceof Error) throw err;
-            }
-          }
-        }
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('Unknown error');
-      showToast({ type: 'error', title: t('Compression failed'), message: msg });
     } finally {
-      setIsLoading(false);
+      abortRef.current = null;
+      setRunning(false);
       setProgress(null);
     }
   };
 
-  const clearFile = () => { setFile(null); setResult(null); setOutputFilename(''); };
+  const clearFile = () => { setInputPath(null); setProbe(null); setResult(null); setOutputName(''); };
+
+  const imagePercent = progress?.stage === 'images' && progress.total
+    ? Math.round((progress.done / progress.total) * 100)
+    : null;
+  const progressTitle = progress?.stage === 'saving'
+    ? t('Saving the compressed PDF…')
+    : progress?.stage === 'images' && progress.total
+      ? t('Compressing picture {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
+      : t('Reading the PDF…');
+  const sizeBefore = probe?.sizeBytes ?? 0;
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const preset = [
@@ -198,30 +188,27 @@ export function CompressPage() {
       />
 
       <div className="page-body">
-        <div className={`form-col${file ? '' : ' form-col--center'}`}>
+        <div className={`form-col${inputPath ? '' : ' form-col--center'}`}>
 
-          {!file ? (
+          {!desktop ? (
+            <div className="card status-card" role="note">
+              <Info size={20} aria-hidden="true" />
+              <div className="status-card-copy">
+                <b>{t('Compress PDF runs in the Dokuwu desktop app')}</b>
+                <small>{t('It works on the file directly on your computer, which the browser preview cannot do.')}</small>
+              </div>
+            </div>
+          ) : !inputPath ? (
             <>
               <div
                 id="compress-drop-zone"
                 className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={handleClick}
+                onClick={() => void pickFile()}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleClick()}
+                onKeyDown={(e) => e.key === 'Enter' && void pickFile()}
                 aria-label={t('Drop a PDF file here or click to browse')}
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  hidden
-                  onChange={handleFileInput}
-                  id="compress-file-input"
-                />
                 <Upload className="drop-zone-icon" />
                 <p className="drop-zone-title">{t('Drop a PDF here')}</p>
                 <p className="drop-zone-sub">{t('or click to browse · One file at a time')}</p>
@@ -236,17 +223,24 @@ export function CompressPage() {
                 <div className="card-head">
                   <span className="card-head-title">
                     <FileText size={16} className="card-head-icon" aria-hidden="true" />
-                    <Filename name={file.name} className="file-item-name" />
-                    <span className="chip">{formatBytes(file.size)}</span>
+                    <Filename name={baseName(inputPath)} className="file-item-name" />
+                    <span className="chip">{formatBytes(sizeBefore)}</span>
                   </span>
                   <span className="card-head-actions">
-                    <ChangeFileControls
-                      accept=".pdf"
-                      idPrefix="compress"
-                      onPick={loadFile}
-                      onClear={clearFile}
-                      disabled={isLoading}
-                    />
+                    <button type="button" className="link-btn" id="compress-change-file" onClick={() => void pickFile()} disabled={running}>
+                      {t('Change file')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon btn-sm converter-danger"
+                      id="compress-remove-file"
+                      onClick={clearFile}
+                      disabled={running}
+                      aria-label={t('Remove file')}
+                      title={t('Remove file')}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
                   </span>
                 </div>
               </div>
@@ -267,11 +261,11 @@ export function CompressPage() {
                 <div className="card-body">
                   <RangeField
                     id="compress-quality-slider"
-                    min={10}
-                    max={95}
+                    min={MIN_COMPRESS_QUALITY}
+                    max={MAX_COMPRESS_QUALITY}
                     step={5}
                     value={quality}
-                    disabled={isLoading}
+                    disabled={running}
                     valueText={`${qualityLabel(quality)}, ${quality}`}
                     onChange={setQuality}
                     scale={(
@@ -287,7 +281,7 @@ export function CompressPage() {
                     ariaLabel={t('Quality preset')}
                     options={preset}
                     value={quality}
-                    disabled={isLoading}
+                    disabled={running}
                     onChange={setQuality}
                   />
                   <small className="hint">
@@ -317,7 +311,7 @@ export function CompressPage() {
                   <div className="size-compare">
                     <div className="size-box">
                       <small>{t('Before')}</small>
-                      <b>{formatBytes(file.size)}</b>
+                      <b>{formatBytes(sizeBefore)}</b>
                       <div className="size-bar"><i style={{ width: '100%' }} /></div>
                     </div>
                     <ArrowRight size={16} className="size-arrow" aria-hidden="true" />
@@ -338,27 +332,33 @@ export function CompressPage() {
                 <div className="card-body">
                   <div className="field">
                     <label htmlFor="compress-output-name">{t('Output Filename')}</label>
-                    <input
-                      id="compress-output-name"
-                      className="input"
-                      type="text"
-                      value={outputFilename}
-                      disabled={isLoading}
-                      onChange={(e) => setOutputFilename(e.target.value)}
-                      placeholder={`compressed_${file.name}`}
-                    />
+                    <div className="input-suffix-wrap">
+                      <input
+                        id="compress-output-name"
+                        className="input"
+                        type="text"
+                        value={outputName}
+                        disabled={running}
+                        onChange={(e) => setOutputName(e.target.value)}
+                        placeholder={`compressed_${stemOf(inputPath)}`}
+                      />
+                      <span className="input-suffix">.pdf</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Result — the download was triggered automatically */}
+              {/* Result — the file is already in the Downloads folder */}
               {result && (
                 <div className="card status-card status-card--ok">
                   <CheckCircle size={22} aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>{t('Saved to your Downloads folder')}</b>
+                    <b>{result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}</b>
                     <small>
-                      <Filename name={result.filename} /> · {tn(result.imagesProcessed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}
+                      <Filename name={baseName(result.outputPath)} />
+                      {result.keptOriginal
+                        ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
+                        : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
                     </small>
                   </div>
                   <button
@@ -374,16 +374,25 @@ export function CompressPage() {
               )}
 
               {/* Progress */}
-              {isLoading && progress && (
+              {running && (
                 <div className="card status-card" role="status" aria-live="polite">
                   <Loader2 size={20} className="spin" aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>{t('Compressing…')} {progress.percent}%</b>
-                    <small>{t('Page')} {progress.page} {t('of')} {progress.total}</small>
-                    <div className="size-bar size-bar--spaced">
-                      <i style={{ width: `${progress.percent}%` }} />
-                    </div>
+                    <b>{progressTitle}</b>
+                    {imagePercent !== null && (
+                      <div className="size-bar size-bar--spaced">
+                        <i style={{ width: `${imagePercent}%` }} />
+                      </div>
+                    )}
                   </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    id="compress-cancel-btn"
+                    onClick={() => abortRef.current?.abort()}
+                  >
+                    {t('Cancel')}
+                  </button>
                 </div>
               )}
 
@@ -391,10 +400,10 @@ export function CompressPage() {
                 <button
                   className="btn btn-primary"
                   id="compress-run-btn"
-                  onClick={handleCompress}
-                  disabled={isLoading}
+                  onClick={() => void handleCompress()}
+                  disabled={running}
                 >
-                  {isLoading ? (
+                  {running ? (
                     <>
                       <Loader2 size={15} className="spin" />
                       {t('Compressing…')}

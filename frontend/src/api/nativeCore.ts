@@ -173,6 +173,106 @@ export async function runCoreJob<T>(
 export const computeFileChecksum = (path: string, options?: CoreJobOptions): Promise<FileDigest> =>
   runCoreJob<FileDigest>('core_checksum_start', { path }, options);
 
+export type ImageTargetFormat = 'png' | 'jpg' | 'jpeg';
+
+export interface ImageConvertOptions {
+  format: ImageTargetFormat;
+  /** JPEG quality, 1 to 100. Ignored for PNG. */
+  quality?: number;
+  /** Existing folder the converted files are written to. */
+  outputDir: string;
+}
+
+export interface ConvertedImage {
+  source: string;
+  /** `null` when this file failed; see `error`. */
+  output: string | null;
+  width: number | null;
+  height: number | null;
+  outputBytes: number | null;
+  /** The source was an animated WEBP; only its first frame was kept. */
+  animated: boolean;
+  error: { code: CoreErrorCode; message: string } | null;
+}
+
+export interface ImageConvertReport {
+  /** One entry per input, in input order. */
+  files: ConvertedImage[];
+  succeeded: number;
+  failed: number;
+}
+
+/**
+ * Converts WEBP files to PNG, JPG or JPEG on disk. Progress counts finished
+ * files. One bad file does not stop the batch: it is reported in `files` with
+ * its error. Cancelling keeps the files already written.
+ */
+export const convertWebpImages = (
+  inputs: string[],
+  options: ImageConvertOptions,
+  jobOptions?: CoreJobOptions,
+): Promise<ImageConvertReport> =>
+  runCoreJob<ImageConvertReport>('core_image_convert_start', { inputs, options }, jobOptions);
+
+export type PhotoOutputFormat = 'keep' | 'jpeg';
+
+export interface PhotoCompressOptions {
+  /** JPEG quality, 1 to 100. PNG stays lossless whatever the value. */
+  quality?: number;
+  /** Longest side in pixels; larger photos are shrunk, smaller ones are untouched. */
+  maxSide?: number | null;
+  /** `keep` leaves JPEG as JPEG and PNG as PNG; `jpeg` turns every photo into a JPEG. */
+  format?: PhotoOutputFormat;
+  /** Existing folder the compressed files are written to. */
+  outputDir: string;
+}
+
+export interface CompressedPhoto {
+  source: string;
+  /** `null` when this file failed; see `error`. */
+  output: string | null;
+  width: number | null;
+  height: number | null;
+  originalBytes: number | null;
+  outputBytes: number | null;
+  /** The photo was shrunk to fit `maxSide`. */
+  resized: boolean;
+  /** Compressing would not have made it smaller, so the output is a copy of the original. */
+  keptOriginal: boolean;
+  error: { code: CoreErrorCode; message: string } | null;
+}
+
+export interface PhotoCompressReport {
+  /** One entry per input, in input order. */
+  files: CompressedPhoto[];
+  succeeded: number;
+  failed: number;
+  /** Sizes summed over the files that succeeded. */
+  originalBytes: number;
+  outputBytes: number;
+}
+
+/**
+ * Compresses JPEG and PNG photos on disk. Progress counts finished photos.
+ * One bad file does not stop the batch: it is reported in `files` with its
+ * error. Cancelling keeps the files already written.
+ */
+export const compressPhotos = (
+  inputs: string[],
+  options: PhotoCompressOptions,
+  jobOptions?: CoreJobOptions,
+): Promise<PhotoCompressReport> =>
+  runCoreJob<PhotoCompressReport>('core_photo_compress_start', { inputs, options }, jobOptions);
+
+/** Opens the system file manager with `path` selected. */
+export async function revealPath(path: string): Promise<void> {
+  try {
+    await invoke('core_reveal_path', { path });
+  } catch (err) {
+    throw toCoreError(err);
+  }
+}
+
 /**
  * Converts a PDF on disk to a Word document saved in the Downloads folder.
  * `outputName` is the file name without `.docx`; empty means the PDF's name.

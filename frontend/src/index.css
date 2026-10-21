@@ -1467,8 +1467,27 @@ select.input {
   gap: var(--space-2);
 }
 
+/* The rail is only 280-340px wide and button labels do not wrap, so longer
+   translations ("Terapkan & verifikasi" + "Batalkan pilihan") overflowed the
+   panel. Let the row wrap: each button grows to fill its line, and a label that
+   is still too long for the whole rail wraps inside its button. */
+.edit-content-editor-actions,
+.edit-content-decision-actions {
+  flex-wrap: wrap;
+}
+
+.edit-content-editor-actions .btn,
+.edit-content-decision-actions .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .edit-content-editor-actions .btn-primary {
-  flex: 1;
+  flex-grow: 2;
 }
 
 .edit-content-history-actions .btn {
@@ -5353,4 +5372,62 @@ select.input {
 /* The empty preview sits on a white document surface in every theme. */
 .preview-empty {
   color: #5b6573;
+}
+
+/* ── WEBP to PNG/JPG ─────────────────────────────────────────────────────── */
+.image-format-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.image-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 34px;
+  padding: 4px 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.image-format-row:first-child {
+  border-top: none;
+}
+
+.image-format-row > .file-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.image-format-row--failed > .file-item-meta {
+  flex-shrink: 0;
+  max-width: 55%;
+  margin-top: 0;
+  color: var(--error);
+  font-family: inherit;
+  text-align: right;
+}
+
+.image-format-warn {
+  color: var(--warning);
+}
+
+/* ── Compress Photos (reuses the WEBP list styles above) ─────────────────── */
+.photo-compress-total {
+  margin: 0;
+  padding-bottom: var(--space-2);
+}
+
+.image-format-row > .photo-compress-size {
+  flex-shrink: 0;
+  margin-top: 0;
+  font-family: inherit;
+  text-align: right;
+}
+
+.card.drag-over {
+  border-color: var(--accent);
 }

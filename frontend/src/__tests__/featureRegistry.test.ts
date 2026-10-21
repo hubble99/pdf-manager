@@ -5,8 +5,8 @@ import {
 } from '../config/features';
 
 const expectedFeatureIds = [
-  'merge', 'extract', 'organize', 'converter', 'pdf-to-word', 'edit-canvas',
-  'edit-content', 'compress', 'protect', 'qr-barcode',
+  'merge', 'extract', 'organize', 'converter', 'pdf-to-word', 'image-format', 'edit-canvas',
+  'edit-content', 'compress', 'photo-compress', 'protect', 'qr-barcode',
 ].sort();
 
 describe('feature registry', () => {
@@ -59,8 +59,8 @@ describe('feature registry', () => {
     expect(FEATURE_GROUPS.map((group) => group.id)).toEqual([
       'organize', 'convert', 'edit', 'optimize', 'protect', 'create',
     ]);
-    expect(featuresByGroup().find((group) => group.id === 'convert')?.features.map((f) => f.id)).toEqual([
-      'converter', 'pdf-to-word',
+    expect(featuresByGroup().find((group) => group.id === 'convert')?.features.map((feature) => feature.id)).toEqual([
+      'converter', 'pdf-to-word', 'image-format',
     ]);
   });
 
