@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Canvas PDF**
+
+- **Images:** add PNG, JPG or WEBP images to a page with the new Insert image button, or drop image files on the page where they should go. An image can be moved, resized (corners keep the proportions, side handles or Shift stretch it), rotated to any angle, layered, copied, faded with an opacity slider, and deleted, with undo and redo. Saving embeds the original image in the PDF at the same place and angle; JPG and PNG files are embedded unchanged, and a photo's camera orientation is respected.
+
 ## 1.8.0 — 2026-10-15 · Cumulative release (1.3.0 → 1.8.0)
 
 > 1.8.0 is the first published release since 1.2.4, so it carries everything in

@@ -1467,8 +1467,27 @@ select.input {
   gap: var(--space-2);
 }
 
+/* The rail is only 280-340px wide and button labels do not wrap, so longer
+   translations ("Terapkan & verifikasi" + "Batalkan pilihan") overflowed the
+   panel. Let the row wrap: each button grows to fill its line, and a label that
+   is still too long for the whole rail wraps inside its button. */
+.edit-content-editor-actions,
+.edit-content-decision-actions {
+  flex-wrap: wrap;
+}
+
+.edit-content-editor-actions .btn,
+.edit-content-decision-actions .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .edit-content-editor-actions .btn-primary {
-  flex: 1;
+  flex-grow: 2;
 }
 
 .edit-content-history-actions .btn {

@@ -44,14 +44,19 @@ import {
 } from '../features/edit-content/api';
 import { EditContentViewport } from '../features/edit-content/EditContentViewport';
 import type {
-  ContentReply,
   ContentSessionState,
   NativeDiscovery,
   NativeRender,
   NativeTextObjectDescriptor,
   Point,
 } from '../features/edit-content/types';
-import { buildEditCommand, explainGuard, explainPreflight } from '../features/edit-content/workflow';
+import {
+  buildEditCommand,
+  explainGuard,
+  explainPreflight,
+  keepsDraftAfterRejection,
+  replyError,
+} from '../features/edit-content/workflow';
 import { t } from '../i18n';
 
 
@@ -64,8 +69,13 @@ type PendingAction =
   | { kind: 'leave'; path?: string };
 
 
-function replyError(reply: ContentReply): string {
-  return reply.error || explainGuard(reply.guardReason);
+// Same limit as the backend (MAX_SOURCE_BYTES); checked here so a large file is not uploaded first.
+const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
+
+/** Shortcuts typed into a text field belong to that field (its own undo, for example). */
+function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable);
 }
 
 function EditContentLimits() {
@@ -102,6 +112,11 @@ export function EditContentPage() {
   }, []);
   const [selected, setSelected] = useState<NativeTextObjectDescriptor | null>(null);
   const [draft, setDraft] = useState('');
+  // The draft a guard just refused for the selected target, and why. Apply waits for a change.
+  const [rejection, setRejection] = useState<{ draft: string; message: string } | null>(null);
+  const [renderAttempt, setRenderAttempt] = useState(0);
+  // A failed render, tagged with the request it belongs to so a newer render ignores it.
+  const [renderFailure, setRenderFailure] = useState<{ key: string; message: string } | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
   const [activeRequest, setActiveRequest] = useState<{ id: string; label: string } | null>(null);
   const [cancelRequested, setCancelRequested] = useState(false);
@@ -135,6 +150,7 @@ export function EditContentPage() {
     return query ? pickableObjects.filter((object) => object.text.toLocaleLowerCase().includes(query)) : pickableObjects;
   }, [pickableObjects, pickerQuery]);
   const draftDirty = Boolean(selected && draft !== selected.text);
+  const draftRejected = rejection !== null && rejection.draft === draft;
   const defaultStem = file?.name.replace(/\.pdf$/i, '') || 'document';
   const unsaved = draftDirty || Boolean(session?.dirty);
   const busy = phase !== 'idle';
@@ -171,6 +187,7 @@ export function EditContentPage() {
     setPickerQuery('');
     setSelected(target);
     setDraft(target?.text ?? '');
+    setRejection(null);
     setAmbiguous([]);
     setError(null);
     if (target) window.setTimeout(() => editorRef.current?.focus(), 0);
@@ -182,6 +199,7 @@ export function EditContentPage() {
     setRender(null);
     setSelected(null);
     setDraft('');
+    setRejection(null);
     setAmbiguous([]);
     setPending(null);
     setPickerOpen(false);
@@ -205,6 +223,7 @@ export function EditContentPage() {
     if (!session || !currentPage) return;
     const sequence = ++renderSequence.current;
     const controller = new AbortController();
+    const key = `${session.sessionId}:${session.acceptedRevision}:${pageIndex}:${renderAttempt}`;
     const aspect = currentPage.widthPt / currentPage.heightPt;
     const width = aspect >= 1 ? 1400 : Math.round(1400 * aspect);
     const height = aspect >= 1 ? Math.round(1400 / aspect) : 1400;
@@ -216,22 +235,25 @@ export function EditContentPage() {
       Math.max(320, height),
       controller.signal,
     ).then((reply) => {
+      if (sequence !== renderSequence.current || controller.signal.aborted) return;
       if (
-        sequence === renderSequence.current
-        && reply.status === 'accepted'
+        reply.status === 'accepted'
         && reply.sessionId === session.sessionId
         && reply.acceptedRevision === session.acceptedRevision
         && reply.result.pageIndex === pageIndex
       ) {
         setRender(reply.result);
+      } else if (reply.status !== 'accepted') {
+        // Without this the preview would wait for a render that is never coming.
+        setRenderFailure({ key, message: replyError(reply) });
       }
     }).catch((caught) => {
       if (!controller.signal.aborted && sequence === renderSequence.current) {
-        setError(caught instanceof Error ? caught.message : t('Native page rendering failed.'));
+        setRenderFailure({ key, message: caught instanceof Error ? caught.message : t('Native page rendering failed.') });
       }
     });
     return () => controller.abort();
-  }, [currentPage, pageIndex, session]);
+  }, [currentPage, pageIndex, renderAttempt, session]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -257,6 +279,10 @@ export function EditContentPage() {
   const openFile = useCallback(async (nextFile: File) => {
     if (!nextFile.name.toLowerCase().endsWith('.pdf')) {
       setError(t('Edit Content accepts PDF files only.'));
+      return;
+    }
+    if (nextFile.size > MAX_SOURCE_BYTES) {
+      setError(t('This PDF is larger than the 16 MiB Edit Content limit.'));
       return;
     }
     setPhase('opening');
@@ -370,6 +396,14 @@ export function EditContentPage() {
       );
       if (reply.status !== 'accepted') {
         const reason = replyError(reply);
+        if (keepsDraftAfterRejection(reply)) {
+          // Only the candidate was discarded: keep the target and the typed text so
+          // the user can revise it. A pending page/deselect/history step is dropped.
+          setPending(null);
+          setNotice(null);
+          setRejection({ draft, message: t('{reason} Your text is kept. Change it and apply again.', { reason }) });
+          return false;
+        }
         const refreshed = await refreshAcceptedCheckpoint(session);
         setError(refreshed
           ? t('{reason} The selection and draft were cleared because the target identity expired. Select the text again before retrying.', { reason })
@@ -416,7 +450,11 @@ export function EditContentPage() {
         edit,
       );
       if (reply.status !== 'accepted') {
-        setError(replyError(reply));
+        if (edit && keepsDraftAfterRejection(reply)) {
+          setRejection({ draft, message: t('{reason} Your text is kept. Change it and apply again.', { reason: replyError(reply) }) });
+        } else {
+          setError(replyError(reply));
+        }
         return false;
       }
       setSession(reply.result.state);
@@ -506,20 +544,30 @@ export function EditContentPage() {
     const handleKey = (event: KeyboardEvent) => {
       if (!session || event.defaultPrevented) return;
       const command = event.ctrlKey || event.metaKey;
-      if (command && event.key.toLowerCase() === 's') {
+      const key = event.key.toLowerCase();
+      if (busy || pending) {
+        // A request is running or a decision is open: never start a second one,
+        // but still keep the browser's own Save dialog away.
+        if (command && key === 's') event.preventDefault();
+        return;
+      }
+      if (command && key === 's') {
         event.preventDefault();
         void saveSession();
-      } else if (command && event.key.toLowerCase() === 'z') {
+      } else if (command && key === 'z') {
+        if (isTextField(event.target)) return;
         event.preventDefault();
         requestAction({ kind: 'history', action: event.shiftKey ? 'redo' : 'undo' });
       } else if (event.key === 'Escape' && selected) {
+        // Escape in the text picker only closes the picker.
+        if (event.target instanceof Element && event.target.closest('.edit-content-object-menu')) return;
         event.preventDefault();
         requestAction({ kind: 'deselect' });
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [requestAction, saveSession, selected, session]);
+  }, [busy, pending, requestAction, saveSession, selected, session]);
 
   const cancelActive = async () => {
     if (!session || !activeRequest || cancelRequested) return;
@@ -540,6 +588,8 @@ export function EditContentPage() {
   };
 
   const totalPages = discovery?.pages.length ?? 0;
+  const renderKey = session ? `${session.sessionId}:${session.acceptedRevision}:${pageIndex}:${renderAttempt}` : '';
+  const renderError = renderFailure?.key === renderKey ? renderFailure.message : null;
 
   return (
     <div className="feature-page edit-content-page">
@@ -770,7 +820,15 @@ export function EditContentPage() {
                       <span>{selected.fontSizePt.toFixed(1)} pt</span>
                       {selected.rotation !== 0 && <span>{Math.round(selected.rotation)}°</span>}
                     </div>
-                    {draftDirty && check.state !== 'idle' && (
+                    {draftRejected ? (
+                      <p
+                        id="edit-content-check"
+                        className="edit-content-check edit-content-check-blocked"
+                        role="alert"
+                      >
+                        {rejection.message}
+                      </p>
+                    ) : draftDirty && check.state !== 'idle' && (
                       <p
                         id="edit-content-check"
                         className={`edit-content-check edit-content-check-${check.state}`}
@@ -783,7 +841,7 @@ export function EditContentPage() {
                       </p>
                     )}
                     <div className="edit-content-editor-actions">
-                      <button className="btn btn-primary" onClick={() => void applyDraft()} disabled={!draftDirty || busy || check.state === 'blocked'} id="edit-content-apply">
+                      <button className="btn btn-primary" onClick={() => void applyDraft()} disabled={!draftDirty || busy || check.state === 'blocked' || draftRejected} id="edit-content-apply">
                         <RotateCcw size={15} aria-hidden="true" /> {t('Apply & verify')}
                       </button>
                       <button className="btn btn-ghost" onClick={() => requestAction({ kind: 'deselect' })} disabled={busy}>{t('Deselect')}</button>
@@ -824,7 +882,9 @@ export function EditContentPage() {
                 selected={selected}
                 zoom={zoom}
                 onFitZoom={handleFitZoom}
-                loading={render === null}
+                loading={render === null && !renderError}
+                error={render === null ? renderError : null}
+                onRetry={() => setRenderAttempt((value) => value + 1)}
                 onPoint={(point, viewportSize) => void handleViewportPoint(point, viewportSize)}
               />
               <div className="edit-content-preview-footer">
