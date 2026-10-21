@@ -9,7 +9,7 @@
  * tools that are not about PDFs fit the same structure without regrouping.
  */
 import {
-  FileImage, FilePenLine, ImageDown, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
+  FileImage, FilePenLine, ImageDown, ImageMinus, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../types';
@@ -82,6 +82,10 @@ export const FEATURES: FeatureEntry[] = [
   {
     id: 'compress', name: t('Compress PDF'), group: 'optimize', icon: Minimize2,
     description: t('Reduce file size while keeping the document readable.'), route: '/compress',
+  },
+  {
+    id: 'photo-compress', name: t('Compress Photos'), group: 'optimize', icon: ImageMinus,
+    description: t('Make JPEG and PNG photos smaller, many at once.'), route: '/photo-compress',
   },
   {
     id: 'protect', name: t('Protect PDF'), group: 'protect', icon: Shield,

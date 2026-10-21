@@ -18,6 +18,7 @@ pub fn run() {
       core_bridge::core_info,
       core_bridge::core_checksum_start,
       core_bridge::core_image_convert_start,
+      core_bridge::core_photo_compress_start,
       core_bridge::core_reveal_path,
       core_bridge::core_job_cancel,
     ])

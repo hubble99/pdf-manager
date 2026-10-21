@@ -4,6 +4,7 @@ import {
   CORE_FINISHED_EVENT,
   CORE_PROGRESS_EVENT,
   NativeCoreError,
+  compressPhotos,
   computeFileChecksum,
   convertWebpImages,
   getCoreInfo,
@@ -144,6 +145,19 @@ describe('nativeCore', () => {
 
     await expect(convertWebpImages(['C:/a.webp', 'C:/b.webp'], options)).resolves.toEqual(report);
     expect(invokeMock).toHaveBeenCalledWith('core_image_convert_start', { inputs: ['C:/a.webp', 'C:/b.webp'], options });
+  });
+
+  it('compresses photos with paths and options', async () => {
+    const report = { files: [], succeeded: 1, failed: 0, originalBytes: 100, outputBytes: 40 };
+    invokeMock.mockImplementation(async (cmd) => {
+      if (cmd !== 'core_photo_compress_start') throw new Error(`unexpected ${cmd}`);
+      setTimeout(() => emit(CORE_FINISHED_EVENT, { jobId: 4, kind: 'photo_compress', status: 'succeeded', result: report }));
+      return 4;
+    });
+    const options = { quality: 70, maxSide: 1920, format: 'jpeg' as const, outputDir: 'C:/out' };
+
+    await expect(compressPhotos(['C:/a.jpg'], options)).resolves.toEqual(report);
+    expect(invokeMock).toHaveBeenCalledWith('core_photo_compress_start', { inputs: ['C:/a.jpg'], options });
   });
 
   it('reveals a path and maps its errors', async () => {

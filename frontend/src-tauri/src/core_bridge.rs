@@ -16,6 +16,7 @@ use std::sync::Arc;
 use dokuwu_core::job::{JobContext, JobId, JobOutcome, JobRunner, Progress, ProgressSink};
 use dokuwu_core::ops::checksum::{sha256_file, FileDigest};
 use dokuwu_core::ops::image_convert::{convert_webp_images, ConvertOptions, ConvertReport};
+use dokuwu_core::ops::photo_compress::{compress_photos, CompressOptions, CompressReport};
 use dokuwu_core::{CoreError, CoreInfo, CoreResult};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime, State};
@@ -117,6 +118,24 @@ pub fn core_image_convert_start<R: Runtime>(
     let inputs: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
     start_job(&app, &state.runner, "image_convert", move |ctx| -> CoreResult<ConvertReport> {
         convert_webp_images(&inputs, &options, ctx)
+    })
+}
+
+/// Compresses JPEG and PNG photos. Takes paths, writes the results into
+/// `options.outputDir`, and finishes with a per-file report.
+#[tauri::command]
+pub fn core_photo_compress_start<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, CoreState>,
+    inputs: Vec<String>,
+    options: CompressOptions,
+) -> Result<JobId, CoreError> {
+    if inputs.is_empty() || inputs.iter().any(|p| p.trim().is_empty()) {
+        return Err(CoreError::InvalidInput("input paths are missing".into()));
+    }
+    let inputs: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
+    start_job(&app, &state.runner, "photo_compress", move |ctx| -> CoreResult<CompressReport> {
+        compress_photos(&inputs, &options, ctx)
     })
 }
 
@@ -228,6 +247,34 @@ mod tests {
 
         let payload = rx.recv_timeout(Duration::from_secs(10)).unwrap();
         assert_eq!(payload["kind"], "image_convert");
+        assert_eq!(payload["status"], "succeeded");
+        assert_eq!(payload["result"]["failed"], 1);
+        assert_eq!(payload["result"]["files"][0]["error"]["code"], "not_found");
+        let _ = std::fs::remove_dir_all(&out);
+    }
+
+    #[test]
+    fn photo_compress_job_finishes_with_a_report() {
+        let app = tauri::test::mock_app();
+        let handle = app.handle().clone();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>();
+        handle.listen_any(FINISHED_EVENT, move |e| {
+            let _ = tx.send(serde_json::from_str(e.payload()).unwrap());
+        });
+        let out = std::env::temp_dir().join(format!("dokuwu-compress-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&out).unwrap();
+        let missing = out.join("missing.jpg");
+        let options: CompressOptions =
+            serde_json::from_value(serde_json::json!({ "quality": 70, "maxSide": 1600, "outputDir": out })).unwrap();
+
+        let runner = JobRunner::new();
+        start_job(&handle, &runner, "photo_compress", move |ctx| {
+            compress_photos(&[missing], &options, ctx)
+        })
+        .unwrap();
+
+        let payload = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(payload["kind"], "photo_compress");
         assert_eq!(payload["status"], "succeeded");
         assert_eq!(payload["result"]["failed"], 1);
         assert_eq!(payload["result"]["files"][0]["error"]["code"], "not_found");

@@ -347,7 +347,7 @@ fn encode(image: &DynamicImage, options: &ConvertOptions, file: File) -> CoreRes
 
 /// JPEG has no alpha channel. Transparent pixels are blended onto white, which
 /// is what the image looks like on a page or in most viewers.
-fn flatten_on_white(image: &DynamicImage) -> RgbImage {
+pub(crate) fn flatten_on_white(image: &DynamicImage) -> RgbImage {
     if !image.color().has_alpha() {
         return image.to_rgb8();
     }
@@ -363,7 +363,7 @@ fn flatten_on_white(image: &DynamicImage) -> RgbImage {
     rgb
 }
 
-fn decode_error(source: &Path, err: image::ImageError) -> CoreError {
+pub(crate) fn decode_error(source: &Path, err: image::ImageError) -> CoreError {
     match err {
         // A truncated file ends early while decoding: that is a damaged
         // image, not a disk or permission problem.
@@ -381,19 +381,27 @@ fn decode_error(source: &Path, err: image::ImageError) -> CoreError {
     }
 }
 
-/// Creates `<stem>.<ext>` in `dir`, or `<stem> (1).<ext>`, `<stem> (2).<ext>`
-/// and so on when the name is taken. Existing files are never overwritten.
+/// Creates `<stem>.<ext>` in `dir` for a converted copy of `source`.
 fn create_unique_output(
     dir: &Path,
     source: &Path,
     format: TargetFormat,
 ) -> CoreResult<(PathBuf, File)> {
-    let stem = source
+    create_unique_file(dir, &file_stem_or_image(source), format.extension())
+}
+
+/// The source's file name without extension, or `image` when it has none.
+pub(crate) fn file_stem_or_image(source: &Path) -> String {
+    source
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "image".to_owned());
-    let ext = format.extension();
+        .unwrap_or_else(|| "image".to_owned())
+}
+
+/// Creates `<stem>.<ext>` in `dir`, or `<stem> (1).<ext>`, `<stem> (2).<ext>`
+/// and so on when the name is taken. Existing files are never overwritten.
+pub(crate) fn create_unique_file(dir: &Path, stem: &str, ext: &str) -> CoreResult<(PathBuf, File)> {
     for n in 0u32..10_000 {
         let name = if n == 0 {
             format!("{stem}.{ext}")
