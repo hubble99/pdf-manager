@@ -68,7 +68,7 @@ export const FEATURES: FeatureEntry[] = [
   },
   {
     id: 'edit-canvas', name: t('Canvas PDF'), group: 'edit', icon: PenLine,
-    description: t('Add text, shapes, drawings, and highlights onto a page.'), route: '/edit-canvas',
+    description: t('Add text, shapes, images, drawings, and highlights onto a page.'), route: '/edit-canvas',
   },
   {
     id: 'edit-content', name: t('Edit Content'), group: 'edit', icon: FilePenLine,

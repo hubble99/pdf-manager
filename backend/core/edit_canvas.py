@@ -3,6 +3,7 @@ from pathlib import Path
 
 import fitz
 
+from core.edit_canvas_images import draw_native_image
 from core.edit_canvas_shapes import (
     draw_native_ellipse,
     draw_native_ellipse_from_corners,
@@ -30,7 +31,7 @@ def hex_to_rgb(hex_str: str):
     return tuple(int(value[index:index + 2], 16) / 255.0 for index in (0, 2, 4))
 
 
-def _draw_native_object(page, item, scale_x, scale_y):
+def _draw_native_object(page, item, scale_x, scale_y, image_assets=None):
     item_type = item.get("type")
     stroke_w = float(item.get("strokeWidth", 0)) * ((scale_x + scale_y) / 2)
     stroke_color = hex_to_rgb(item.get("strokeColor"))
@@ -68,6 +69,8 @@ def _draw_native_object(page, item, scale_x, scale_y):
             draw_native_path(page, commands, float(item.get("x", 0)) * scale_x, float(item.get("y", 0)) * scale_y, scale_x, scale_y, stroke_color, stroke_w, float(item.get("opacity", 1)), item.get("transformMatrix"), item.get("pathOffset"))
     elif item_type == "text":
         draw_native_text(page, item, scale_x, scale_y, hex_to_rgb(item.get("color")))
+    elif item_type == "image":
+        draw_native_image(page, item, scale_x, scale_y, image_assets)
 
 
 def _insert_raster(page, encoded_image: str, target_rect=None):
@@ -114,9 +117,10 @@ def save_edited_pdf(input_path: Path, annotations: list, output_path: Path) -> d
                 canvas_height = page_data.get("canvas_height", page.rect.height)
                 scale_x = page.rect.width / canvas_width
                 scale_y = page.rect.height / canvas_height
+                image_assets = page_data.get("image_assets") or {}
                 for shape in shapes:
                     if native_objects is not None:
-                        _draw_native_object(page, shape, scale_x, scale_y)
+                        _draw_native_object(page, shape, scale_x, scale_y, image_assets)
                     else:
                         _draw_legacy_shape(page, shape, scale_x, scale_y)
                 page_b64 = page_data.get("image_b64", "")
