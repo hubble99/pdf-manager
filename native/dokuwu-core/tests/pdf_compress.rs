@@ -73,7 +73,7 @@ fn pages(path: &Path) -> i32 {
 
 /// (Filter, ColorSpace family) of every image object in the file.
 fn image_objects(path: &Path) -> Vec<(String, String)> {
-    let doc = PdfDocument::open(path).unwrap();
+    let doc = PdfDocument::open(path.to_str().unwrap()).unwrap();
     let mut found = Vec::new();
     for xref in 1..doc.count_objects().unwrap() as i32 {
         let obj = doc.new_indirect(xref, 0).unwrap();
@@ -111,7 +111,7 @@ fn image_objects(path: &Path) -> Vec<(String, String)> {
 
 /// The raw stream of every image object, in file order.
 fn image_streams(path: &Path) -> Vec<Vec<u8>> {
-    let doc = PdfDocument::open(path).unwrap();
+    let doc = PdfDocument::open(path.to_str().unwrap()).unwrap();
     let mut streams = Vec::new();
     for xref in 1..doc.count_objects().unwrap() as i32 {
         let obj = doc.new_indirect(xref, 0).unwrap();
