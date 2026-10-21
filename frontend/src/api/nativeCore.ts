@@ -157,3 +157,53 @@ export async function runCoreJob<T>(
 /** SHA-256 of a file on disk, computed by the native core. */
 export const computeFileChecksum = (path: string, options?: CoreJobOptions): Promise<FileDigest> =>
   runCoreJob<FileDigest>('core_checksum_start', { path }, options);
+
+export type ImageTargetFormat = 'png' | 'jpg' | 'jpeg';
+
+export interface ImageConvertOptions {
+  format: ImageTargetFormat;
+  /** JPEG quality, 1 to 100. Ignored for PNG. */
+  quality?: number;
+  /** Existing folder the converted files are written to. */
+  outputDir: string;
+}
+
+export interface ConvertedImage {
+  source: string;
+  /** `null` when this file failed; see `error`. */
+  output: string | null;
+  width: number | null;
+  height: number | null;
+  outputBytes: number | null;
+  /** The source was an animated WEBP; only its first frame was kept. */
+  animated: boolean;
+  error: { code: CoreErrorCode; message: string } | null;
+}
+
+export interface ImageConvertReport {
+  /** One entry per input, in input order. */
+  files: ConvertedImage[];
+  succeeded: number;
+  failed: number;
+}
+
+/**
+ * Converts WEBP files to PNG, JPG or JPEG on disk. Progress counts finished
+ * files. One bad file does not stop the batch: it is reported in `files` with
+ * its error. Cancelling keeps the files already written.
+ */
+export const convertWebpImages = (
+  inputs: string[],
+  options: ImageConvertOptions,
+  jobOptions?: CoreJobOptions,
+): Promise<ImageConvertReport> =>
+  runCoreJob<ImageConvertReport>('core_image_convert_start', { inputs, options }, jobOptions);
+
+/** Opens the system file manager with `path` selected. */
+export async function revealPath(path: string): Promise<void> {
+  try {
+    await invoke('core_reveal_path', { path });
+  } catch (err) {
+    throw toCoreError(err);
+  }
+}

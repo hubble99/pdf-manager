@@ -17,6 +17,8 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
+      core_bridge::core_image_convert_start,
+      core_bridge::core_reveal_path,
       core_bridge::core_job_cancel,
     ])
     .on_window_event(|window, event| {

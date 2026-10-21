@@ -15,6 +15,7 @@ wraps each operation in a command, and tests call the operations directly.
 | `job` | `JobRunner`: background thread per job, throttled progress, cancel, panic capture |
 | `resources` | `worker_count` from free RAM and `MemoryBrake`, so memory use does not grow with file size |
 | `ops::checksum` | Streaming SHA-256 of a file; the first operation, used to prove the wiring |
+| `ops::image_convert` | WEBP to PNG / JPG / JPEG, batch, per-file report, never overwrites |
 
 ## Rules for new operations
 
@@ -40,6 +41,7 @@ wraps each operation in a command, and tests call the operations directly.
 
 ```sh
 cargo test                      # this crate
+cargo run --release --example convert_webp -- png <out-dir> <file.webp>...
 cd ../../frontend/src-tauri && cargo test   # Tauri commands and events
 cd .. && npx vitest run src/__tests__/nativeCore.test.ts
 ```
