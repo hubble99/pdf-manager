@@ -199,6 +199,56 @@ export const convertWebpImages = (
 ): Promise<ImageConvertReport> =>
   runCoreJob<ImageConvertReport>('core_image_convert_start', { inputs, options }, jobOptions);
 
+export type PhotoOutputFormat = 'keep' | 'jpeg';
+
+export interface PhotoCompressOptions {
+  /** JPEG quality, 1 to 100. PNG stays lossless whatever the value. */
+  quality?: number;
+  /** Longest side in pixels; larger photos are shrunk, smaller ones are untouched. */
+  maxSide?: number | null;
+  /** `keep` leaves JPEG as JPEG and PNG as PNG; `jpeg` turns every photo into a JPEG. */
+  format?: PhotoOutputFormat;
+  /** Existing folder the compressed files are written to. */
+  outputDir: string;
+}
+
+export interface CompressedPhoto {
+  source: string;
+  /** `null` when this file failed; see `error`. */
+  output: string | null;
+  width: number | null;
+  height: number | null;
+  originalBytes: number | null;
+  outputBytes: number | null;
+  /** The photo was shrunk to fit `maxSide`. */
+  resized: boolean;
+  /** Compressing would not have made it smaller, so the output is a copy of the original. */
+  keptOriginal: boolean;
+  error: { code: CoreErrorCode; message: string } | null;
+}
+
+export interface PhotoCompressReport {
+  /** One entry per input, in input order. */
+  files: CompressedPhoto[];
+  succeeded: number;
+  failed: number;
+  /** Sizes summed over the files that succeeded. */
+  originalBytes: number;
+  outputBytes: number;
+}
+
+/**
+ * Compresses JPEG and PNG photos on disk. Progress counts finished photos.
+ * One bad file does not stop the batch: it is reported in `files` with its
+ * error. Cancelling keeps the files already written.
+ */
+export const compressPhotos = (
+  inputs: string[],
+  options: PhotoCompressOptions,
+  jobOptions?: CoreJobOptions,
+): Promise<PhotoCompressReport> =>
+  runCoreJob<PhotoCompressReport>('core_photo_compress_start', { inputs, options }, jobOptions);
+
 /** Opens the system file manager with `path` selected. */
 export async function revealPath(path: string): Promise<void> {
   try {

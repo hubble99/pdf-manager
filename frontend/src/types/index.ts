@@ -6,6 +6,7 @@ export type NavItemId =
   | 'merge'
   | 'extract'
   | 'compress'
+  | 'photo-compress'
   | 'converter'
   | 'image-format'
   | 'qr-barcode'
