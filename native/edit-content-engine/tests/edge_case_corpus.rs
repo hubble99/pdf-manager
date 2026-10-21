@@ -395,6 +395,19 @@ fn corpus() -> Vec<Case> {
                 apply: Some("REJECTED_UNSUPPORTED_STRUCTURE"),
             },
         },
+        Case {
+            // Quartz output repeats identical objects; the verifier must pair twins
+            // one-to-one instead of treating them as ambiguous.
+            name: "duplicate identical paths beside the edited text",
+            pdf: single_page("0.8 g 20 20 100 40 re f 0.8 g 20 20 100 40 re f BT /F1 12 Tf 30 100 Td (word) Tj ET"),
+            old: "word", new: "wor", expect: PREPARED,
+        },
+        Case {
+            // Quartz stacks several rectangular clips (`W n`) on one object.
+            name: "text and paths under several nested clip paths",
+            pdf: single_page("q 10 10 280 180 re W n q 20 20 200 150 re W n 0.5 g 30 30 80 20 re f BT /F1 12 Tf 30 100 Td (word) Tj ET Q Q"),
+            old: "word", new: "wor", expect: PREPARED,
+        },
         Case { name: "signed letter body next to a BSrE-style stamp", pdf: signed_page(), old: "Kepada Yth", new: "Kepada Yts", expect: PREPARED },
         Case { name: "BSrE-style stamp text (BT x y Td)", pdf: signed_page(), old: "Dokumen", new: "Dokumex", expect: PREPARED },
     ]
