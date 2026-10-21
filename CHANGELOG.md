@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased
+## 1.9.0 — 2026-10-21 · Phase 1: native Rust core and new tools
+
+> The first tools that run on the new Rust core (`dokuwu-core`) instead of the
+> Python backend. They work on files directly on disk, report progress, can be
+> cancelled, and keep memory use flat for large files.
+
+**New tools**
+
+- **PDF to Word:** turn a PDF into an editable `.docx` in the Convert group. Paragraphs, headings, bullet and numbered lists, underline and strike-through, ruled tables with merged cells, columns and pictures are rebuilt, and the result opens in Microsoft Word without a repair prompt. A scanned page is kept as a picture and reported as having no text to edit. A password-protected PDF is reported instead of failing. Shows page progress and can be cancelled; the file goes to Downloads without overwriting an existing one.
+- **WEBP to PNG/JPG:** convert many WEBP images at once to PNG, JPG or JPEG (JPEG quality adjustable). Transparent areas become white for JPEG, animated WEBP keeps its first frame, a broken file is reported without stopping the others, and existing files are never overwritten.
+- **Compress Photos:** make JPEG and PNG photos smaller, many at once. A photo that cannot get smaller is copied unchanged, the camera orientation and colour profile are kept, and the originals are never touched.
+
+**Improved**
+
+- **Compress PDF:** rebuilt on the Rust core. Memory stays roughly flat even for very large PDFs, progress is shown per picture, it can be cancelled, and it says so when nothing could be made smaller.
+
+**Edit Content**
+
+- Fixed the action buttons being pushed out of the side panel in Indonesian, so Deselect and Cancel are no longer clipped.
+- A rejected edit now keeps the selection and the typed text, with the reason shown above Apply, so the text can be revised instead of retyped.
+- Rejection messages are translated, Ctrl+S and Ctrl+Z are ignored while an edit is running, text fields keep their own undo, a failed page render offers Try again, and PDFs over 16 MiB are refused before upload with a clear message.
+- PDFs made by macOS Quartz (repeated identical objects and stacked clip paths) are verified more often instead of being rejected. Verification rules were not loosened.
 
 **Canvas PDF**
 
