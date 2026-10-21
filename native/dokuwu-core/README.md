@@ -46,3 +46,21 @@ cargo run --release --example convert_webp -- png <out-dir> <file.webp>...
 cd ../../frontend/src-tauri && cargo test   # Tauri commands and events
 cd .. && npx vitest run src/__tests__/nativeCore.test.ts
 ```
+
+## Building on Windows
+
+PDF to Word uses the `mupdf` crate, which compiles MuPDF from C source and runs
+bindgen. You need Visual Studio Build Tools (C++ workload) and LLVM
+(`winget install LLVM.LLVM`). Then, in PowerShell:
+
+```powershell
+. native\dokuwu-core\windows\build-env.ps1
+cargo test
+```
+
+The script sets `LIBCLANG_PATH`, the MSVC toolset (`MUPDF_MSVC_PLATFORM_TOOLSET`,
+`v145` for Build Tools 18; edit it for your install), a short `CARGO_TARGET_DIR`,
+and `BINDGEN_EXTRA_CLANG_ARGS` with `windows/max_align.h`. That header is needed
+because MSVC's C headers do not define `max_align_t`, which `mupdf` 0.8 asserts
+on. If a build fails after you change these, delete the `mupdf-sys-*` folder under
+the target dir so bindgen runs again. The first build takes 15 minutes or more.

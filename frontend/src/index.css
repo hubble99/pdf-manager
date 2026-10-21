@@ -4443,6 +4443,33 @@ select.input {
   color: var(--success);
 }
 
+.status-card--warn {
+  border-color: var(--warning);
+  background: var(--warning-container);
+}
+
+.status-card--warn > svg,
+.status-card--warn .status-card-copy b {
+  color: var(--warning);
+}
+
+/* A text input with a fixed extension after it, e.g. "name" + ".docx". */
+.input-suffix-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-suffix-wrap .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-suffix {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 /* A centred form column owns its own spacing; the page body adds no extra top gap. */
 .page-body:has(> .form-col) {
   padding: 20px 16px 40px;

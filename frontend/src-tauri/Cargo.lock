@@ -945,9 +945,12 @@ dependencies = [
 name = "dokuwu-core"
 version = "0.1.0"
 dependencies = [
+ "crc32fast",
+ "flate2",
  "image",
  "jpeg-encoder",
  "mupdf",
+ "png 0.18.1",
  "serde",
  "sha2",
  "sysinfo",

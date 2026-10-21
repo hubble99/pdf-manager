@@ -62,6 +62,20 @@ export interface FileDigest {
   sha256: string;
 }
 
+/** What a PDF to Word conversion produced; see `ops::pdf_to_word` in the core. */
+export interface PdfToWordReport {
+  outputPath: string;
+  outputSizeBytes: number;
+  pages: number;
+  /** 1-based pages with no text layer (scans); kept as pictures, not editable text. */
+  pagesWithoutText: number[];
+  /** Pages whose scan picture was replaced by its invisible OCR text. */
+  ocrLayerPages: number[];
+  tables: number;
+  images: number;
+  durationMs: number;
+}
+
 export interface CoreJobOptions {
   onProgress?: (progress: CoreProgress) => void;
   /** Aborting asks the job to stop; the promise then rejects as cancelled. */
@@ -258,3 +272,15 @@ export async function revealPath(path: string): Promise<void> {
     throw toCoreError(err);
   }
 }
+
+/**
+ * Converts a PDF on disk to a Word document saved in the Downloads folder.
+ * `outputName` is the file name without `.docx`; empty means the PDF's name.
+ * Progress arrives with stage `page` (done/total pages), then `saving`.
+ */
+export const convertPdfToWord = (
+  inputPath: string,
+  outputName?: string,
+  options?: CoreJobOptions,
+): Promise<PdfToWordReport> =>
+  runCoreJob<PdfToWordReport>('core_pdf_to_word_start', { inputPath, outputName: outputName?.trim() || null }, options);

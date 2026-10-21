@@ -8,6 +8,7 @@ export type NavItemId =
   | 'compress'
   | 'photo-compress'
   | 'converter'
+  | 'pdf-to-word'
   | 'image-format'
   | 'qr-barcode'
   | 'edit-canvas'

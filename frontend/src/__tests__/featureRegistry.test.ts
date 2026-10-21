@@ -5,7 +5,7 @@ import {
 } from '../config/features';
 
 const expectedFeatureIds = [
-  'merge', 'extract', 'organize', 'converter', 'image-format', 'edit-canvas',
+  'merge', 'extract', 'organize', 'converter', 'pdf-to-word', 'image-format', 'edit-canvas',
   'edit-content', 'compress', 'photo-compress', 'protect', 'qr-barcode',
 ].sort();
 
@@ -55,12 +55,12 @@ describe('feature registry', () => {
   });
 
   it('groups by task so non-PDF tools have a home', () => {
-    // Convert holds the non-PDF conversion tools next to PDF & Image.
+    // Convert holds the conversion tools, PDF and non-PDF alike.
     expect(FEATURE_GROUPS.map((group) => group.id)).toEqual([
       'organize', 'convert', 'edit', 'optimize', 'protect', 'create',
     ]);
     expect(featuresByGroup().find((group) => group.id === 'convert')?.features.map((feature) => feature.id)).toEqual([
-      'converter', 'image-format',
+      'converter', 'pdf-to-word', 'image-format',
     ]);
   });
 

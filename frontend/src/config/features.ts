@@ -9,7 +9,7 @@
  * tools that are not about PDFs fit the same structure without regrouping.
  */
 import {
-  FileImage, FilePenLine, ImageDown, ImageMinus, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
+  FileImage, FilePenLine, FileType2, ImageDown, ImageMinus, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { NavItemId } from '../types';
@@ -65,6 +65,10 @@ export const FEATURES: FeatureEntry[] = [
   {
     id: 'converter', name: t('PDF & Image'), group: 'convert', icon: FileImage,
     description: t('Turn PDF pages into images, or images into a single PDF.'), route: '/converter',
+  },
+  {
+    id: 'pdf-to-word', name: t('PDF to Word'), group: 'convert', icon: FileType2,
+    description: t('Turn a PDF into an editable Word document.'), route: '/pdf-to-word',
   },
   {
     id: 'image-format', name: t('WEBP to PNG/JPG'), group: 'convert', icon: ImageDown,

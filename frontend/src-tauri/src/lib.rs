@@ -18,6 +18,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
+      core_bridge::core_pdf_to_word_start,
       core_bridge::core_image_convert_start,
       core_bridge::core_photo_compress_start,
       core_bridge::core_reveal_path,
