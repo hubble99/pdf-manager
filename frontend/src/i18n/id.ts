@@ -744,4 +744,7 @@ export const ID: Record<string, string> = {
   '{n} pages from the source file, in the order typed.': '{n} halaman dari file sumber, sesuai urutan yang diketik.',
   '{reason} The selection and draft were cleared because the target identity expired. Select the text again before retrying.': '{reason} Pilihan dan draf dikosongkan karena identitas target kedaluwarsa. Pilih teks lagi sebelum mencoba kembali.',
   '{reason} The selection and draft were cleared. Refresh the page, then select the text again before retrying.': '{reason} Pilihan dan draf dikosongkan. Segarkan halaman, lalu pilih teks lagi sebelum mencoba kembali.',
+  'This PDF is larger than the 16 MiB Edit Content limit.': 'PDF ini lebih besar dari batas Edit Content 16 MiB.',
+  'This page could not be shown': 'Halaman ini tidak dapat ditampilkan',
+  '{reason} Your text is kept. Change it and apply again.': '{reason} Teks Anda tetap disimpan. Ubah lalu terapkan lagi.',
 };

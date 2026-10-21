@@ -117,21 +117,56 @@ export function selectionPolygon(
     .join(' ');
 }
 
+const GUARD_MESSAGES: Record<string, string> = {
+  REJECTED_STALE_REVISION: t('The document changed. Refresh and select the text again.'),
+  REJECTED_STALE_TARGET: t('This selection is no longer current. Select the text again.'),
+  REJECTED_SPLIT_TEXT_OBJECT: t('This word spans multiple native text objects and is view-only.'),
+  REJECTED_TYPE3: t('Text using a Type 3 font is view-only in Edit Content V1.'),
+  INVISIBLE_TEXT: t('This text is invisible (a hidden layer over an image), so editing it would not change what you see.'),
+  REJECTED_UNSUPPORTED_GLYPH: t('The existing PDF font cannot represent the replacement.'),
+  REJECTED_FONT_RESOURCE_COLLISION: t('This page has colliding font resources and cannot be regenerated safely.'),
+  REJECTED_LAYOUT: t('The replacement would require unsupported layout changes.'),
+  REJECTED_COLLATERAL_INTEGRITY: t('Verification found an unexpected change elsewhere in the PDF.'),
+  REJECTED_PERSISTENCE: t('The replacement did not persist correctly after the PDF was reopened.'),
+  REJECTED_PUBLICATION: t('The verified PDF could not be published safely.'),
+  REJECTED_UNSUPPORTED_STRUCTURE: t('This text cannot be edited safely.'),
+};
+
 export function explainGuard(reason?: string): string {
-  const messages: Record<string, string> = {
-    REJECTED_STALE_REVISION: t('The document changed. Refresh and select the text again.'),
-    REJECTED_STALE_TARGET: t('This selection is no longer current. Select the text again.'),
-    REJECTED_SPLIT_TEXT_OBJECT: t('This word spans multiple native text objects and is view-only.'),
-    REJECTED_TYPE3: t('Text using a Type 3 font is view-only in Edit Content V1.'),
-    INVISIBLE_TEXT: t('This text is invisible (a hidden layer over an image), so editing it would not change what you see.'),
-    REJECTED_UNSUPPORTED_GLYPH: t('The existing PDF font cannot represent the replacement.'),
-    REJECTED_FONT_RESOURCE_COLLISION: t('This page has colliding font resources and cannot be regenerated safely.'),
-    REJECTED_LAYOUT: t('The replacement would require unsupported layout changes.'),
-    REJECTED_COLLATERAL_INTEGRITY: t('Verification found an unexpected change elsewhere in the PDF.'),
-    REJECTED_PERSISTENCE: t('The replacement did not persist correctly after the PDF was reopened.'),
-    REJECTED_PUBLICATION: t('The verified PDF could not be published safely.'),
-  };
-  return reason ? messages[reason] ?? t('This text cannot be edited safely.') : t('This text cannot be edited safely.');
+  return (reason && GUARD_MESSAGES[reason]) || t('This text cannot be edited safely.');
+}
+
+/**
+ * The message for a refused reply, in the interface language. The backend's own
+ * text is English, so it is used only for a reason the page does not know.
+ */
+export function replyError(reply: Pick<ContentReply, 'error' | 'guardReason'>): string {
+  if (reply.guardReason && GUARD_MESSAGES[reply.guardReason]) return GUARD_MESSAGES[reply.guardReason];
+  return reply.error || explainGuard(reply.guardReason);
+}
+
+// Guard verdicts on a candidate. The coordinator discards only the candidate and
+// keeps the worker and its discovery snapshot, so the selected target is still
+// valid and the user can revise the same draft. Stale codes are not listed.
+const DRAFT_KEEPING_GUARDS = new Set([
+  'REJECTED_SPLIT_TEXT_OBJECT',
+  'REJECTED_TYPE3',
+  'REJECTED_UNSUPPORTED_GLYPH',
+  'REJECTED_FONT_RESOURCE_COLLISION',
+  'REJECTED_LAYOUT',
+  'REJECTED_COLLATERAL_INTEGRITY',
+  'REJECTED_PERSISTENCE',
+  'REJECTED_UNSUPPORTED_STRUCTURE',
+]);
+
+/**
+ * True when a refused Apply was a guard verdict that leaves the selection usable.
+ * Anything else (stale, unknown, a worker failure) needs a fresh selection. The
+ * engine still checks the target on the next request, so a wrong guess here can
+ * only produce a stale reply, never an edit on another object.
+ */
+export function keepsDraftAfterRejection(reply: Pick<ContentReply, 'status' | 'guardReason'>): boolean {
+  return reply.status === 'rejected' && Boolean(reply.guardReason && DRAFT_KEEPING_GUARDS.has(reply.guardReason));
 }
 
 const DETAIL_MESSAGES: Record<string, string> = {
