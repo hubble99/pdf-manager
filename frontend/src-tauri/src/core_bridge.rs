@@ -15,9 +15,10 @@ use std::sync::Arc;
 
 use dokuwu_core::job::{JobContext, JobId, JobOutcome, JobRunner, Progress, ProgressSink};
 use dokuwu_core::ops::checksum::{sha256_file, FileDigest};
+use dokuwu_core::ops::pdf_to_word::{convert_pdf_to_docx, unique_output_path, PdfToWordReport};
 use dokuwu_core::{CoreError, CoreInfo, CoreResult};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 pub const PROGRESS_EVENT: &str = "core://job-progress";
 pub const FINISHED_EVENT: &str = "core://job-finished";
@@ -98,6 +99,36 @@ pub fn core_checksum_start<R: Runtime>(
     }
     start_job(&app, &state.runner, "checksum", move |ctx| -> CoreResult<FileDigest> {
         sha256_file(&path, ctx)
+    })
+}
+
+/// PDF to Word. The .docx goes to the Downloads folder, like the other tools'
+/// output, named `output_name` (or the PDF's name) plus `.docx`, with
+/// " (1)", " (2)", ... added instead of overwriting an existing file.
+#[tauri::command]
+pub fn core_pdf_to_word_start<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, CoreState>,
+    input_path: String,
+    output_name: Option<String>,
+) -> Result<JobId, CoreError> {
+    let input = PathBuf::from(&input_path);
+    if input_path.trim().is_empty() {
+        return Err(CoreError::InvalidInput("path is empty".into()));
+    }
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|e| CoreError::Internal(format!("cannot find the Downloads folder: {e}")))?;
+    let stem = output_name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .or_else(|| input.file_stem().map(|s| s.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "document".into());
+    start_job(&app, &state.runner, "pdf_to_word", move |ctx| -> CoreResult<PdfToWordReport> {
+        std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
+        let output = unique_output_path(&dir, &stem);
+        convert_pdf_to_docx(&input, &output, ctx)
     })
 }
 

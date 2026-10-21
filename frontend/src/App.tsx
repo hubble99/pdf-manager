@@ -7,6 +7,7 @@ import { MergePage } from './pages/MergePage';
 import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
 import { ConverterPage } from './pages/ConverterPage';
+import { PdfToWordPage } from './pages/PdfToWordPage';
 import { HomePage } from './pages/HomePage';
 import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
@@ -157,6 +158,7 @@ export default function App() {
                 <Route path="/extract"       element={<ExtractPage />} />
                 <Route path="/compress"      element={<CompressPage />} />
                 <Route path="/converter"     element={<ConverterPage />} />
+                <Route path="/pdf-to-word"   element={<PdfToWordPage />} />
                 <Route path="/pdf-to-image"  element={<Navigate to="/converter" replace />} />
                 <Route path="/image-to-pdf"  element={<Navigate to="/converter" replace />} />
                 <Route path="/organize"      element={<OrganizePage />} />

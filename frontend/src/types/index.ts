@@ -7,6 +7,7 @@ export type NavItemId =
   | 'extract'
   | 'compress'
   | 'converter'
+  | 'pdf-to-word'
   | 'qr-barcode'
   | 'edit-canvas'
   | 'edit-content'
