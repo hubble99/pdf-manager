@@ -7,6 +7,7 @@ import { MergePage } from './pages/MergePage';
 import { ExtractPage } from './pages/ExtractPage';
 import { CompressPage } from './pages/CompressPage';
 import { ConverterPage } from './pages/ConverterPage';
+import { ImageFormatPage } from './pages/ImageFormatPage';
 import { HomePage } from './pages/HomePage';
 import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
@@ -159,6 +160,7 @@ export default function App() {
                 <Route path="/converter"     element={<ConverterPage />} />
                 <Route path="/pdf-to-image"  element={<Navigate to="/converter" replace />} />
                 <Route path="/image-to-pdf"  element={<Navigate to="/converter" replace />} />
+                <Route path="/image-format"  element={<ImageFormatPage />} />
                 <Route path="/organize"      element={<OrganizePage />} />
                 <Route path="/protect"       element={<ProtectPage />} />
                 <Route path="/qr-barcode"    element={<QrBarcodePage />} />

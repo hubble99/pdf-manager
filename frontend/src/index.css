@@ -5346,3 +5346,48 @@ select.input {
 .preview-empty {
   color: #5b6573;
 }
+
+/* ── WEBP to PNG/JPG ─────────────────────────────────────────────────────── */
+.image-format-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.image-format-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 34px;
+  padding: 4px 0;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.image-format-row:first-child {
+  border-top: none;
+}
+
+.image-format-row > .file-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.image-format-row--failed > .file-item-meta {
+  flex-shrink: 0;
+  max-width: 55%;
+  margin-top: 0;
+  color: var(--error);
+  font-family: inherit;
+  text-align: right;
+}
+
+.image-format-warn {
+  color: var(--warning);
+}
+
+.card.drag-over {
+  border-color: var(--accent);
+}
