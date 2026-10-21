@@ -3,17 +3,19 @@ import { t } from '../i18n';
 import * as fabric from 'fabric';
 import type {
   CanvasObject, 
-  CanvasObjectType, 
   DefaultShapeProps,
   DefaultStrokeProps,
   DefaultTextProps,
+  EditorTool,
   FreehandObject, 
+  ImageObject,
   LineObject, 
   PageData, 
   ShapeObject, 
   TextObject,
 } from '../types/canvas';
 import { generateCanvasObjectId } from '../features/edit-canvas/ids';
+import type { CanvasImageAssetStore } from '../features/edit-canvas/imageObjects';
 import { CanvasBridge } from '../features/edit-canvas/canvasBridge';
 import { normalizeLetterSpacing } from '../features/edit-canvas/letterSpacing';
 import { useTheme } from '../hooks/useTheme';
@@ -42,10 +44,10 @@ import { sampleForegroundColor } from '../utils/colorSampling';
 // ── PageCanvas Component ──────────────────────────────────────────────────────
 export interface PageCanvasProps {
   page: PageData;
-  activeTool: 'select' | CanvasObjectType | 'eraser' | 'eyedropper';
+  activeTool: EditorTool;
   selectedObjectId: string | null;
   setSelectedObjectId: (id: string | null) => void;
-  setActiveTool: (tool: 'select' | CanvasObjectType | 'eraser' | 'eyedropper') => void;
+  setActiveTool: (tool: EditorTool) => void;
   updateSelectedObject: (patch: Partial<CanvasObject>, overrideId?: string) => void;
   commitPageObjectsToHistory: (pageIndex: number, finalObjects: CanvasObject[]) => void;
   fabricRefs?: React.MutableRefObject<Record<number, fabric.Canvas>>;
@@ -56,6 +58,7 @@ export interface PageCanvasProps {
   hexToRgba: (hex: string, opacity: number) => string;
   onSampleColor: (color: string) => void;
   finalScale: number;
+  imageAssets?: CanvasImageAssetStore;
 }
 
 // Patch fabric.Canvas.prototype.calcOffset to prevent crash on disposal in v6
@@ -113,6 +116,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
     hexToRgba,
     onSampleColor,
     finalScale,
+    imageAssets,
   } = props;
 
   // ============================================================================
@@ -622,6 +626,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                 const isText = obj.type && (obj.type.toLowerCase() === 'text' || obj.type.toLowerCase() === 'textbox');
                 const isRect = obj.type && obj.type.toLowerCase() === 'rect';
                 const isEllipse = obj.type && obj.type.toLowerCase() === 'ellipse';
+                const isImage = obj.type && obj.type.toLowerCase() === 'image';
 
                 const scaleX = obj.scaleX || 1;
                 const scaleY = obj.scaleY || 1;
@@ -642,6 +647,10 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                   }
                   newWidth = Math.max(MIN_SHAPE_SIZE, calcW);
                   newHeight = Math.max(MIN_SHAPE_SIZE, calcH);
+                } else if (isImage) {
+                  // Images keep their Fabric scale; the displayed size is stored instead.
+                  newWidth = Math.max(MIN_SHAPE_SIZE, (obj.width || 1) * Math.abs(scaleX));
+                  newHeight = Math.max(MIN_SHAPE_SIZE, (obj.height || 1) * Math.abs(scaleY));
                 }
 
                 updates[obj.id] = { 
@@ -654,7 +663,8 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                   fontSize: newFontSize,
                   isText,
                   isRect,
-                  isEllipse
+                  isEllipse,
+                  isImage
                 };
               }
             }
@@ -672,7 +682,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
                    if (up.isText) {
                       (newObj as any).fontSize = up.fontSize;
                       (newObj as any).width = up.width;
-                   } else if (up.isRect || up.isEllipse) {
+                   } else if (up.isRect || up.isEllipse || up.isImage) {
                       (newObj as any).width = up.width;
                       (newObj as any).height = up.height;
                    }
@@ -686,7 +696,9 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
 
           activeObjects.forEach((obj: any) => {
              const up = updates[obj.id];
-             if (up && !up.points) {
+             if (up && up.isImage) {
+                 obj.setCoords();
+             } else if (up && !up.points) {
                  obj.set({ scaleX: 1, scaleY: 1, width: up.width, height: up.height });
                  if (up.fontSize) obj.set({ fontSize: up.fontSize });
                  obj.setCoords();
@@ -716,6 +728,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       const isEllipse = target.type && target.type.toLowerCase() === 'ellipse';
       const isLine = target.type && target.type.toLowerCase() === 'line';
       const isPath = target.type && target.type.toLowerCase() === 'path';
+      const isImage = target.type && target.type.toLowerCase() === 'image';
 
       const targetScaleX = target.scaleX || 1;
       const targetScaleY = target.scaleY || 1;
@@ -725,7 +738,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
       let newHeight = target.height;
 
       if (Math.abs(targetScaleX - 1) > 0.0001 || Math.abs(targetScaleY - 1) > 0.0001) {
-        if (!isPath) {
+        if (!isPath && !isImage) {
           wasScaled = true;
           const scaleX = targetScaleX;
           const scaleY = targetScaleY;
@@ -795,6 +808,9 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
           } else if (isPath) {
              patch.scaleX = target.scaleX;
              patch.scaleY = target.scaleY;
+          } else if (isImage) {
+             patch.width = Math.max(MIN_SHAPE_SIZE, target.width * Math.abs(targetScaleX));
+             patch.height = Math.max(MIN_SHAPE_SIZE, target.height * Math.abs(targetScaleY));
           }
 
           bridge.updateSelectedObject(patch, target.id);
@@ -966,7 +982,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
     fabricRebuildingRef.current = true;
     canvas.renderOnAddRemove = false;
 
-    const fabricObjects = page.objects.filter(o => ['text', 'rect', 'circle', 'line', 'pen', 'highlighter'].includes(o.type));
+    const fabricObjects = page.objects.filter(o => ['text', 'rect', 'circle', 'line', 'pen', 'highlighter', 'image'].includes(o.type));
     const isInteractive = activeTool === 'select';
 
     const existingFabricObjects = new Map<string, any>();
@@ -1012,7 +1028,7 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
         cornerStrokeColor: activeColors.selectionBorder,
         borderColor: activeColors.selectionBorder,
         borderScaleFactor: 1.5,
-        padding: obj.type === 'rect' ? 0 : compensatedPadding,
+        padding: obj.type === 'rect' || obj.type === 'image' ? 0 : compensatedPadding,
         transparentCorners: false,
       };
 
@@ -1159,6 +1175,19 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             cursorStyleHandler: () => 'crosshair',
             actionName: 'modifyLine'
           } as any);
+        } else if (obj.type === 'image') {
+          const imageObj = obj as ImageObject;
+          const asset = imageAssets?.get(imageObj.assetId);
+          if (asset) {
+            fabricObj = new fabric.FabricImage(asset.element, {
+              ...commonProps,
+              id: imageObj.id,
+              scaleX: imageObj.width / asset.naturalWidth,
+              scaleY: imageObj.height / asset.naturalHeight,
+              opacity: imageObj.opacity ?? 1,
+              lockScalingFlip: true,
+            } as any);
+          }
         }
 
         if (fabricObj) {
@@ -1268,6 +1297,14 @@ export const PageCanvas = React.forwardRef<fabric.Canvas, PageCanvasProps>((prop
             stroke: lineObj.strokeColor,
             strokeWidth: lineObj.strokeWidth,
           });
+        } else if (obj.type === 'image') {
+          const imageObj = obj as ImageObject;
+          fabricObj.set({
+            scaleX: imageObj.width / (fabricObj.width || 1),
+            scaleY: imageObj.height / (fabricObj.height || 1),
+            opacity: imageObj.opacity ?? 1,
+          });
+          fabricObj.setCoords();
         }
       }
     });
