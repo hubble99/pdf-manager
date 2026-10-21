@@ -365,6 +365,14 @@ fn flatten_on_white(image: &DynamicImage) -> RgbImage {
 
 fn decode_error(source: &Path, err: image::ImageError) -> CoreError {
     match err {
+        // A truncated file ends early while decoding: that is a damaged
+        // image, not a disk or permission problem.
+        image::ImageError::IoError(e) if e.kind() == ErrorKind::UnexpectedEof => {
+            CoreError::InvalidInput(format!(
+                "cannot read {}: the file is incomplete",
+                source.display()
+            ))
+        }
         image::ImageError::IoError(e) => CoreError::io(source, e),
         image::ImageError::Unsupported(e) => {
             CoreError::Unsupported(format!("{}: {e}", source.display()))

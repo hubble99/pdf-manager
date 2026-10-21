@@ -255,7 +255,7 @@ fn bad_files_fail_alone_and_the_batch_continues() {
         .collect();
     assert_eq!(codes[0], Some("unsupported"));
     assert_eq!(codes[1], None);
-    assert!(codes[2].is_some());
+    assert_eq!(codes[2], Some("invalid_input"));
     assert_eq!(codes[3], Some("not_found"));
     // Report order follows input order, and failed files leave nothing behind.
     let sources: Vec<_> = report.files.iter().map(|f| f.source.clone()).collect();
