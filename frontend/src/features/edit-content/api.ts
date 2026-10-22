@@ -44,7 +44,7 @@ export async function openContentSession(file: File, signal?: AbortSignal) {
   form.append('schemaVersion', SCHEMA);
   form.append('requestId', requestId);
   form.append('command', 'open');
-  const response = await apiClient.post<ContentReply<{ state: ContentSessionState; discovery: NativeDiscovery }>>(
+  const response = await apiClient.post<ContentReply<{ state: ContentSessionState; discovery: NativeDiscovery; permissionsRemoved?: boolean }>>(
     '/api/v1/edit-content/sessions', form, { signal },
   );
   return response.data;
