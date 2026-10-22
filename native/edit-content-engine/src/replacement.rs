@@ -274,6 +274,36 @@ enum RegenerationStage {
     BeforeSerialization,
 }
 
+/// PDFium writes the page back from its own colour state, and a fill or stroke
+/// that came from an ICC-based or other non-device colour space is written as
+/// default black. Re-setting the resolved RGB value on each coloured text and
+/// path object makes the regenerated stream carry the colour the page showed.
+fn keep_native_colors(page: &mut PdfPage) -> Result<(), &'static str> {
+    let is_black = |c: &PdfColor| c.red() == 0 && c.green() == 0 && c.blue() == 0;
+    for mut object in page.objects().iter() {
+        if object.as_text_object().is_none() && object.as_path_object().is_none() {
+            continue;
+        }
+        if let Ok(fill) = object.fill_color() {
+            if !is_black(&fill) {
+                object
+                    .set_fill_color(fill)
+                    .map_err(|_| "REJECTED_PERSISTENCE")?;
+            }
+        }
+        if object.as_path_object().is_some() {
+            if let Ok(stroke) = object.stroke_color() {
+                if !is_black(&stroke) {
+                    object
+                        .set_stroke_color(stroke)
+                        .map_err(|_| "REJECTED_PERSISTENCE")?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn regenerate_observed(
     pdfium: &Pdfium,
     working: &Path,
@@ -292,6 +322,7 @@ fn regenerate_observed(
             .pages()
             .get(edit.target.page_index as _)
             .map_err(|_| "REJECTED_PERSISTENCE")?;
+        keep_native_colors(&mut page)?;
         {
             let mut object = page
                 .objects()

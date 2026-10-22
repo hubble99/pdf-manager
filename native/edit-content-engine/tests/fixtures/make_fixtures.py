@@ -1,9 +1,14 @@
-"""Builds two-same-name-fonts.pdf for edge_case_corpus.rs.
+"""Builds the binary fixtures used by edge_case_corpus.rs.
+
+two-same-name-fonts.pdf:
 
 Page 1: two embedded TrueType subsets (DejaVu Sans and DejaVu Serif) that both
 carry the name ArialMT, like the fonts Quartz writes into one document.
 Page 2: Helvetica text ("gamma"), the object the test edits.
-Needs fontTools and pypdf; run: python make_two_same_name_fonts.py
+
+icc-colored-text.pdf: text painted with ICCBased colours (`/Cs1 cs ... sc`) as Quartz writes them.
+
+Needs fontTools, pypdf and Pillow; run: python make_fixtures.py
 """
 
 import io
@@ -16,6 +21,7 @@ from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObjec
 
 FONTS = Path("/usr/share/fonts/truetype/dejavu")
 OUT = Path(__file__).with_name("two-same-name-fonts.pdf")
+ICC_OUT = Path(__file__).with_name("icc-colored-text.pdf")
 
 
 def subset_named_arialmt(path, text):
@@ -37,7 +43,7 @@ def subset_named_arialmt(path, text):
     return out.getvalue(), font
 
 
-def build():
+def build_two_same_name_fonts():
     writer = PdfWriter()
     page1 = writer.add_blank_page(300, 200)
     page2 = writer.add_blank_page(300, 200)
@@ -87,5 +93,32 @@ def build():
         writer.write(handle)
 
 
+def build_icc_colored_text():
+    from PIL import ImageCms
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(300, 200)
+    name = NameObject
+    profile = StreamObject()
+    profile._data = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    profile[name("/N")] = NumberObject(3)
+    cs1 = ArrayObject([name("/ICCBased"), writer._add_object(profile)])
+    helvetica = writer._add_object(DictionaryObject({
+        name("/Type"): name("/Font"), name("/Subtype"): name("/Type1"),
+        name("/BaseFont"): name("/Helvetica"), name("/Encoding"): name("/WinAnsiEncoding"),
+    }))
+    page[name("/Resources")] = DictionaryObject({
+        name("/Font"): DictionaryObject({name("/F1"): helvetica}),
+        name("/ColorSpace"): DictionaryObject({name("/Cs1"): cs1}),
+    })
+    content = StreamObject()
+    content._data = (b"/Cs1 cs 0.3255 0.5059 0.2078 sc BT /F1 12 Tf 30 150 Td (green) Tj ET "
+                     b"/Cs1 cs 0 0 0 sc BT /F1 12 Tf 30 100 Td (word) Tj ET")
+    page[name("/Contents")] = writer._add_object(content)
+    with ICC_OUT.open("wb") as handle:
+        writer.write(handle)
+
+
 if __name__ == "__main__":
-    build()
+    build_two_same_name_fonts()
+    build_icc_colored_text()
