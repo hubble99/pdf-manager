@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+
+- **PDF to Word:** letterheads and logos that are stored with transparency (a soft mask) no longer turn into black boxes in the `.docx`; the transparent background is kept.
+
 ## 1.9.0 — 2026-10-21 · Phase 1: native Rust core and new tools
 
 > The first tools that run on the new Rust core (`dokuwu-core`) instead of the

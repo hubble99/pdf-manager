@@ -15,6 +15,7 @@ from reportlab.lib.enums import TA_JUSTIFY
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     BaseDocTemplate, Frame, Image as RLImage, ListFlowable, ListItem, PageBreak,
     PageTemplate, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
@@ -126,6 +127,25 @@ def mixed_pdf():
     doc.build(s, onFirstPage=decorate, onLaterPages=decorate)
 
 
+def letterhead_pdf():
+    # A letterhead picture whose colour data is black everywhere: only its
+    # soft mask (alpha) draws the dark-blue "ACME" shape on a clear background.
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    img = Image.new("RGBA", (300, 80), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse([10, 10, 70, 70], fill=(20, 40, 160, 255))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    c = rl_canvas.Canvas(os.path.join(OUT, "letterhead.pdf"), pagesize=A4)
+    c.setTitle("Letterhead")
+    c.drawImage(ImageReader(buf), 2 * cm, A4[1] - 4 * cm, width=9 * cm, height=2.4 * cm, mask="auto")
+    c.setFont("Helvetica", 11)
+    c.drawString(2 * cm, A4[1] - 6 * cm, "Letter body below the letterhead.")
+    c.save()
+
+
 def scanned_pdf():
     # A page that is only a picture of text: no text layer, so nothing to extract without OCR.
     img = Image.new("RGB", (1240, 1754), "white")
@@ -216,6 +236,6 @@ def word_export_pdf():
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    for fn in (text_pdf, columns_pdf, table_pdf, images_pdf, mixed_pdf, scanned_pdf, protected_pdf, word_export_pdf):
+    for fn in (text_pdf, columns_pdf, table_pdf, images_pdf, mixed_pdf, letterhead_pdf, scanned_pdf, protected_pdf, word_export_pdf):
         fn()
     print("written to", OUT)
