@@ -1,36 +1,57 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToast } from '../../hooks/useToast';
-import { triggerBlobDownload } from '../../utils/downloadHelper';
-import { openOutputFolder } from '../../utils/tauriDialog';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { chooseFolderDialog, isTauri } from '../../utils/tauriDialog';
+import { baseName } from '../../utils/paths';
+import { NativeCoreError, isCoreCancelled, revealPath, type CoreProgress } from '../../api/nativeCore';
 import {
-  CHOOSE_FOLDER_AGAIN, describeFiles, inspectFiles, listFolder, mergeFolderFiles, registerFolder, releaseFolder,
-  type FileInfo, type FolderFileNode, type FolderListing, type MergeProblem, type RegisteredRoot,
-} from './api';
+  describePdfs, inspectPdfs, mergePdfs, scanFolder,
+  type FileDescription, type FolderListing, type FolderNode, type MergeProblem,
+} from '../../api/pdfMerge';
+import { mergeErrorMessage } from './messages';
 import { t, tn } from '../../i18n';
+
+export interface ChosenFolder {
+  path: string;
+  name: string;
+}
+
+/** A queued file that cannot be merged, named the way the queue shows it. */
+export interface QueueProblem {
+  path: string;
+  reason: string;
+}
 
 export interface FolderMergeState {
   folderModeAvailable: boolean;
-  root: RegisteredRoot | null;
+  root: ChosenFolder | null;
   listing: FolderListing | null;
   expanded: Set<string>;
   queue: string[];
   /** Size and page count of queued files, filled in as they are read. */
-  fileInfo: Record<string, FileInfo>;
+  fileInfo: Record<string, FileDescription>;
   outputName: string;
+  /** Scanning, checking or merging. */
   isBusy: boolean;
+  isMerging: boolean;
+  progress: CoreProgress | null;
   error: string | null;
   notice: string | null;
-  problems: MergeProblem[] | null;
-  result: { filename: string; merged: number; skipped: number; totalPages: number } | null;
+  problems: QueueProblem[] | null;
+  result: {
+    outputPath: string;
+    filename: string;
+    merged: number;
+    skipped: number;
+    totalPages: number;
+  } | null;
 
   chooseFolder: () => Promise<void>;
   refresh: () => Promise<void>;
   toggleFolder: (relativePath: string) => void;
   setExpandedPaths: (paths: string[]) => void;
   addFile: (relativePath: string) => void;
-  addFolder: (node: FolderFileNode) => void;
+  addFolder: (node: FolderNode) => void;
   removeAt: (index: number) => void;
   moveAt: (from: number, to: number) => void;
   step: (index: number, direction: -1 | 1) => void;
@@ -38,6 +59,7 @@ export interface FolderMergeState {
   setOutputName: (name: string) => void;
   requestMerge: () => Promise<void>;
   skipAndMerge: () => Promise<void>;
+  cancelMerge: () => void;
   cancelPreflight: () => void;
   dismissError: () => void;
   isQueued: (relativePath: string) => boolean;
@@ -46,43 +68,54 @@ export interface FolderMergeState {
 /**
  * Files of a folder in display order: subfolders first, then its own PDFs.
  *
- * The order itself comes from the backend listing, which already applies the
+ * The order itself comes from the core's listing, which already applies the
  * natural-order rule, so it is not re-applied here.
  */
-function collectInOrder(node: FolderFileNode): string[] {
+function collectInOrder(node: FolderNode): string[] {
   const result: string[] = [];
   for (const child of node.folders) result.push(...collectInOrder(child));
   for (const name of node.files) {
-    result.push(node.relative_path ? `${node.relative_path}/${name}` : name);
+    result.push(node.relativePath ? `${node.relativePath}/${name}` : name);
   }
   return result;
 }
 
+/** The core's own words for what it refused; anything else gets the fallback. */
+const describeFailure = (thrown: unknown, fallback: string) =>
+  thrown instanceof NativeCoreError ? mergeErrorMessage(thrown) : fallback;
+
 export function useFolderMerge(): FolderMergeState {
   const { showToast } = useToast();
-  const [root, setRoot] = useState<RegisteredRoot | null>(null);
+  const [root, setRoot] = useState<ChosenFolder | null>(null);
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [queue, setQueue] = useState<string[]>([]);
-  const [fileInfo, setFileInfo] = useState<Record<string, FileInfo>>({});
+  const [fileInfo, setFileInfo] = useState<Record<string, FileDescription>>({});
   const [outputName, setOutputName] = useState('merged_output.pdf');
   const [isBusy, setIsBusy] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [progress, setProgress] = useState<CoreProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [problems, setProblems] = useState<MergeProblem[] | null>(null);
+  const [problems, setProblems] = useState<QueueProblem[] | null>(null);
   const [result, setResult] = useState<FolderMergeState['result']>(null);
 
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
-  const rootIdRef = useRef<string | null>(null);
+  const rootPathRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const folderModeAvailable = isTauri();
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
   }, []);
 
   const forgetRoot = useCallback(() => {
+    rootPathRef.current = null;
     setRoot(null);
     setListing(null);
     setExpanded(new Set());
@@ -92,29 +125,11 @@ export function useFolderMerge(): FolderMergeState {
     setResult(null);
   }, []);
 
-  // Leaving the workspace releases the registration, so folder mode resets.
-  useEffect(() => {
-    return () => {
-      const rootId = rootIdRef.current;
-      if (rootId) void releaseFolder(rootId).catch(() => {});
-    };
-  }, []);
-
-  const describeError = useCallback((thrown: unknown, fallback: string) => {
-    const message = thrown instanceof Error ? thrown.message : fallback;
-    // A lapsed registration is a normal state, not a failure to interpret.
-    if (message.includes(CHOOSE_FOLDER_AGAIN)) {
-      forgetRoot();
-      return CHOOSE_FOLDER_AGAIN;
-    }
-    return message;
-  }, [forgetRoot]);
-
-  const loadListing = useCallback(async (rootId: string) => {
-    const data = await listFolder(rootId);
+  const loadListing = useCallback(async (path: string) => {
+    const data = await scanFolder(path);
     if (!mountedRef.current) return;
     setListing(data);
-    setExpanded(new Set(data.root.folders.map((child) => child.relative_path)));
+    setExpanded(new Set(data.root.folders.map((child) => child.relativePath)));
     setNotice(data.skipped > 0 ? tn(data.skipped, '{n} item could not be read', '{n} items could not be read') : null);
   }, []);
 
@@ -124,30 +139,30 @@ export function useFolderMerge(): FolderMergeState {
     const path = await chooseFolderDialog({ title: t('Choose a folder of PDFs') });
     if (!path) return;
 
-    // Choosing a folder replaces any previous root; the queue is never filled.
-    const previous = rootIdRef.current;
-    if (previous) void releaseFolder(previous).catch(() => {});
-
     busyRef.current = true;
     setIsBusy(true);
     try {
-      const registered = await registerFolder(path);
-      rootIdRef.current = registered.rootId;
+      // Choosing a folder replaces any previous one; the queue is never filled.
+      const data = await scanFolder(path);
       if (!mountedRef.current) return;
-      setRoot(registered);
+      rootPathRef.current = path;
+      setRoot({ path, name: baseName(path) || path });
       setQueue([]);
       setFileInfo({});
       setResult(null);
-      await loadListing(registered.rootId);
+      setProblems(null);
+      setListing(data);
+      setExpanded(new Set(data.root.folders.map((child) => child.relativePath)));
+      setNotice(data.skipped > 0 ? tn(data.skipped, '{n} item could not be read', '{n} items could not be read') : null);
     } catch (thrown) {
       if (!mountedRef.current) return;
       forgetRoot();
-      setError(describeError(thrown, t('That folder could not be read.')));
+      setError(describeFailure(thrown, t('That folder could not be read.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }
-  }, [describeError, forgetRoot, loadListing]);
+  }, [forgetRoot]);
 
   const refresh = useCallback(async () => {
     if (!root || busyRef.current) return;
@@ -155,15 +170,15 @@ export function useFolderMerge(): FolderMergeState {
     busyRef.current = true;
     setIsBusy(true);
     try {
-      await loadListing(root.rootId);
+      await loadListing(root.path);
     } catch (thrown) {
       if (!mountedRef.current) return;
-      setError(describeError(thrown, t('That folder could not be read.')));
+      setError(describeFailure(thrown, t('That folder could not be read.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }
-  }, [describeError, loadListing, root]);
+  }, [loadListing, root]);
 
   const toggleFolder = useCallback((relativePath: string) => {
     setExpanded((previous) => {
@@ -189,7 +204,7 @@ export function useFolderMerge(): FolderMergeState {
 
   const addFile = useCallback((relativePath: string) => addFiles([relativePath]), [addFiles]);
 
-  const addFolder = useCallback((node: FolderFileNode) => {
+  const addFolder = useCallback((node: FolderNode) => {
     // Tree display order, which is the same rule the tree itself uses.
     addFiles(collectInOrder(node));
   }, [addFiles]);
@@ -221,36 +236,50 @@ export function useFolderMerge(): FolderMergeState {
     if (!root) return;
     busyRef.current = true;
     setIsBusy(true);
+    setIsMerging(true);
+    setProgress(null);
     setError(null);
     setProblems(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const merged = await mergeFolderFiles(root.rootId, files, outputName || 'merged_output.pdf', skipInvalid);
+      const report = await mergePdfs(
+        files,
+        { root: root.path, skipInvalid, outputName },
+        { signal: controller.signal, onProgress: (p) => { if (mountedRef.current) setProgress(p); } },
+      );
       if (!mountedRef.current) return;
-      triggerBlobDownload(merged.blob, merged.filename);
+      const filename = baseName(report.outputPath);
       setResult({
-        filename: merged.filename,
-        merged: merged.merged,
-        skipped: merged.skipped,
-        totalPages: merged.totalPages,
+        outputPath: report.outputPath,
+        filename,
+        merged: report.mergedFiles,
+        skipped: report.skipped.length,
+        totalPages: report.totalPages,
       });
-      addHistoryEntry({ filename: merged.filename, action: 'Merge PDF', size: merged.blob.size });
+      addHistoryEntry({ filename, action: 'Merge PDF', size: report.outputSizeBytes });
       showToast({
         type: 'success',
         title: t('Merge complete'),
-        message: merged.skipped
-          ? tn(merged.merged, '{n} file merged, {skipped} skipped', '{n} files merged, {skipped} skipped', { skipped: merged.skipped })
-          : tn(merged.merged, '{n} file merged', '{n} files merged'),
-        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
+        message: report.skipped.length
+          ? tn(report.mergedFiles, '{n} file merged, {skipped} skipped', '{n} files merged, {skipped} skipped', { skipped: report.skipped.length })
+          : tn(report.mergedFiles, '{n} file merged', '{n} files merged'),
+        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
         duration: 8000,
       });
     } catch (thrown) {
-      if (!mountedRef.current) return;
-      setError(describeError(thrown, t('The merge failed.')));
+      if (!mountedRef.current || isCoreCancelled(thrown)) return;
+      setError(mergeErrorMessage(thrown));
     } finally {
+      abortRef.current = null;
       busyRef.current = false;
-      if (mountedRef.current) setIsBusy(false);
+      if (mountedRef.current) {
+        setIsBusy(false);
+        setIsMerging(false);
+        setProgress(null);
+      }
     }
-  }, [describeError, outputName, root, showToast]);
+  }, [outputName, root, showToast]);
 
   const requestMerge = useCallback(async () => {
     if (!root || queue.length < 2 || busyRef.current) return;
@@ -258,23 +287,24 @@ export function useFolderMerge(): FolderMergeState {
     busyRef.current = true;
     setIsBusy(true);
     try {
-      const found = await inspectFiles(root.rootId, queue);
+      const inspection = await inspectPdfs(queue, root.path);
       if (!mountedRef.current) return;
-      if (found.length === 0) {
-        busyRef.current = false;
-        setIsBusy(false);
+      if (inspection.problems.length === 0) {
         await runMerge(false, queue);
         return;
       }
-      setProblems(found);
+      setProblems(inspection.problems.map((problem: MergeProblem) => ({
+        path: queue[problem.index],
+        reason: problem.reason,
+      })));
     } catch (thrown) {
       if (!mountedRef.current) return;
-      setError(describeError(thrown, t('The files could not be checked.')));
+      setError(describeFailure(thrown, t('The files could not be checked.')));
     } finally {
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }
-  }, [describeError, queue, root, runMerge]);
+  }, [queue, root, runMerge]);
 
   const skipAndMerge = useCallback(async () => {
     if (!problems) return;
@@ -300,13 +330,15 @@ export function useFolderMerge(): FolderMergeState {
     const missing = queue.filter((path) => !requestedInfo.current.has(path));
     if (missing.length === 0) return;
     missing.forEach((path) => requestedInfo.current.add(path));
-    const rootId = root.rootId;
-    describeFiles(rootId, missing)
+    const rootPath = root.path;
+    describePdfs(missing, rootPath)
       .then((described) => {
-        if (!mountedRef.current || rootIdRef.current !== rootId) return;
+        if (!mountedRef.current || rootPathRef.current !== rootPath) return;
         setFileInfo((previous) => {
           const next = { ...previous };
-          for (const info of described) next[info.path] = info;
+          missing.forEach((path, index) => {
+            if (described[index]) next[path] = described[index];
+          });
           return next;
         });
       })
@@ -316,6 +348,7 @@ export function useFolderMerge(): FolderMergeState {
       });
   }, [queue, root]);
 
+  const cancelMerge = useCallback(() => abortRef.current?.abort(), []);
   const orderedQueue = useMemo(() => queue, [queue]);
 
   return {
@@ -327,6 +360,8 @@ export function useFolderMerge(): FolderMergeState {
     fileInfo,
     outputName,
     isBusy,
+    isMerging,
+    progress,
     error,
     notice,
     problems,
@@ -344,6 +379,7 @@ export function useFolderMerge(): FolderMergeState {
     setOutputName,
     requestMerge,
     skipAndMerge,
+    cancelMerge,
     cancelPreflight: () => setProblems(null),
     dismissError: () => setError(null),
     isQueued,
