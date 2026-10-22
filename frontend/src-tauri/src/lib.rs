@@ -5,6 +5,7 @@ mod desktop_lifecycle;
 
 mod core_bridge;
 mod core_pdf_compress;
+mod core_qr_barcode;
 
 struct DesktopLifecycleToken(String);
 
@@ -26,6 +27,8 @@ pub fn run() {
       core_bridge::core_job_cancel,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
+      core_qr_barcode::core_qr_generate,
+      core_qr_barcode::core_barcode_generate,
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Resized(size) = event {

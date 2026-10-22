@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Barcode,
@@ -8,7 +7,7 @@ import {
   Loader2,
   QrCode,
 } from 'lucide-react';
-import apiClient from '../api/client';
+import { generateBarcode, generateQr, generationErrorText } from '../api/qrBarcode';
 import { useToast } from '../hooks/useToast';
 import { PageHeader, RadioCardGroup, RangeField, Tabs } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
@@ -67,6 +66,8 @@ export function QrBarcodePage() {
   const [format, setFormat] = useState<'png' | 'svg'>('png');
   const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<{ url: string; isSvgText: boolean; svgText?: string; content: string } | null>(null);
+  // Why the preview is empty when the core refused the content (wrong check digit, characters the barcode cannot hold, ...).
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   // QR state
   const [qrContent, setQrContent] = useState('');
@@ -99,11 +100,13 @@ export function QrBarcodePage() {
 
   // ── Generation Logic ────────────────────────────────────────────────────────
   
-  const generatePreview = useCallback(async (isUserAction = false, signal?: AbortSignal) => {
+  const generatePreview = useCallback(async (isUserAction = false) => {
     const isQr = activeTab === 'qr';
     const content = isQr ? normalizeQrContent(debouncedQrContent) : debouncedBarcodeContent;
 
     const requestId = ++requestIdRef.current;
+
+    setPreviewError(null);
 
     if (!content.trim()) {
       setIsLoading(false);
@@ -133,45 +136,22 @@ export function QrBarcodePage() {
     setIsLoading(true);
     
     try {
-      let endpoint = '';
-      let payload = {};
-
-      if (isQr) {
-        endpoint = '/api/v1/qr-barcode/qr';
-        payload = {
-          content,
-          size: qrSize,
-          error_correction: qrErrorCorrection,
-          format: format,
-          border: 4,
-        };
-      } else {
-        endpoint = '/api/v1/qr-barcode/barcode';
-        payload = {
-          content,
-          barcode_type: barcodeType,
-          format: format,
-        };
-      }
-
-      const response = await apiClient.post(endpoint, payload, {
-        responseType: format === 'svg' ? 'text' : 'blob',
-        signal,
-      });
+      const bytes = isQr
+        ? await generateQr({ content, size: qrSize, errorCorrection: qrErrorCorrection, format, border: 4 })
+        : await generateBarcode({ content, barcodeType, format });
 
       if (requestId !== requestIdRef.current) {
         return;
       }
 
       if (format === 'svg') {
-        // Convert SVG bytes/text to a Blob URL for reliable <img> rendering
-        // Handles qrcode library's SVG namespace (svg:rect xmlns:svg=...) which breaks dangerouslySetInnerHTML
-        const svgText = response.data as string;
+        // A Blob URL renders reliably in an <img>; the text is kept for the download.
+        const svgText = new TextDecoder().decode(bytes);
         const blob = new Blob([svgText], { type: 'image/svg+xml' });
         const blobUrl = URL.createObjectURL(blob);
         setPreviewData({ url: blobUrl, isSvgText: true, svgText, content });
       } else {
-        const blob = new Blob([response.data], { type: 'image/png' });
+        const blob = new Blob([bytes], { type: 'image/png' });
         setPreviewData({ url: URL.createObjectURL(blob), isSvgText: false, content });
       }
 
@@ -180,16 +160,14 @@ export function QrBarcodePage() {
       }
 
     } catch (err: unknown) {
-      if (axios.isCancel(err) || (err instanceof Error && err.name === 'AbortError')) {
-        return;
-      }
       if (requestId !== requestIdRef.current) {
         return;
       }
+      const message = generationErrorText(err);
       if (isUserAction) {
-        const msg = err instanceof Error ? err.message : t('Unknown error');
-        showToast({ type: 'error', title: t('Generation failed'), message: msg });
+        showToast({ type: 'error', title: t('Generation failed'), message });
       }
+      setPreviewError(message);
       setPreviewData(null);
     } finally {
       if (requestId === requestIdRef.current) {
@@ -209,10 +187,12 @@ export function QrBarcodePage() {
 
   // Trigger preview generation when debounced inputs or settings change
   useEffect(() => {
-    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    generatePreview(false, controller.signal);
-    return () => controller.abort();
+    generatePreview(false);
+    // A request still running when the inputs change, or the page closes, must not commit.
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [generatePreview]);
 
   // ── Download ────────────────────────────────────────────────────────────────
@@ -394,7 +374,9 @@ export function QrBarcodePage() {
                   ) : (
                     <div className="preview-empty">
                       {activeTab === 'qr' ? <QrCode size={32} aria-hidden="true" /> : <Barcode size={32} aria-hidden="true" />}
-                      <span>{t('Enter content to see preview')}</span>
+                      <span role={previewError ? 'alert' : undefined}>
+                        {previewError ?? t('Enter content to see preview')}
+                      </span>
                     </div>
                   )}
                 </div>
