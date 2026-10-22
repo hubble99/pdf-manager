@@ -3,7 +3,9 @@
 pub(crate) mod batch;
 pub mod barcode;
 pub(crate) mod code_image;
+pub mod folder_scan;
 pub mod naming;
+pub mod natural_sort;
 pub(crate) mod ordered;
 pub mod page_ranges;
 pub mod zip_stream;
@@ -16,5 +18,8 @@ pub mod qr;
 pub mod image_thumb;
 pub mod image_to_pdf;
 pub(crate) mod pdf_writer;
+pub(crate) mod pdf_graft;
+pub mod pdf_extract;
+pub mod pdf_merge;
 pub mod pdf_render;
 pub mod pdf_to_image;
