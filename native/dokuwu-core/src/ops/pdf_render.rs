@@ -165,6 +165,52 @@ pub fn effective_dpi(width_pt: f64, height_pt: f64, dpi: u32, hint: QualityHint)
     actual as u32
 }
 
+/// The dpi to export a page of `width_pt` by `height_pt` points at. Unlike a
+/// preview, an export keeps the dpi the user asked for; it is lowered only when
+/// the page would pass [`MAX_PIXELS`] or `max_side` pixels (a format limit, such
+/// as 16383 for WEBP), and never below [`MIN_DPI`].
+pub fn export_dpi(width_pt: f64, height_pt: f64, dpi: u32, max_side: Option<f64>) -> u32 {
+    let wished = dpi.clamp(MIN_DPI, MAX_DPI) as f64;
+    let mut scale: f64 = 1.0;
+    let pixels = width_pt * wished / 72.0 * (height_pt * wished / 72.0);
+    if pixels > MAX_PIXELS {
+        scale = scale.min((MAX_PIXELS / pixels).sqrt());
+    }
+    if let Some(max_side) = max_side {
+        let longest = width_pt.max(height_pt) * wished / 72.0;
+        if longest > max_side {
+            scale = scale.min(max_side / longest);
+        }
+    }
+    ((wished * scale).floor().max(MIN_DPI as f64)) as u32
+}
+
+/// A rendered page as RGB samples borrowed from MuPDF (`stride` bytes per row,
+/// which can be more than `width * 3`).
+pub struct RgbView<'a> {
+    pub width: u32,
+    pub height: u32,
+    pub stride: usize,
+    pub samples: &'a [u8],
+    /// The dpi the page was actually rendered at.
+    pub dpi: u32,
+}
+
+impl RgbView<'_> {
+    /// Rows packed without padding.
+    pub fn packed(&self) -> std::borrow::Cow<'_, [u8]> {
+        let row = self.width as usize * 3;
+        if self.stride == row {
+            return std::borrow::Cow::Borrowed(&self.samples[..row * self.height as usize]);
+        }
+        let mut out = Vec::with_capacity(row * self.height as usize);
+        for y in 0..self.height as usize {
+            out.extend_from_slice(&self.samples[y * self.stride..y * self.stride + row]);
+        }
+        std::borrow::Cow::Owned(out)
+    }
+}
+
 /// A PDF opened for rendering. MuPDF documents are tied to the thread that
 /// opened them, so one of these lives inside a worker.
 pub struct RenderDocument {
@@ -186,6 +232,54 @@ impl RenderDocument {
 
     pub fn page_count(&self) -> u32 {
         self.pages
+    }
+
+    /// Size of page `page` (1-based) in points, as rendered (rotation applied).
+    pub fn page_size_pt(&self, page: u32) -> CoreResult<(f64, f64)> {
+        self.check_page(page)?;
+        let loaded = self.doc.load_page(page as i32 - 1).map_err(|e| mupdf_error("loading page", e))?;
+        let bounds = loaded.bounds().map_err(|e| mupdf_error("page bounds", e))?;
+        Ok(((bounds.x1 - bounds.x0) as f64, (bounds.y1 - bounds.y0) as f64))
+    }
+
+    fn check_page(&self, page: u32) -> CoreResult<()> {
+        if page < 1 || page > self.pages {
+            return Err(CoreError::InvalidInput(format!(
+                "page number out of bounds: the document has {} pages",
+                self.pages
+            )));
+        }
+        Ok(())
+    }
+
+    /// Renders page `page` (1-based) at `dpi`, already chosen by the caller
+    /// (see [`export_dpi`]), and gives the RGB samples to `f`. The samples are
+    /// freed when `f` returns.
+    pub fn render_rgb<R>(
+        &self,
+        page: u32,
+        dpi: u32,
+        f: impl FnOnce(RgbView<'_>) -> CoreResult<R>,
+    ) -> CoreResult<R> {
+        self.check_page(page)?;
+        let loaded = self.doc.load_page(page as i32 - 1).map_err(|e| mupdf_error("loading page", e))?;
+        let bounds = loaded.bounds().map_err(|e| mupdf_error("page bounds", e))?;
+        let (w_pt, h_pt) = ((bounds.x1 - bounds.x0) as f64, (bounds.y1 - bounds.y0) as f64);
+        let scale = dpi as f32 / 72.0;
+        check_memory(w_pt * scale as f64, h_pt * scale as f64)?;
+        let pixmap = loaded
+            .to_pixmap(&Matrix::new_scale(scale, scale), &Colorspace::device_rgb(), false, true)
+            .map_err(|e| mupdf_error("rendering page", e))?;
+        if pixmap.n() != 3 {
+            return Err(CoreError::Internal(format!("unexpected pixmap with {} components", pixmap.n())));
+        }
+        f(RgbView {
+            width: pixmap.width(),
+            height: pixmap.height(),
+            stride: pixmap.stride().max(0) as usize,
+            samples: pixmap.samples(),
+            dpi,
+        })
     }
 
     /// Renders page `page` (1-based).
