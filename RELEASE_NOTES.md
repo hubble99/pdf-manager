@@ -1,3 +1,15 @@
+# Dokuwu 1.9.1 — Release Notes
+
+**Release type:** patch. Fixes found while testing 1.9.0 on real documents. The
+detailed entry is in [`CHANGELOG.md`](CHANGELOG.md).
+
+## 1.9.1 highlights
+- **Edit Content** accepts more macOS-made PDFs (equally named fonts, ICC colours) and PDFs that are only restricted from editing (no password needed); empty text strings in browser-printed PDFs no longer block an edit.
+- **PDF to Word:** letterheads and logos with transparency no longer turn black.
+- **Compress PDF:** PDFs that only restrict editing or copying are compressed instead of refused.
+
+---
+
 # Dokuwu 1.9.0 — Release Notes
 
 **Release type:** minor. This release adds the first tools built on the new Rust
