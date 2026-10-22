@@ -326,7 +326,7 @@ struct Case {
 }
 
 /// Page 1 holds two different embedded TrueType subsets that carry the same /BaseFont name
-/// (as Quartz writes them); page 2 holds Helvetica text. See make_two_same_name_fonts.py.
+/// (as Quartz writes them); page 2 holds Helvetica text. See tests/fixtures/make_fixtures.py.
 fn two_same_name_fonts() -> Vec<u8> {
     include_bytes!("fixtures/two-same-name-fonts.pdf").to_vec()
 }
@@ -427,6 +427,11 @@ fn corpus() -> Vec<Case> {
             name: "text and paths under several nested clip paths",
             pdf: single_page("q 10 10 280 180 re W n q 20 20 200 150 re W n 0.5 g 30 30 80 20 re f BT /F1 12 Tf 30 100 Td (word) Tj ET Q Q"),
             old: "word", new: "wor", expect: PREPARED,
+        },
+        Case {
+            // Quartz paints text in ICCBased colours; edit the black word beside a green one.
+            name: "text beside ICCBased-coloured text",
+            pdf: include_bytes!("fixtures/icc-colored-text.pdf").to_vec(), old: "word", new: "wor", expect: PREPARED,
         },
         Case {
             // Editing text in another font must not be refused because two other fonts share a name.
