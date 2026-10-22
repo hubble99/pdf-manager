@@ -8,6 +8,7 @@ mod core_convert;
 mod core_pdf_compress;
 mod core_qr_barcode;
 mod core_merge;
+mod core_protect;
 mod core_pdf_render;
 
 struct DesktopLifecycleToken(String);
@@ -38,6 +39,8 @@ pub fn run() {
       core_merge::core_pdf_describe,
       core_merge::core_folder_scan,
       core_merge::core_pdf_extract_start,
+      core_protect::core_pdf_protect_start,
+      core_protect::core_pdf_unprotect_start,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
       core_qr_barcode::core_qr_generate,
