@@ -96,7 +96,7 @@ pub struct PdfCompressReport {
 pub struct PdfProbe {
     pub size_bytes: u64,
     pub pages: u32,
-    /// The PDF is encrypted (with an open or an owner password).
+    /// The PDF needs a password to open.
     pub encrypted: bool,
 }
 
@@ -467,12 +467,11 @@ fn open_pdf(path: &Path) -> CoreResult<PdfDocument> {
     PdfDocument::open(path_str(path)?).map_err(|e| CoreError::InvalidInput(format!("cannot open PDF: {e}")))
 }
 
+/// True when the PDF cannot be read without a password. A PDF that is only
+/// permission-restricted (owner password, empty open password) opens as
+/// usual, like it does in any viewer.
 fn is_encrypted(doc: &PdfDocument) -> CoreResult<bool> {
-    if doc.needs_password().map_err(|e| mupdf_error("password check", e))? {
-        return Ok(true);
-    }
-    let trailer = doc.trailer().map_err(|e| mupdf_error("reading the trailer", e))?;
-    Ok(trailer.get_dict("Encrypt").map_err(|e| mupdf_error("reading the trailer", e))?.is_some())
+    doc.needs_password().map_err(|e| mupdf_error("password check", e))
 }
 
 fn page_count(doc: &PdfDocument) -> u32 {
