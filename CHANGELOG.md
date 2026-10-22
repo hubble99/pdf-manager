@@ -4,6 +4,7 @@
 
 **Fixed**
 
+- **Edit Content:** a document with two different embedded fonts that share one name (written by macOS Quartz, for example a KLH letter) no longer makes every edit on its other pages fail verification. The fonts are told apart by their embedded font program. Edits on the very page that holds the two same-named fonts are still refused.
 - **PDF to Word:** letterheads and logos that are stored with transparency (a soft mask) no longer turn into black boxes in the `.docx`; the transparent background is kept.
 - **Compress PDF:** a PDF that is only permission-restricted (it opens without a password, but editing or copying is not allowed) is now compressed instead of refused as "password required". Its restrictions are kept in the result.
 - **Edit Content:** a PDF that only restricts editing (it opens without a password) can now be opened. The edited copy does not carry the restriction, and a notice says so. A PDF that needs a password is still refused.
