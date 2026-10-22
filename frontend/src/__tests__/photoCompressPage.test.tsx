@@ -3,16 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   openFilePicker: vi.fn(),
-  chooseFolderDialog: vi.fn(),
   compressPhotos: vi.fn(),
   revealPath: vi.fn(),
+  fileSizes: vi.fn(),
   dragDrop: null as null | ((event: { payload: { type: string; paths?: string[] } }) => void),
 }));
 
 vi.mock('../utils/tauriDialog', () => ({
   isTauri: () => true,
   openFilePicker: mocks.openFilePicker,
-  chooseFolderDialog: mocks.chooseFolderDialog,
 }));
 
 vi.mock('@tauri-apps/api/path', () => ({ downloadDir: async () => 'C:\\Users\\me\\Downloads' }));
@@ -28,7 +27,7 @@ vi.mock('@tauri-apps/api/webview', () => ({
 
 vi.mock('../api/nativeCore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/nativeCore')>();
-  return { ...actual, compressPhotos: mocks.compressPhotos, revealPath: mocks.revealPath };
+  return { ...actual, compressPhotos: mocks.compressPhotos, revealPath: mocks.revealPath, fileSizes: mocks.fileSizes };
 });
 
 import { NativeCoreError } from '../api/nativeCore';
@@ -56,7 +55,7 @@ const addPhotos = async (names: string[]) => {
   renderPage();
   fireEvent.click(screen.getByRole('button', { name: 'Drop photos here or click to browse' }));
   await screen.findByText(names[0].split('\\').pop()!);
-  await screen.findByText('C:\\Users\\me\\Downloads');
+  await screen.findByText(names.length === 1 ? '3.81 MB' : '7.63 MB');
 };
 
 describe('photo compress helpers', () => {
@@ -81,7 +80,8 @@ describe('photo compress helpers', () => {
 describe('PhotoCompressPage', () => {
   beforeEach(() => {
     mocks.openFilePicker.mockReset();
-    mocks.chooseFolderDialog.mockReset();
+    mocks.fileSizes.mockReset();
+    mocks.fileSizes.mockImplementation(async (paths: string[]) => paths.map(() => 4_000_000));
     mocks.compressPhotos.mockReset();
     mocks.revealPath.mockReset();
   });
@@ -109,8 +109,8 @@ describe('PhotoCompressPage', () => {
       { quality: 75, maxSide: 2560, format: 'keep', outputDir: 'C:\\Users\\me\\Downloads' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(screen.getByText('7.63 MB → 4.77 MB')).toBeInTheDocument();
-    expect(screen.getByText('38% smaller')).toBeInTheDocument();
+    expect(screen.getByText('4.77 MB')).toBeInTheDocument();
+    expect(screen.getByText('−38%')).toBeInTheDocument();
     expect(screen.getByText('Already as small as possible')).toBeInTheDocument();
     expect(screen.getByText('3.81 MB → 976.6 KB')).toBeInTheDocument();
 
@@ -179,17 +179,29 @@ describe('PhotoCompressPage', () => {
     expect(screen.getByRole('button', { name: 'Compress 1 photo' })).toBeEnabled();
   });
 
-  it('uses the folder the user picks', async () => {
-    mocks.chooseFolderDialog.mockResolvedValue('D:\\Out');
-    mocks.compressPhotos.mockResolvedValue({ files: [file('C:\\p\\a.jpg', 'D:\\Out\\a.jpg')], succeeded: 1, failed: 0, originalBytes: 2, outputBytes: 1 });
-    await addPhotos(['C:\\p\\a.jpg']);
+  it('shows the size before compressing and has no output folder choice', async () => {
+    await addPhotos(['C:\\p\\a.jpg', 'C:\\p\\b.png']);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
-    await screen.findByText('D:\\Out');
-    fireEvent.click(screen.getByRole('button', { name: 'Compress 1 photo' }));
+    expect(mocks.fileSizes).toHaveBeenCalledWith(['C:\\p\\a.jpg', 'C:\\p\\b.png']);
+    expect(screen.getByText('Before')).toBeInTheDocument();
+    expect(screen.getByText('7.63 MB')).toBeInTheDocument();
+    expect(screen.queryByText('Output folder')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change' })).not.toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(mocks.compressPhotos).toHaveBeenCalledWith(
-      ['C:\\p\\a.jpg'], expect.objectContaining({ outputDir: 'D:\\Out' }), expect.anything(),
-    ));
+  it('shows a progress bar while compressing', async () => {
+    let finish!: (value: unknown) => void;
+    mocks.compressPhotos.mockImplementation((_inputs, _options, job) => new Promise((resolve) => {
+      job.onProgress({ jobId: 1, kind: 'photo_compress', stage: 'compressing', done: 1, total: 2 });
+      finish = resolve;
+    }));
+    await addPhotos(['C:\\p\\a.jpg', 'C:\\p\\b.png']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compress 2 photos' }));
+
+    expect(await screen.findByText('Compressing… 50%')).toBeInTheDocument();
+    expect(screen.getByText('1 of 2 photos')).toBeInTheDocument();
+    finish({ files: [], succeeded: 0, failed: 0, originalBytes: 0, outputBytes: 0 });
+    await waitFor(() => expect(screen.queryByText('Compressing… 50%')).not.toBeInTheDocument());
   });
 });

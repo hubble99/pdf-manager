@@ -264,6 +264,15 @@ export const compressPhotos = (
 ): Promise<PhotoCompressReport> =>
   runCoreJob<PhotoCompressReport>('core_photo_compress_start', { inputs, options }, jobOptions);
 
+/** Size in bytes of each file, in order; `null` for a path that cannot be read. */
+export async function fileSizes(paths: string[]): Promise<Array<number | null>> {
+  try {
+    return await invoke<Array<number | null>>('core_file_sizes', { paths });
+  } catch (err) {
+    throw toCoreError(err);
+  }
+}
+
 /** Opens the system file manager with `path` selected. */
 export async function revealPath(path: string): Promise<void> {
   try {

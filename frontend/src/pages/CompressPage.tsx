@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowRight,
   CheckCircle,
   FileText,
   FolderOpen,
@@ -12,7 +11,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { Filename } from '../components/Filename';
-import { PageHeader, RangeField, SegmentedControl } from '../components/ui';
+import { PageHeader, RangeField, SegmentedControl, SizeCompareCard } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
@@ -294,38 +293,7 @@ export function CompressPage() {
                 </div>
               </div>
 
-              {/* Size */}
-              <div className="card card--flush">
-                <div className="card-head">
-                  <span className="card-head-title">
-                    <Minimize2 size={16} className="card-head-icon" aria-hidden="true" />
-                    {t('Size')}
-                  </span>
-                  {result && (
-                    <span className="card-head-actions status-ok">
-                      <CheckCircle size={14} aria-hidden="true" /> {t('Compression complete')}
-                    </span>
-                  )}
-                </div>
-                <div className="card-body">
-                  <div className="size-compare">
-                    <div className="size-box">
-                      <small>{t('Before')}</small>
-                      <b>{formatBytes(sizeBefore)}</b>
-                      <div className="size-bar"><i style={{ width: '100%' }} /></div>
-                    </div>
-                    <ArrowRight size={16} className="size-arrow" aria-hidden="true" />
-                    <div className={`size-box${result ? ' ok' : ''}`}>
-                      <small>{t('After')}</small>
-                      <b>{result ? formatBytes(result.sizeAfter) : '—'}</b>
-                      <div className="size-bar">
-                        <i style={{ width: result ? `${Math.max(2, Math.min(100, (result.sizeAfter / Math.max(1, result.sizeBefore)) * 100))}%` : '0%' }} />
-                      </div>
-                      {result && <span className="size-saved">−{result.reductionPct}%</span>}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <SizeCompareCard sizeBefore={sizeBefore} result={result} />
 
               {/* Output filename */}
               <div className="card card--flush">

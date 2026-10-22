@@ -5441,3 +5441,24 @@ select.input {
 .card.drag-over {
   border-color: var(--accent);
 }
+
+.badge-row--center {
+  justify-content: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+/* Progress bar with no known share yet (the first photo is still being compressed). */
+.size-bar--busy > i {
+  width: 35% !important;
+  animation: size-bar-busy 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes size-bar-busy {
+  from { transform: translateX(0); }
+  to { transform: translateX(185%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .size-bar--busy > i { animation: none; }
+}

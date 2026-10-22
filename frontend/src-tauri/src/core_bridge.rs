@@ -184,6 +184,16 @@ pub fn core_reveal_path<R: Runtime>(app: AppHandle<R>, path: String) -> Result<(
         .map_err(|e| CoreError::Internal(format!("cannot open the folder: {e}")))
 }
 
+/// Size in bytes of each file, in the same order; `None` for a path that
+/// cannot be read. Lets a page show the "before" size without opening the file.
+#[tauri::command]
+pub fn core_file_sizes(paths: Vec<String>) -> Vec<Option<u64>> {
+    paths
+        .iter()
+        .map(|p| std::fs::metadata(p).ok().filter(|m| m.is_file()).map(|m| m.len()))
+        .collect()
+}
+
 /// Returns false when the job already finished or never existed.
 #[tauri::command]
 pub fn core_job_cancel(state: State<'_, CoreState>, job_id: JobId) -> bool {
@@ -197,6 +207,21 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
     use tauri::Listener;
+
+    #[test]
+    fn file_sizes_keep_order_and_mark_unreadable_paths() {
+        let dir = std::env::temp_dir().join(format!("dokuwu-sizes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.bin");
+        std::fs::write(&file, [0u8; 123]).unwrap();
+        let sizes = core_file_sizes(vec![
+            file.to_string_lossy().into_owned(),
+            dir.join("missing.bin").to_string_lossy().into_owned(),
+            dir.to_string_lossy().into_owned(),
+        ]);
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(sizes, vec![Some(123), None, None]);
+    }
 
     #[test]
     fn checksum_job_emits_progress_and_finished_events() {

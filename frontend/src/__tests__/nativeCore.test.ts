@@ -10,6 +10,7 @@ import {
   getCoreInfo,
   isCoreCancelled,
   revealPath,
+  fileSizes,
   type CoreProgress,
 } from '../api/nativeCore';
 
@@ -158,6 +159,12 @@ describe('nativeCore', () => {
 
     await expect(compressPhotos(['C:/a.jpg'], options)).resolves.toEqual(report);
     expect(invokeMock).toHaveBeenCalledWith('core_photo_compress_start', { inputs: ['C:/a.jpg'], options });
+  });
+
+  it('reads file sizes in order', async () => {
+    invokeMock.mockResolvedValueOnce([1200, null]);
+    await expect(fileSizes(['C:/a.jpg', 'C:/missing.jpg'])).resolves.toEqual([1200, null]);
+    expect(invokeMock).toHaveBeenCalledWith('core_file_sizes', { paths: ['C:/a.jpg', 'C:/missing.jpg'] });
   });
 
   it('reveals a path and maps its errors', async () => {

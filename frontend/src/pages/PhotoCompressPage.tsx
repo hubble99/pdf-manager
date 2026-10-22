@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   compressPhotos,
+  fileSizes,
   isCoreCancelled,
   revealPath,
   type PhotoCompressReport,
@@ -21,7 +22,7 @@ import {
   NativeCoreError,
 } from '../api/nativeCore';
 import { Filename } from '../components/Filename';
-import { PageHeader, RangeField, SegmentedControl } from '../components/ui';
+import { PageHeader, RangeField, SegmentedControl, SizeCompareCard } from '../components/ui';
 import { baseName, formatBytes, mergePaths } from '../features/image-format/helpers';
 import {
   DEFAULT_LEVEL,
@@ -34,7 +35,7 @@ import {
 } from '../features/photo-compress/helpers';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
-import { chooseFolderDialog, isTauri, openFilePicker } from '../utils/tauriDialog';
+import { isTauri, openFilePicker } from '../utils/tauriDialog';
 import { t, tn } from '../i18n';
 
 const PHOTO_FILTER = [{ name: 'JPEG, PNG', extensions: ['jpg', 'jpeg', 'jfif', 'png', 'JPG', 'JPEG', 'PNG'] }];
@@ -55,7 +56,9 @@ export function PhotoCompressPage() {
   const [quality, setQuality] = useState(LEVELS[DEFAULT_LEVEL].quality);
   const [maxSide, setMaxSide] = useState<number | null>(LEVELS[DEFAULT_LEVEL].maxSide);
   const [format, setFormat] = useState<PhotoOutputFormat>('keep');
+  // Results always go to Downloads, like the other tools; there is no folder choice.
   const [outputDir, setOutputDir] = useState<string | null>(null);
+  const [sizes, setSizes] = useState<Record<string, number>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -73,6 +76,25 @@ export function PhotoCompressPage() {
       .catch(() => undefined);
     return () => { active = false; };
   }, [desktop]);
+
+  // Sizes of the picked photos, so the "Before" size shows before compressing.
+  useEffect(() => {
+    if (!desktop) return;
+    const missing = paths.filter((path) => !(path in sizes));
+    if (missing.length === 0) return;
+    let active = true;
+    fileSizes(missing)
+      .then((found) => {
+        if (!active) return;
+        setSizes((current) => {
+          const next = { ...current };
+          missing.forEach((path, i) => { next[path] = found[i] ?? 0; });
+          return next;
+        });
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [desktop, paths, sizes]);
 
   // Stop a running job when the user leaves the page.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -123,12 +145,6 @@ export function PhotoCompressPage() {
     if (running) return;
     const picked = await openFilePicker({ multiple: true, filters: PHOTO_FILTER, title: t('Choose photos') });
     if (picked) addPaths(picked);
-  };
-
-  const pickFolder = async () => {
-    if (running) return;
-    const dir = await chooseFolderDialog({ title: t('Choose the output folder') });
-    if (dir) setOutputDir(dir);
   };
 
   const removePath = (path: string) => {
@@ -219,9 +235,13 @@ export function PhotoCompressPage() {
   };
 
   const percent = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  const progressTitle = progress && progress.done > 0
+    ? t('Compressing… {pct}%', { pct: percent })
+    : t('Compressing…');
   const doneFiles = report?.files.filter((f) => f.output) ?? [];
   const failedFiles = report?.files.filter((f) => f.error) ?? [];
   const saved = report ? savedPercent(report.originalBytes, report.outputBytes) : 0;
+  const sizeBefore = report ? report.originalBytes : paths.reduce((sum, path) => sum + (sizes[path] ?? 0), 0);
   const canCompress = paths.length > 0 && Boolean(outputDir) && !running;
 
   const levelOptions: { value: CompressLevel; label: string; title?: string }[] = [
@@ -261,10 +281,12 @@ export function PhotoCompressPage() {
                 <Upload className="drop-zone-icon" />
                 <p className="drop-zone-title">{t('Drop photos here')}</p>
                 <p className="drop-zone-sub">{t('or click to browse · Several files at once')}</p>
-                <span className="badge badge-neutral">JPG</span>
-                <span className="badge badge-neutral">PNG</span>
+                <div className="badge-row badge-row--center">
+                  <span className="badge badge-neutral">JPG</span>
+                  <span className="badge badge-neutral">PNG</span>
+                </div>
               </div>
-              <p className="empty-hint">{t('Compressed copies are saved to a folder you choose. The originals are not changed.')}</p>
+              <p className="empty-hint">{t('Compressed copies are saved to your Downloads folder. The originals are not changed.')}</p>
             </>
           ) : (
             <>
@@ -386,33 +408,21 @@ export function PhotoCompressPage() {
                 </div>
               </div>
 
-              {/* Output folder */}
-              <div className="card card--flush">
-                <div className="card-head">
-                  <span className="card-head-title">
-                    <FolderOpen size={16} className="card-head-icon" aria-hidden="true" />
-                    {t('Output folder')}
-                  </span>
-                  <span className="card-head-actions">
-                    <button type="button" className="btn btn-ghost btn-sm" id="photo-compress-folder-btn" onClick={pickFolder} disabled={running}>
-                      {t('Change')}
-                    </button>
-                  </span>
-                </div>
-                <div className="card-body">
-                  <Filename name={outputDir ?? t('Choose a folder')} className="file-item-meta" />
-                  <small className="hint">{t('Existing files are never overwritten; a number is added to the new name instead.')}</small>
-                </div>
-              </div>
+              <SizeCompareCard
+                sizeBefore={sizeBefore}
+                result={report && report.succeeded > 0 ? { sizeAfter: report.outputBytes, reductionPct: saved } : null}
+              />
 
               {/* Progress */}
               {running && progress && (
                 <div className="card status-card" role="status" aria-live="polite">
                   <Loader2 size={20} className="spin" aria-hidden="true" />
                   <div className="status-card-copy">
-                    <b>{t('Compressing…')} {percent}%</b>
+                    <b>{progressTitle}</b>
                     <small>{t('{done} of {total} photos', { done: progress.done, total: progress.total })}</small>
-                    <div className="size-bar size-bar--spaced"><i style={{ width: `${percent}%` }} /></div>
+                    <div className={`size-bar size-bar--spaced${progress.done === 0 ? ' size-bar--busy' : ''}`}>
+                      <i style={{ width: `${percent}%` }} />
+                    </div>
                   </div>
                   <button type="button" className="btn btn-ghost btn-sm" id="photo-compress-cancel-btn" onClick={() => abortRef.current?.abort()}>
                     {t('Cancel')}
@@ -435,9 +445,7 @@ export function PhotoCompressPage() {
                     </span>
                   </div>
                   <p className="card-body photo-compress-total">
-                    <b>{formatBytes(report.originalBytes)} → {formatBytes(report.outputBytes)}</b>
-                    {' · '}
-                    <span>{saved > 0 ? t('{pct}% smaller', { pct: saved }) : t('No size saved')}</span>
+                    <small className="hint">{t('Saved to your Downloads folder')}</small>
                   </p>
                   <ul className="image-format-list">
                     {doneFiles.map((file) => (
