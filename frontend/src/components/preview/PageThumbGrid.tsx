@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import { Check } from 'lucide-react';
-import apiClient from '../../api/client';
+import { fetchPagePreview, isAbort, type PdfSource } from '../../api/pdfRender';
 import { t } from '../../i18n';
 
 /**
@@ -33,7 +32,7 @@ function limited<T>(task: () => Promise<T>): Promise<T> {
 }
 
 interface PageThumbProps {
-  file: File;
+  file: PdfSource;
   page: number;
   selected: boolean;
   interactive: boolean;
@@ -67,20 +66,12 @@ function PageThumb({ file, page, selected, interactive, dpi, onToggle }: PageThu
     void limited(async () => {
       if (controller.signal.aborted) return;
       try {
-        const form = new FormData();
-        form.append('file', file, file.name || 'preview.pdf');
-        form.append('page', String(page));
-        form.append('dpi', String(dpi));
-        form.append('quality_hint', 'low');
-        const response = await apiClient.post('/api/v1/preview/', form, {
-          responseType: 'blob',
-          signal: controller.signal,
-        });
+        const blob = await fetchPagePreview(file, { page, dpi, quality: 'low', signal: controller.signal });
         if (controller.signal.aborted) return;
-        created = URL.createObjectURL(new Blob([response.data], { type: 'image/png' }));
+        created = URL.createObjectURL(blob);
         setUrl(created);
       } catch (error) {
-        if (!axios.isCancel(error)) console.error('Failed to load page thumbnail', error);
+        if (!isAbort(error)) console.error('Failed to load page thumbnail', error);
       }
     });
     return () => {
@@ -109,7 +100,7 @@ function PageThumb({ file, page, selected, interactive, dpi, onToggle }: PageThu
 }
 
 export interface PageThumbGridProps {
-  file: File;
+  file: PdfSource;
   totalPages: number;
   selected: ReadonlySet<number>;
   /** When false the grid only displays the selection (it cannot be edited). */

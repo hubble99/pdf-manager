@@ -1,14 +1,7 @@
 import { NativeCoreError } from '../api/nativeCore';
 import { t } from '../i18n';
 
-/** File name without folders, for paths from either Windows or POSIX. */
-export function baseName(path: string): string {
-  return path.split(/[\\/]/).pop() ?? path;
-}
-
-export function stemOf(path: string): string {
-  return baseName(path).replace(/\.pdf$/i, '');
-}
+export { baseName, stemOf } from './paths';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

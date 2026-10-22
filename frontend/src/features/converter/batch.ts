@@ -1,36 +1,32 @@
 import { t } from '../../i18n';
+import { baseName, extensionOf } from '../../utils/paths';
+
 export type QuarterTurn = 0 | 90 | 180 | 270;
 
 export interface ConverterImage {
   id: string;
-  file: File;
+  /** Path of the picture on disk. */
+  path: string;
   rotation: QuarterTurn;
   flipH: boolean;
 }
 
-// Persist source data only. Preview URLs belong to the mounted view.
-export type ConverterInput = File | ConverterImage[] | null;
+// Persist source paths only. Preview URLs belong to the mounted view.
+// A string is the one PDF; an array is the image batch.
+export type ConverterInput = string | ConverterImage[] | null;
 export type ConverterKind = 'empty' | 'pdf' | 'images';
 
-const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff']);
-const IMAGE_MIME_TYPES = new Set([
-  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
-  'image/bmp', 'image/x-ms-bmp', 'image/tiff',
-]);
+export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff'];
 
 export function converterKind(input: ConverterInput): ConverterKind {
-  if (input instanceof File) return 'pdf';
+  if (typeof input === 'string') return 'pdf';
   return input?.length ? 'images' : 'empty';
 }
 
-export function classifyConverterFile(file: File): Exclude<ConverterKind, 'empty'> | null {
-  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-  const extensionKind = extension === 'pdf' ? 'pdf' : IMAGE_EXTENSIONS.has(extension) ? 'images' : null;
-  const mime = file.type.toLowerCase();
-  if (!mime || mime === 'application/octet-stream') return extensionKind;
-  const mimeKind = mime === 'application/pdf' ? 'pdf' : IMAGE_MIME_TYPES.has(mime) ? 'images' : null;
-  if (!mimeKind || (extensionKind && extensionKind !== mimeKind)) return null;
-  return mimeKind;
+export function classifyConverterPath(path: string): Exclude<ConverterKind, 'empty'> | null {
+  const extension = extensionOf(path);
+  if (extension === 'pdf') return 'pdf';
+  return IMAGE_EXTENSIONS.includes(extension) ? 'images' : null;
 }
 
 export interface BatchAddition {
@@ -45,15 +41,15 @@ function defaultCreateId(): string {
   return `image-${generatedId}`;
 }
 
-export function addConverterFiles(
+export function addConverterPaths(
   current: ConverterInput,
-  incoming: readonly File[],
+  incoming: readonly string[],
   createId: () => string = defaultCreateId,
 ): BatchAddition {
   const reject = (error: string): BatchAddition => ({ input: current, error });
   if (incoming.length === 0) return { input: current, error: null };
 
-  const kinds = incoming.map(classifyConverterFile);
+  const kinds = incoming.map(classifyConverterPath);
   if (kinds.some((kind) => kind === null)) {
     return reject(t('Use a PDF or JPG, JPEG, PNG, WEBP, BMP, or TIFF images. No files were added.'));
   }
@@ -76,8 +72,10 @@ export function addConverterFiles(
   return {
     input: [
       ...(Array.isArray(current) ? current : []),
-      ...incoming.map((file): ConverterImage => ({ id: createId(), file, rotation: 0, flipH: false })),
+      ...incoming.map((path): ConverterImage => ({ id: createId(), path, rotation: 0, flipH: false })),
     ],
     error: null,
   };
 }
+
+export { baseName };

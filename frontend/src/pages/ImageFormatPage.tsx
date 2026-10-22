@@ -28,12 +28,12 @@ import {
   convertErrorText,
   formatBytes,
   isJpegFormat,
-  isWebpPath,
   mergePaths,
 } from '../features/image-format/helpers';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
-import { chooseFolderDialog, isTauri, openFilePicker } from '../utils/tauriDialog';
+import { chooseFolderDialog, isTauri } from '../utils/tauriDialog';
+import { useNativePaths } from '../hooks/useNativePaths';
 import { t, tn } from '../i18n';
 
 const FORMAT_OPTIONS: { value: ImageTargetFormat; label: string }[] = [
@@ -42,7 +42,7 @@ const FORMAT_OPTIONS: { value: ImageTargetFormat; label: string }[] = [
   { value: 'jpeg', label: 'JPEG' },
 ];
 
-const WEBP_FILTER = [{ name: 'WEBP', extensions: ['webp', 'WEBP'] }];
+const WEBP_FILTER = { name: 'WEBP', extensions: ['webp'] };
 
 /**
  * WEBP to PNG, JPG or JPEG, run by the native Rust core.
@@ -58,12 +58,10 @@ export function ImageFormatPage() {
   const [format, setFormat] = useState<ImageTargetFormat>('png');
   const [quality, setQuality] = useState(DEFAULT_JPEG_QUALITY);
   const [outputDir, setOutputDir] = useState<string | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<ImageConvertReport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const runningRef = useRef(false);
 
   // Default output folder: Downloads, where every other tool saves too.
   useEffect(() => {
@@ -79,10 +77,7 @@ export function ImageFormatPage() {
   // Stop a running job when the user leaves the page.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const addPaths = useCallback((incoming: string[]) => {
-    if (runningRef.current) return;
-    const webp = incoming.filter(isWebpPath);
-    const rejected = incoming.length - webp.length;
+  const addPaths = useCallback((webp: string[], rejected: number) => {
     if (rejected > 0) {
       showToast({
         type: 'warning',
@@ -95,37 +90,13 @@ export function ImageFormatPage() {
     setReport(null);
   }, [showToast]);
 
-  // Tauri delivers dropped files with their paths; the HTML drop event does not.
-  useEffect(() => {
-    if (!desktop) return;
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    import('@tauri-apps/api/webview')
-      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
-        const { payload } = event;
-        if (payload.type === 'enter' || payload.type === 'over') setIsDragOver(true);
-        else if (payload.type === 'leave') setIsDragOver(false);
-        else if (payload.type === 'drop') {
-          setIsDragOver(false);
-          addPaths(payload.paths);
-        }
-      }))
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [desktop, addPaths]);
-
-  const pickFiles = async () => {
-    if (running) return;
-    const picked = await openFilePicker({ multiple: true, filters: WEBP_FILTER, title: t('Choose WEBP images') });
-    if (picked) addPaths(picked);
-  };
+  const { isDragOver, pick: pickFiles } = useNativePaths({
+    filter: WEBP_FILTER,
+    multiple: true,
+    pickerTitle: t('Choose WEBP images'),
+    disabled: running,
+    onPaths: addPaths,
+  });
 
   const pickFolder = async () => {
     if (running) return;
@@ -149,7 +120,6 @@ export function ImageFormatPage() {
     if (running || paths.length === 0 || !outputDir) return;
     const controller = new AbortController();
     abortRef.current = controller;
-    runningRef.current = true;
     setRunning(true);
     setReport(null);
     setProgress({ done: 0, total: paths.length });
@@ -196,7 +166,6 @@ export function ImageFormatPage() {
       }
     } finally {
       abortRef.current = null;
-      runningRef.current = false;
       setRunning(false);
       setProgress(null);
     }

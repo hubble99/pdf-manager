@@ -15,7 +15,8 @@ import { PageHeader } from '../components/ui';
 import { PDF_TO_WORD_BETA_NOTE } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
-import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
+import { openOutputFolder } from '../utils/tauriDialog';
+import { useNativePaths } from '../hooks/useNativePaths';
 import {
   convertPdfToWord,
   isCoreCancelled,
@@ -25,66 +26,32 @@ import {
 import { t, tn } from '../i18n';
 import { baseName, errorMessage, formatBytes, pageList, stemOf } from '../utils/pdfToWord';
 
+const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
+
 export function PdfToWordPage() {
   const { showToast } = useToast();
-  const desktop = isTauri();
   const [inputPath, setInputPath] = useState<string | null>(null);
   const [outputName, setOutputName] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<CoreProgress | null>(null);
   const [result, setResult] = useState<PdfToWordReport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const loadPath = useCallback((path: string) => {
-    if (!/\.pdf$/i.test(path)) {
-      showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
-      return;
-    }
     setInputPath(path);
     setOutputName(stemOf(path));
     setResult(null);
-  }, [showToast]);
+  }, []);
 
-  const pickFile = useCallback(async () => {
-    const picked = await openFilePicker({
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      title: t('Choose a PDF to convert'),
-    });
-    if (picked?.[0]) loadPath(picked[0]);
-  }, [loadPath]);
-
-  // The desktop window reports dropped files with their paths, which the
-  // native converter needs (a browser File has no path).
-  const runningRef = useRef(running);
-  useEffect(() => {
-    runningRef.current = running;
-  }, [running]);
-  useEffect(() => {
-    if (!desktop) return undefined;
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    void import('@tauri-apps/api/webview')
-      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
-        const payload = event.payload;
-        if (payload.type === 'over' || payload.type === 'enter') setIsDragOver(true);
-        else if (payload.type === 'leave') setIsDragOver(false);
-        else if (payload.type === 'drop') {
-          setIsDragOver(false);
-          const path = payload.paths[0];
-          if (path && !runningRef.current) loadPath(path);
-        }
-      }))
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [desktop, loadPath]);
+  const { desktop, isDragOver, pick: pickFile } = useNativePaths({
+    filter: PDF_FILTER,
+    pickerTitle: t('Choose a PDF to convert'),
+    disabled: running,
+    onPaths: (accepted, rejected) => {
+      if (accepted[0]) loadPath(accepted[0]);
+      else if (rejected > 0) showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
+    },
+  });
 
   useEffect(() => () => abortRef.current?.abort(), []);
 

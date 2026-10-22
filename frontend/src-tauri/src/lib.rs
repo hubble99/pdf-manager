@@ -4,8 +4,10 @@ use tauri::Manager;
 mod desktop_lifecycle;
 
 mod core_bridge;
+mod core_convert;
 mod core_pdf_compress;
 mod core_qr_barcode;
+mod core_pdf_render;
 
 struct DesktopLifecycleToken(String);
 
@@ -16,6 +18,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
     .manage(core_bridge::CoreState::default())
+    .manage(core_pdf_render::RenderState::default())
+    .manage(core_convert::ThumbState::default())
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
@@ -25,10 +29,15 @@ pub fn run() {
       core_bridge::core_reveal_path,
       core_bridge::core_file_sizes,
       core_bridge::core_job_cancel,
+      core_convert::core_pdf_to_image_start,
+      core_convert::core_image_to_pdf_start,
+      core_convert::core_image_thumbnail,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
       core_qr_barcode::core_qr_generate,
       core_qr_barcode::core_barcode_generate,
+      core_pdf_render::core_pdf_info,
+      core_pdf_render::core_pdf_render_page,
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Resized(size) = event {
@@ -100,6 +109,12 @@ pub fn run() {
       // Stop native core jobs at their next checkpoint.
       if let Some(core) = app_handle.try_state::<core_bridge::CoreState>() {
         core.runner.cancel_all();
+      }
+      if let Some(render) = app_handle.try_state::<core_pdf_render::RenderState>() {
+        render.service.shutdown();
+      }
+      if let Some(thumbs) = app_handle.try_state::<core_convert::ThumbState>() {
+        thumbs.service.shutdown();
       }
 
       // ── Graceful shutdown sequence ──────────────────────────────────────────

@@ -32,3 +32,4 @@ dokuwu-core = { path = "../../native/dokuwu-core" }
 [dev-dependencies]
 tauri = { version = "2.11.2", features = ["test"] }
 tempfile = "3"
+image = { version = "0.25", default-features = false, features = ["png"] }

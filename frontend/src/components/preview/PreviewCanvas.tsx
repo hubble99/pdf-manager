@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { FileX, Loader2 } from 'lucide-react';
-import axios from 'axios';
-import apiClient from '../../api/client';
+import { fetchPagePreview, isAbort, previewKey, type PdfSource } from '../../api/pdfRender';
 import { t } from '../../i18n';
 
 export interface PreviewCanvasProps {
-  file?: File;
+  file?: PdfSource;
   pageNumber?: number; // 1-indexed
   imageUrl?: string; // object URL
   imageRotation?: 0 | 90 | 180 | 270;
@@ -72,7 +71,7 @@ export function PreviewCanvas({
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const loadedPdfPreviewRef = useRef<LoadedPdfPreview | null>(null);
-  const requestKey = file ? `${file.name}:${file.size}:${file.lastModified}:${pageNumber}` : null;
+  const requestKey = file ? previewKey(file, pageNumber) : null;
   const displayUrl = imageUrl || (file ? loadedPdfPreview?.url || url : null);
   const displayKey = imageUrl || loadedPdfPreview?.sourceKey || (file ? requestKey : null) || 'none';
   const displayLoading = Boolean(file) && !imageUrl && (!loadedPdfPreview || loading || loadedPdfPreview.sourceKey !== requestKey);
@@ -102,25 +101,21 @@ export function PreviewCanvas({
       let currentUrl: string | null = null;
       let isCurrent = true;
       
-      const isLargeFile = file.size > 50 * 1024 * 1024; // >50MB
-      const qualityHint = isLargeFile ? 'low' : 'auto';
+      // A big upload is slow, so large files get the lightest preview; a path
+      // is read from disk and costs nothing to send.
+      const isLargeFile = typeof file !== 'string' && file.size > 50 * 1024 * 1024; // >50MB
+      const quality = isLargeFile ? 'low' : 'auto';
 
       async function loadPdfPreview() {
         setLoading(true);
         setError(false);
         try {
-          const form = new FormData();
-          form.append('file', file as Blob, file!.name || 'preview.pdf');
-          form.append('page', String(pageNumber));
-          form.append('dpi', '72'); // ≈ 600px width for A4
-          form.append('quality_hint', qualityHint);
-
-          const res = await apiClient.post('/api/v1/preview/', form, {
-            responseType: 'blob',
-            signal: abortController.signal
+          const blob = await fetchPagePreview(file as PdfSource, {
+            page: pageNumber,
+            dpi: 72, // ≈ 600px width for A4
+            quality,
+            signal: abortController.signal,
           });
-          
-          const blob = new Blob([res.data], { type: 'image/png' });
           currentUrl = URL.createObjectURL(blob);
           if (!isCurrent || abortController.signal.aborted) {
             URL.revokeObjectURL(currentUrl);
@@ -144,7 +139,7 @@ export function PreviewCanvas({
             URL.revokeObjectURL(previousPreview.url);
           }
         } catch (err: unknown) {
-          if (!isCurrent || abortController.signal.aborted || axios.isCancel(err)) return;
+          if (!isCurrent || abortController.signal.aborted || isAbort(err)) return;
           console.error('Failed to load preview', err);
           setError(true);
         } finally {
@@ -230,7 +225,7 @@ export function PreviewCanvas({
             color: 'var(--on-surface-variant)'
           }}
         >
-          {file && file.size > 50 * 1024 * 1024 ? (
+          {file && typeof file !== 'string' && file.size > 50 * 1024 * 1024 ? (
             <div style={{ textAlign: 'center' }}>
               <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
               <p style={{ fontWeight: 500 }}>{t('Large file detected')}</p>

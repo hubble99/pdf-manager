@@ -13,7 +13,7 @@ name = "dokuwu_core"
 ab_glyph = "0.2"
 crc32fast = "1"
 flate2 = "1"
-image = { version = "0.25", default-features = false, features = ["webp", "png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["webp", "png", "jpeg", "bmp", "tiff"] }
 jpeg-encoder = "0.6"
 # MuPDF reads the PDF (text with fonts and positions, images, vector lines) and
 # opens it lazily for Compress PDF. AGPL-3.0, accepted for Dokuwu. base14-fonts
@@ -26,9 +26,11 @@ serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 thiserror = "2"
+webp = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 # Reads generated QR codes and barcodes back, to prove they scan.
 rxing = { version = "0.9", default-features = false, features = ["decoders", "encoding_rs", "oned", "qrcode"] }
 serde_json = "1"
 tempfile = "3"
+zip = { version = "9.0.5", default-features = false }

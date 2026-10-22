@@ -5003,6 +5003,12 @@ select.input {
   height: 90cqw;
 }
 
+/* Shown while the native core decodes the preview, or if it cannot. */
+.conv-thumb-empty {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 /* Merge Folder before a folder is chosen: the empty states sit in the middle of their cards. */
 .merge-folder-grid--initial .merge-sources {
   display: flex;

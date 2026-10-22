@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  addConverterFiles, classifyConverterFile, converterKind,
+  addConverterPaths, classifyConverterPath, converterKind,
   type ConverterImage, type ConverterInput,
 } from '../features/converter/batch';
 import {
@@ -8,42 +8,48 @@ import {
   type PageSelection,
 } from '../features/converter/pageSelection';
 
-const pdf = (name = 'document.pdf') => new File(['pdf'], name, { type: 'application/pdf' });
-const image = (name = 'image.png', type = 'image/png') => new File(['image'], name, { type });
-const entry = (): ConverterImage => ({ id: 'existing', file: image(), rotation: 90, flipH: true });
+const pdf = (name = 'document.pdf') => `C:\\Docs\\${name}`;
+const image = (name = 'image.png') => `C:\\Pics\\${name}`;
+const entry = (): ConverterImage => ({ id: 'existing', path: image(), rotation: 90, flipH: true });
 const selected = (draft: string): PageSelection => ({ mode: 'selected', draft });
 
 describe('converter batch validation', () => {
   it('accepts one PDF without a manual direction', () => {
-    const file = pdf();
-    const result = addConverterFiles(null, [file]);
-    expect(result).toEqual({ input: file, error: null });
+    const path = pdf();
+    const result = addConverterPaths(null, [path]);
+    expect(result).toEqual({ input: path, error: null });
     expect(converterKind(result.input)).toBe('pdf');
   });
 
   it('accepts mixed image formats in order, preserving existing transforms', () => {
     const existing = entry();
-    const files = [image('one.jpg', 'image/jpeg'), image('two.jpeg', 'image/jpeg'), image()];
+    const paths = [image('one.jpg'), image('two.jpeg'), image()];
     let id = 0;
-    const result = addConverterFiles([existing], files, () => `new-${++id}`);
+    const result = addConverterPaths([existing], paths, () => `new-${++id}`);
     expect(result.error).toBeNull();
     const entries = result.input as ConverterImage[];
     expect(entries[0]).toBe(existing);
-    expect(entries.slice(1).map((item) => item.file)).toEqual(files);
+    expect(entries.slice(1).map((item) => item.path)).toEqual(paths);
     expect(entries.slice(1).every((item) => item.rotation === 0 && !item.flipH)).toBe(true);
     expect(converterKind(entries)).toBe('images');
   });
 
-  it.each(['JPG', 'JPEG', 'PNG', 'WEBP', 'BMP', 'TIF', 'TIFF'])('accepts %s with empty MIME metadata', (extension) => {
-    expect(classifyConverterFile(image(`photo.${extension}`, ''))).toBe('images');
+  it('lets the same picture be added twice, one page each', () => {
+    const result = addConverterPaths([entry()], [image()], () => 'again');
+    expect((result.input as ConverterImage[]).map((item) => item.path)).toEqual([image(), image()]);
   });
 
-  it('accepts uppercase PDF extensions with empty MIME metadata', () => {
-    expect(classifyConverterFile(new File(['pdf'], 'REPORT.PDF'))).toBe('pdf');
+  it.each(['JPG', 'JPEG', 'PNG', 'WEBP', 'BMP', 'TIF', 'TIFF', 'jpg', 'tiff'])('accepts the %s extension in any case', (extension) => {
+    expect(classifyConverterPath(image(`photo.${extension}`))).toBe('images');
   });
 
-  it.each(['image/webp', 'image/bmp', 'image/tiff'])('retains existing %s support', (mime) => {
-    expect(classifyConverterFile(image('photo', mime))).toBe('images');
+  it('accepts uppercase PDF extensions and POSIX paths', () => {
+    expect(classifyConverterPath('C:\\Docs\\REPORT.PDF')).toBe('pdf');
+    expect(classifyConverterPath('/home/a/report.pdf')).toBe('pdf');
+  });
+
+  it.each(['notes.txt', 'archive.zip', 'photo', 'photo.gif'])('does not know %s', (name) => {
+    expect(classifyConverterPath(`C:\\Pics\\${name}`)).toBeNull();
   });
 
   it.each([
@@ -52,11 +58,10 @@ describe('converter batch validation', () => {
     ['second PDF', pdf(), [pdf('other.pdf')]],
     ['image added to PDF', pdf(), [image()]],
     ['PDF added to images', [entry()], [pdf()]],
-    ['unsupported file', [entry()], [image(), new File(['text'], 'notes.txt', { type: 'text/plain' })]],
-    ['conflicting MIME', null, [new File(['image'], 'wrong.pdf', { type: 'image/png' })]],
-  ] as [string, ConverterInput, File[]][])('rejects %s atomically', (_name, current, incoming) => {
+    ['unsupported file', [entry()], [image(), 'C:\\Docs\\notes.txt']],
+  ] as [string, ConverterInput, string[]][])('rejects %s atomically', (_name, current, incoming) => {
     const createId = vi.fn();
-    const result = addConverterFiles(current, incoming, createId);
+    const result = addConverterPaths(current, incoming, createId);
     expect(result.error).toBeTruthy();
     expect(result.input).toBe(current);
     expect(createId).not.toHaveBeenCalled();
@@ -64,14 +69,14 @@ describe('converter batch validation', () => {
 
   it('does nothing when the picker is cancelled', () => {
     const current = [entry()];
-    expect(addConverterFiles(current, []).input).toBe(current);
-    expect(addConverterFiles(current, []).error).toBeNull();
+    expect(addConverterPaths(current, []).input).toBe(current);
+    expect(addConverterPaths(current, []).error).toBeNull();
   });
 
   it('allows a different category after the batch is cleared', () => {
     expect(converterKind(null)).toBe('empty');
     expect(converterKind([])).toBe('empty');
-    expect(addConverterFiles([], [pdf()]).error).toBeNull();
+    expect(addConverterPaths([], [pdf()]).error).toBeNull();
   });
 });
 

@@ -29,16 +29,16 @@ import {
   LEVELS,
   MAX_SIDE_CHOICES,
   compressErrorText,
-  isPhotoPath,
   savedPercent,
   type CompressLevel,
 } from '../features/photo-compress/helpers';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
-import { isTauri, openFilePicker } from '../utils/tauriDialog';
+import { isTauri } from '../utils/tauriDialog';
+import { useNativePaths } from '../hooks/useNativePaths';
 import { t, tn } from '../i18n';
 
-const PHOTO_FILTER = [{ name: 'JPEG, PNG', extensions: ['jpg', 'jpeg', 'jfif', 'png', 'JPG', 'JPEG', 'PNG'] }];
+const PHOTO_FILTER = { name: 'JPEG, PNG', extensions: ['jpg', 'jpeg', 'jfif', 'png'] };
 
 /**
  * Compress JPEG and PNG photos, run by the native Rust core.
@@ -59,12 +59,10 @@ export function PhotoCompressPage() {
   // Results always go to Downloads, like the other tools; there is no folder choice.
   const [outputDir, setOutputDir] = useState<string | null>(null);
   const [sizes, setSizes] = useState<Record<string, number>>({});
-  const [isDragOver, setIsDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<PhotoCompressReport | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const runningRef = useRef(false);
 
   // Default output folder: Downloads, where every other tool saves too.
   useEffect(() => {
@@ -99,10 +97,7 @@ export function PhotoCompressPage() {
   // Stop a running job when the user leaves the page.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const addPaths = useCallback((incoming: string[]) => {
-    if (runningRef.current) return;
-    const photos = incoming.filter(isPhotoPath);
-    const rejected = incoming.length - photos.length;
+  const addPaths = useCallback((photos: string[], rejected: number) => {
     if (rejected > 0) {
       showToast({
         type: 'warning',
@@ -115,37 +110,13 @@ export function PhotoCompressPage() {
     setReport(null);
   }, [showToast]);
 
-  // Tauri delivers dropped files with their paths; the HTML drop event does not.
-  useEffect(() => {
-    if (!desktop) return;
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    import('@tauri-apps/api/webview')
-      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
-        const { payload } = event;
-        if (payload.type === 'enter' || payload.type === 'over') setIsDragOver(true);
-        else if (payload.type === 'leave') setIsDragOver(false);
-        else if (payload.type === 'drop') {
-          setIsDragOver(false);
-          addPaths(payload.paths);
-        }
-      }))
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [desktop, addPaths]);
-
-  const pickFiles = async () => {
-    if (running) return;
-    const picked = await openFilePicker({ multiple: true, filters: PHOTO_FILTER, title: t('Choose photos') });
-    if (picked) addPaths(picked);
-  };
+  const { isDragOver, pick: pickFiles } = useNativePaths({
+    filter: PHOTO_FILTER,
+    multiple: true,
+    pickerTitle: t('Choose photos'),
+    disabled: running,
+    onPaths: addPaths,
+  });
 
   const removePath = (path: string) => {
     if (running) return;
@@ -171,7 +142,6 @@ export function PhotoCompressPage() {
     if (running || paths.length === 0 || !outputDir) return;
     const controller = new AbortController();
     abortRef.current = controller;
-    runningRef.current = true;
     setRunning(true);
     setReport(null);
     setProgress({ done: 0, total: paths.length });
@@ -218,7 +188,6 @@ export function PhotoCompressPage() {
       }
     } finally {
       abortRef.current = null;
-      runningRef.current = false;
       setRunning(false);
       setProgress(null);
     }

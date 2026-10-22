@@ -14,7 +14,8 @@ import { Filename } from '../components/Filename';
 import { PageHeader, RangeField, SegmentedControl, SizeCompareCard } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
-import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
+import { openOutputFolder } from '../utils/tauriDialog';
+import { useNativePaths } from '../hooks/useNativePaths';
 import { NativeCoreError, isCoreCancelled, type CoreProgress } from '../api/nativeCore';
 import {
   MAX_COMPRESS_QUALITY,
@@ -43,16 +44,16 @@ function qualityColor(q: number): string {
   return 'var(--error)';
 }
 
+const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function CompressPage() {
   const { showToast } = useToast();
-  const desktop = isTauri();
   const [inputPath, setInputPath] = useState<string | null>(null);
   const [probe, setProbe] = useState<PdfProbe | null>(null);
   const [quality, setQuality] = useState(70);
   const [outputName, setOutputName] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<CoreProgress | null>(null);
   const [result, setResult] = useState<PdfCompressReport | null>(null);
@@ -60,10 +61,6 @@ export function CompressPage() {
 
   // ── File handling ───────────────────────────────────────────────────────────
   const loadPath = useCallback(async (path: string) => {
-    if (!/\.pdf$/i.test(path)) {
-      showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
-      return;
-    }
     try {
       const info = await probePdf(path);
       if (info.encrypted) {
@@ -79,45 +76,15 @@ export function CompressPage() {
     }
   }, [showToast]);
 
-  const pickFile = useCallback(async () => {
-    const picked = await openFilePicker({
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-      title: t('Choose a PDF to compress'),
-    });
-    if (picked?.[0]) void loadPath(picked[0]);
-  }, [loadPath]);
-
-  // The desktop window reports dropped files with their paths, which the
-  // native engine needs (a browser File has no path).
-  const runningRef = useRef(running);
-  useEffect(() => {
-    runningRef.current = running;
-  }, [running]);
-  useEffect(() => {
-    if (!desktop) return undefined;
-    let unlisten: (() => void) | undefined;
-    let disposed = false;
-    void import('@tauri-apps/api/webview')
-      .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
-        const payload = event.payload;
-        if (payload.type === 'over' || payload.type === 'enter') setIsDragOver(true);
-        else if (payload.type === 'leave') setIsDragOver(false);
-        else if (payload.type === 'drop') {
-          setIsDragOver(false);
-          const path = payload.paths[0];
-          if (path && !runningRef.current) void loadPath(path);
-        }
-      }))
-      .then((fn) => {
-        if (disposed) fn();
-        else unlisten = fn;
-      })
-      .catch(() => undefined);
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, [desktop, loadPath]);
+  const { desktop, isDragOver, pick: pickFile } = useNativePaths({
+    filter: PDF_FILTER,
+    pickerTitle: t('Choose a PDF to compress'),
+    disabled: running,
+    onPaths: (accepted, rejected) => {
+      if (accepted[0]) void loadPath(accepted[0]);
+      else if (rejected > 0) showToast({ type: 'error', title: t('Invalid file'), message: t('Only PDF files are accepted.') });
+    },
+  });
 
   useEffect(() => () => abortRef.current?.abort(), []);
 

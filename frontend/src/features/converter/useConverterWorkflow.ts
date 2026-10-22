@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import apiClient from '../../api/client';
 import { useFeatureFile } from '../../hooks/useFeatureFile';
 import { useToast } from '../../hooks/useToast';
 import { addHistoryEntry } from '../../utils/historyStore';
-import { getFilenameFromHeaders, triggerBlobDownload } from '../../utils/downloadHelper';
-import { openOutputFolder } from '../../utils/tauriDialog';
-import type { PdfInfoResult } from '../../types';
+import { baseName, stemOf } from '../../utils/paths';
+import { NativeCoreError, fileSizes, isCoreCancelled, revealPath, type CoreProgress } from '../../api/nativeCore';
+import { getPdfInfo, type PdfInfo } from '../../api/pdfRender';
 import {
-  addConverterFiles, classifyConverterFile, converterKind,
+  exportPdfImages, imagesToPdf, type ImageToPdfReport, type PdfImageFormat, type PdfToImageReport,
+} from '../../api/pdfImage';
+import {
+  addConverterPaths, classifyConverterPath, converterKind,
   type ConverterImage, type ConverterInput, type ConverterKind,
 } from './batch';
 import { formatBytes, nextRotation } from './options';
@@ -18,24 +20,32 @@ import {
 import { t, tn } from '../../i18n';
 
 export interface ConverterResult {
+  /** Where the file was saved. */
+  outputPath: string;
   filename: string;
   detail: string;
   isZip: boolean;
 }
 
-export type PdfInfoState = 'idle' | 'loading' | 'ready' | 'error';
+export type PdfInfoState = 'idle' | 'loading' | 'ready' | 'protected' | 'error';
 
 export interface ConverterWorkflow {
   kind: ConverterKind;
-  pdfFile: File | null;
+  /** Path of the loaded PDF. */
+  pdfPath: string | null;
   images: ConverterImage[];
+  /** Size in bytes of each image by id; `null` when unreadable, missing while unknown. */
+  imageSizes: Record<string, number | null>;
 
   batchError: string | null;
   error: string | null;
+  /** Images the last PDF could not include. */
+  skippedNotice: string | null;
   result: ConverterResult | null;
   isConverting: boolean;
+  progress: CoreProgress | null;
 
-  pdfInfo: PdfInfoResult | null;
+  pdfInfo: PdfInfo | null;
   pdfInfoState: PdfInfoState;
   selection: ResolvedSelection;
   selectionMode: 'all' | 'selected';
@@ -48,18 +58,13 @@ export interface ConverterWorkflow {
   pageSize: string;
   imageOutputName: string;
 
-  previewPage: number;
-  activeImageId: string | null;
-  activeImage: ConverterImage | null;
-  zoom: number;
-
-  accept: string;
   /** `expected` is the tab the files were added on; a mismatch is reported, not guessed. */
-  addFiles: (files: File[], expected?: 'pdf' | 'images') => void;
-  replaceFiles: (files: File[]) => void;
+  addPaths: (paths: string[], expected?: 'pdf' | 'images') => void;
+  replacePaths: (paths: string[]) => void;
   clear: () => void;
   dismissError: () => void;
   dismissBatchError: () => void;
+  reportBatchError: (message: string) => void;
   setSelectionMode: (mode: 'all' | 'selected') => void;
   setSelectionDraft: (draft: string) => void;
   togglePageSelection: (page: number) => void;
@@ -68,23 +73,40 @@ export interface ConverterWorkflow {
   setPdfOutputName: (name: string) => void;
   setPageSize: (size: string) => void;
   setImageOutputName: (name: string) => void;
-  setPreviewPage: (page: number) => void;
-  setActiveImageId: (id: string) => void;
-  setZoom: (zoom: number) => void;
   rotateImage: (id: string) => void;
   flipImage: (id: string) => void;
-  moveImage: (id: string, direction: 'up' | 'down') => void;
   reorderImages: (from: number, to: number) => void;
   removeImage: (id: string) => void;
   convert: () => Promise<void>;
+  cancel: () => void;
 }
 
-const CONVERTER_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff';
+export function converterErrorMessage(err: unknown): string {
+  if (err instanceof NativeCoreError) {
+    switch (err.code) {
+      case 'password_required':
+        return t('This PDF is protected. Remove the protection first, then export its pages.');
+      case 'not_found':
+        return t('A file could not be found. It may have been moved or renamed.');
+      case 'invalid_input':
+        return err.message.includes('none of the provided images')
+          ? t('None of the images could be read. Check that they are valid pictures.')
+          : t('This file does not look like a valid PDF.');
+      case 'io':
+        return t('The result could not be saved. Check that the Downloads folder is writable and has free space.');
+      case 'insufficient_memory':
+        return t('The computer is low on memory. Close other programs and try again.');
+      default:
+        return err.message;
+    }
+  }
+  return err instanceof Error ? err.message : t('Unknown error');
+}
 
 /**
- * Owns converter batch transitions, explicit page selection, request ownership,
- * and conversion submission. Preview object URLs are owned by the components
- * that display them, so retained source files survive navigation.
+ * Owns converter batch transitions, explicit page selection, job ownership,
+ * and conversion submission. Files are paths on disk; the native core reads
+ * them and saves the result in the Downloads folder.
  */
 export function useConverterWorkflow(): ConverterWorkflow {
   const { showToast } = useToast();
@@ -93,10 +115,12 @@ export function useConverterWorkflow(): ConverterWorkflow {
 
   const [batchError, setBatchError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [skippedNotice, setSkippedNotice] = useState<string | null>(null);
   const [result, setResult] = useState<ConverterResult | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [progress, setProgress] = useState<CoreProgress | null>(null);
 
-  const [pdfInfo, setPdfInfo] = useState<PdfInfoResult | null>(null);
+  const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
   const [pdfInfoFailed, setPdfInfoFailed] = useState(false);
   const [pageSelection, dispatch] = useReducer(pageSelectionReducer, undefined, initialPageSelection);
 
@@ -105,110 +129,138 @@ export function useConverterWorkflow(): ConverterWorkflow {
   const [pdfOutputName, setPdfOutputNameState] = useState('');
   const [pageSize, setPageSizeState] = useState('a4');
   const [imageOutputName, setImageOutputNameState] = useState('output.pdf');
-
-  const [previewPage, setPreviewPage] = useState(1);
-  const [activeImageId, setActiveImageId] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1.0);
+  const [imageSizes, setImageSizes] = useState<Record<string, number | null>>({});
 
   const kind = converterKind(input);
-  const pdfFile = input instanceof File ? input : null;
+  const pdfPath = typeof input === 'string' ? input : null;
   const images = useMemo(() => (Array.isArray(input) ? input : []), [input]);
-  const activeImage = images.find((entry) => entry.id === activeImageId) ?? images[0] ?? null;
-  const totalPages = pdfInfo?.total_pages ?? 0;
+  const totalPages = pdfInfo?.pages ?? 0;
   const selection = resolvePageSelection(pageSelection, totalPages);
-  const pdfInfoState: PdfInfoState = !pdfFile ? 'idle' : pdfInfo ? 'ready' : pdfInfoFailed ? 'error' : 'loading';
+  const pdfInfoState: PdfInfoState = !pdfPath
+    ? 'idle'
+    : pdfInfo
+      ? (pdfInfo.encrypted ? 'protected' : 'ready')
+      : pdfInfoFailed ? 'error' : 'loading';
 
   const generationRef = useRef(0);
   const convertingRef = useRef(false);
   const mountedRef = useRef(true);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
   }, []);
 
   // Read the page count for the active PDF. Results are applied only while the
   // request still owns the current document.
   useEffect(() => {
-    if (!pdfFile) return;
+    if (!pdfPath) return;
     const generation = ++generationRef.current;
     let cancelled = false;
-    const form = new FormData();
-    form.append('file', pdfFile);
-    apiClient
-      .post<{ status: string; data: PdfInfoResult }>('/api/v1/pdf-info/', form)
-      .then((response) => {
+    getPdfInfo(pdfPath)
+      .then((info) => {
         if (cancelled || generation !== generationRef.current || !mountedRef.current) return;
-        setPdfInfo(response.data.data);
+        setPdfInfo(info);
       })
       .catch(() => {
         if (cancelled || generation !== generationRef.current || !mountedRef.current) return;
         setPdfInfoFailed(true);
       });
     return () => { cancelled = true; };
-  }, [pdfFile]);
+  }, [pdfPath]);
 
-  const invalidateResult = useCallback(() => setResult(null), []);
+  // Sizes of newly added images, for the cards.
+  useEffect(() => {
+    const unknown = images.filter((entry) => !(entry.id in imageSizes));
+    if (unknown.length === 0) return;
+    let cancelled = false;
+    fileSizes(unknown.map((entry) => entry.path))
+      .then((sizes) => {
+        if (cancelled || !mountedRef.current) return;
+        setImageSizes((previous) => {
+          const next = { ...previous };
+          unknown.forEach((entry, index) => { next[entry.id] = sizes[index] ?? null; });
+          return next;
+        });
+      })
+      .catch(() => {
+        if (cancelled || !mountedRef.current) return;
+        setImageSizes((previous) => {
+          const next = { ...previous };
+          unknown.forEach((entry) => { next[entry.id] = null; });
+          return next;
+        });
+      });
+    return () => { cancelled = true; };
+  }, [images, imageSizes]);
+
+  const invalidateResult = useCallback(() => { setResult(null); setSkippedNotice(null); }, []);
 
   /** Document-specific state is reset here, not in the fetch effect. */
-  const startNewDocument = useCallback((document: File) => {
+  const startNewDocument = useCallback((document: string) => {
     dispatch({ type: 'reset' });
     setPdfInfo(null);
     setPdfInfoFailed(false);
     setResult(null);
+    setSkippedNotice(null);
     setError(null);
-    setPreviewPage(1);
-    setPdfOutputNameState(document.name.replace(/\.pdf$/i, ''));
+    setPdfOutputNameState(stemOf(document));
   }, []);
 
   const commitInput = useCallback((next: ConverterInput) => {
-    if (next instanceof File) startNewDocument(next);
+    if (typeof next === 'string') startNewDocument(next);
     setFileData(next);
     setBatchError(null);
     setError(null);
     setResult(null);
+    setSkippedNotice(null);
   }, [setFileData, startNewDocument]);
 
-  const addFiles = useCallback((incoming: File[], expected?: 'pdf' | 'images') => {
+  const reportBatchError = useCallback((message: string) => {
+    setBatchError(message);
+    showToast({ type: 'error', title: t('Files not added'), message });
+  }, [showToast]);
+
+  const addPaths = useCallback((incoming: string[], expected?: 'pdf' | 'images') => {
     if (convertingRef.current) return;
     setBatchError(null);
     if (expected && incoming.length > 0) {
-      const wrongTab = incoming.every((file) => {
-        const detected = classifyConverterFile(file);
+      const wrongTab = incoming.every((path) => {
+        const detected = classifyConverterPath(path);
         return detected !== null && detected !== expected;
       });
       if (wrongTab) {
-        const message = expected === 'pdf'
+        reportBatchError(expected === 'pdf'
           ? t('This tab takes one PDF. To combine images into a PDF, use the Images to PDF tab.')
-          : t('This tab takes images. To export PDF pages as images, use the PDF to Images tab.');
-        setBatchError(message);
-        showToast({ type: 'error', title: t('Files not added'), message });
+          : t('This tab takes images. To export PDF pages as images, use the PDF to Images tab.'));
         return;
       }
     }
-    const addition = addConverterFiles(input, incoming);
+    const addition = addConverterPaths(input, incoming);
     if (addition.error) {
-      setBatchError(addition.error);
-      showToast({ type: 'error', title: t('Files not added'), message: addition.error });
+      reportBatchError(addition.error);
       return;
     }
     if (addition.input === input) return;
     commitInput(addition.input);
-  }, [commitInput, input, showToast]);
+  }, [commitInput, input, reportBatchError]);
 
-  const replaceFiles = useCallback((incoming: File[]) => {
+  const replacePaths = useCallback((incoming: string[]) => {
     if (convertingRef.current) return;
     setBatchError(null);
     // Replace is an explicit user action, so validation runs against an empty batch.
-    const addition = addConverterFiles(null, incoming);
+    const addition = addConverterPaths(null, incoming);
     if (addition.error) {
-      setBatchError(addition.error);
-      showToast({ type: 'error', title: t('Files not added'), message: addition.error });
+      reportBatchError(addition.error);
       return;
     }
     if (addition.input === null) return;
     commitInput(addition.input);
-  }, [commitInput, showToast]);
+  }, [commitInput, reportBatchError]);
 
   const clear = useCallback(() => {
     generationRef.current += 1;
@@ -216,19 +268,20 @@ export function useConverterWorkflow(): ConverterWorkflow {
     setBatchError(null);
     setError(null);
     setResult(null);
+    setSkippedNotice(null);
     setPdfInfo(null);
     setPdfInfoFailed(false);
+    setImageSizes({});
     dispatch({ type: 'reset' });
-    setActiveImageId(null);
-    setPreviewPage(1);
   }, [clearFileData]);
 
   const mutateImages = useCallback((updater: (entries: ConverterImage[]) => ConverterImage[]) => {
     if (convertingRef.current) return;
-    setFileData((previous) => updater(Array.isArray(previous) ? previous : []));
+    setFileData((previous) => updater(Array.isArray(previous) ? previous as ConverterImage[] : []));
     setBatchError(null);
     setError(null);
     setResult(null);
+    setSkippedNotice(null);
   }, [setFileData]);
 
   const setSelectionMode = useCallback((mode: 'all' | 'selected') => {
@@ -259,17 +312,6 @@ export function useConverterWorkflow(): ConverterWorkflow {
     )));
   }, [mutateImages]);
 
-  const moveImage = useCallback((id: string, direction: 'up' | 'down') => {
-    mutateImages((entries) => {
-      const index = entries.findIndex((entry) => entry.id === id);
-      const swapIndex = direction === 'up' ? index - 1 : index + 1;
-      if (index < 0 || swapIndex < 0 || swapIndex >= entries.length) return entries;
-      const next = [...entries];
-      [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-      return next;
-    });
-  }, [mutateImages]);
-
   const reorderImages = useCallback((from: number, to: number) => {
     mutateImages((entries) => {
       if (from < 0 || to < 0 || from >= entries.length || to >= entries.length || from === to) return entries;
@@ -293,124 +335,130 @@ export function useConverterWorkflow(): ConverterWorkflow {
   const pdfBlockReason = useMemo(() => {
     if (kind !== 'pdf') return t('Add a PDF to export images.');
     if (pdfInfoState === 'loading') return t('Reading the PDF page count…');
+    if (pdfInfoState === 'protected') return t('This PDF is protected. Remove the protection first, then export its pages.');
     if (pdfInfoState === 'error') return t('The PDF page count could not be read. Remove and add the PDF again.');
     if (!selection.valid) return selection.error;
     return null;
   }, [kind, pdfInfoState, selection]);
 
+  const cancel = useCallback(() => { abortRef.current?.abort(); }, []);
+
+  const finish = useCallback((cancelled: boolean) => {
+    abortRef.current = null;
+    convertingRef.current = false;
+    if (!mountedRef.current) return;
+    setIsConverting(false);
+    setProgress(null);
+    if (cancelled) {
+      showToast({ type: 'info', title: t('Conversion cancelled'), message: t('Nothing was saved.') });
+    }
+  }, [showToast]);
+
   const convert = useCallback(async () => {
     if (convertingRef.current) return;
+    const isPdf = kind === 'pdf';
+    if (isPdf && (!pdfPath || pdfInfoState !== 'ready' || !selection.valid || selection.pages.size === 0)) return;
+    if (!isPdf && (kind !== 'images' || images.length === 0)) return;
 
-    if (kind === 'pdf') {
-      if (!pdfFile || pdfInfoState !== 'ready' || !selection.valid || selection.pages.size === 0) return;
-      convertingRef.current = true;
-      setIsConverting(true);
-      setError(null);
-      setResult(null);
-      const generation = generationRef.current;
-      const isCurrent = () => generation === generationRef.current && mountedRef.current;
-      try {
-        const formData = new FormData();
-        formData.append('file', pdfFile);
-        formData.append('page_ranges', serializePageSelection(pageSelection, totalPages));
-        formData.append('format', format);
-        formData.append('dpi', dpi.toString());
-        formData.append('output_filename', pdfOutputName || pdfFile.name.replace(/\.pdf$/i, ''));
-        const response = await apiClient.post('/api/v1/pdf-to-image/', formData, { responseType: 'blob' });
+    convertingRef.current = true;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsConverting(true);
+    setError(null);
+    setResult(null);
+    setSkippedNotice(null);
+    setProgress(null);
+    const generation = generationRef.current;
+    const isCurrent = () => generation === generationRef.current && mountedRef.current;
+    const jobOptions = { signal: controller.signal, onProgress: (p: CoreProgress) => { if (isCurrent()) setProgress(p); } };
+    let cancelled = false;
+    const openFolder = (path: string) => ({ label: t('Show in folder'), onClick: () => { void revealPath(path).catch(() => undefined); } });
+
+    try {
+      if (isPdf && pdfPath) {
+        const report: PdfToImageReport = await exportPdfImages(pdfPath, {
+          format: format.toLowerCase() as PdfImageFormat,
+          dpi,
+          pageRanges: serializePageSelection(pageSelection, totalPages),
+          outputName: pdfOutputName || stemOf(pdfPath),
+        }, jobOptions);
         if (!isCurrent()) return;
-        const pagesExported = parseInt(response.headers['x-pages-exported'] || '1', 10);
-        const resFormat = response.headers['x-format'] || format;
-        const resDpi = parseInt(response.headers['x-dpi'] || dpi.toString(), 10);
-        const isZip = pagesExported > 1;
-        const blob = new Blob([response.data], { type: isZip ? 'application/zip' : `image/${resFormat.toLowerCase()}` });
-        const filename = getFilenameFromHeaders(response.headers, pdfOutputName || `exported.${isZip ? 'zip' : resFormat.toLowerCase()}`);
-        triggerBlobDownload(blob, filename);
+        const filename = baseName(report.outputPath);
+        const reduced = report.reducedPages.length > 0
+          ? ` · ${tn(report.reducedPages.length, '{n} large page used a lower DPI', '{n} large pages used a lower DPI')}`
+          : '';
         setResult({
+          outputPath: report.outputPath,
           filename,
-          isZip,
-          detail: `${tn(pagesExported, '{n} page', '{n} pages')} · ${resFormat} · ${resDpi} DPI${isZip ? t(' (ZIP archive)') : ''}`,
+          isZip: report.isZip,
+          detail: `${tn(report.pages, '{n} page', '{n} pages')} · ${format} · ${dpi} DPI${report.isZip ? t(' (ZIP archive)') : ''} · ${formatBytes(report.outputSizeBytes)}${reduced}`,
         });
-        addHistoryEntry({ filename, action: 'PDF to Image', size: 0 });
+        addHistoryEntry({ filename, action: 'PDF to Image', size: report.outputSizeBytes });
         showToast({
           type: 'success',
           title: t('Conversion complete'),
-          message: tn(pagesExported, '{n} page exported to {format}', '{n} pages exported to {format}', { format: resFormat }),
-          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
+          message: tn(report.pages, '{n} page exported to {format}', '{n} pages exported to {format}', { format }),
+          action: openFolder(report.outputPath),
           duration: 8000,
         });
-      } catch (err: unknown) {
+      } else {
+        const report: ImageToPdfReport = await imagesToPdf(
+          images.map((entry) => ({ path: entry.path, rotation: entry.rotation, flipH: entry.flipH })),
+          pageSize,
+          imageOutputName || 'output.pdf',
+          jobOptions,
+        );
         if (!isCurrent()) return;
-        const message = err instanceof Error ? err.message : t('Unknown error');
-        setError(message);
-        showToast({ type: 'error', title: t('Conversion failed'), message });
-      } finally {
-        convertingRef.current = false;
-        if (mountedRef.current) setIsConverting(false);
-      }
-      return;
-    }
-
-    if (kind === 'images') {
-      const batch = images;
-      if (batch.length === 0) return;
-      const submittedPageSize = pageSize;
-      const submittedName = imageOutputName;
-      convertingRef.current = true;
-      setIsConverting(true);
-      setError(null);
-      setResult(null);
-      const generation = generationRef.current;
-      const isCurrent = () => generation === generationRef.current && mountedRef.current;
-      try {
-        const formData = new FormData();
-        batch.forEach((entry) => formData.append('files', entry.file));
-        formData.append('output_filename', submittedName || 'output.pdf');
-        formData.append('page_size', submittedPageSize);
-        formData.append('rotations', JSON.stringify(batch.map((entry) => entry.rotation)));
-        formData.append('flips', JSON.stringify(batch.map((entry) => entry.flipH)));
-        const response = await apiClient.post('/api/v1/image-to-pdf/', formData, { responseType: 'blob' });
-        if (!isCurrent()) return;
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const total = parseInt(response.headers['x-total-pages'] || '0', 10);
-        const resPageSize = response.headers['x-page-size'] || submittedPageSize.toUpperCase();
-        const filename = getFilenameFromHeaders(response.headers, submittedName || 'output.pdf');
-        triggerBlobDownload(blob, filename);
+        const filename = baseName(report.outputPath);
         setResult({
+          outputPath: report.outputPath,
           filename,
           isZip: false,
-          detail: `${tn(total, '{n} page', '{n} pages')} · ${resPageSize} · ${formatBytes(blob.size)}`,
+          detail: `${tn(report.pages, '{n} page', '{n} pages')} · ${report.pageSize.toUpperCase()} · ${formatBytes(report.outputSizeBytes)}`,
         });
-        addHistoryEntry({ filename, action: 'Image to PDF', size: blob.size });
+        if (report.skipped.length > 0) {
+          setSkippedNotice(t('Skipped because they could not be read: {names}', {
+            names: report.skipped.map((item) => baseName(item.source)).join(', '),
+          }));
+        }
+        addHistoryEntry({ filename, action: 'Image to PDF', size: report.outputSizeBytes });
         showToast({
-          type: 'success',
+          type: report.skipped.length > 0 ? 'info' : 'success',
           title: t('Conversion complete'),
-          message: tn(total, '{n} image converted', '{n} images converted'),
-          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
+          message: report.skipped.length > 0
+            ? tn(report.skipped.length, '{n} image was skipped because it could not be read', '{n} images were skipped because they could not be read')
+            : tn(report.pages, '{n} image converted', '{n} images converted'),
+          action: openFolder(report.outputPath),
           duration: 8000,
         });
-      } catch (err: unknown) {
-        if (!isCurrent()) return;
-        const message = err instanceof Error ? err.message : t('Unknown error');
+      }
+    } catch (err: unknown) {
+      if (isCoreCancelled(err)) {
+        cancelled = true;
+      } else if (isCurrent()) {
+        const message = converterErrorMessage(err);
         setError(message);
         showToast({ type: 'error', title: t('Conversion failed'), message });
-      } finally {
-        convertingRef.current = false;
-        if (mountedRef.current) setIsConverting(false);
       }
+    } finally {
+      finish(cancelled && generation === generationRef.current);
     }
   }, [
-    dpi, format, imageOutputName, images, kind, pageSize, pageSelection,
-    pdfFile, pdfInfoState, pdfOutputName, selection, showToast, totalPages,
+    dpi, finish, format, imageOutputName, images, kind, pageSelection, pageSize, pdfInfoState,
+    pdfOutputName, pdfPath, selection, showToast, totalPages,
   ]);
 
   return {
     kind,
-    pdfFile,
+    pdfPath,
     images,
+    imageSizes,
     batchError,
     error,
+    skippedNotice,
     result,
     isConverting,
+    progress,
     pdfInfo,
     pdfInfoState,
     selection,
@@ -422,16 +470,12 @@ export function useConverterWorkflow(): ConverterWorkflow {
     pdfOutputName,
     pageSize,
     imageOutputName,
-    previewPage,
-    activeImageId,
-    activeImage,
-    zoom,
-    accept: CONVERTER_ACCEPT,
-    addFiles,
-    replaceFiles,
+    addPaths,
+    replacePaths,
     clear,
     dismissError: () => setError(null),
     dismissBatchError: () => setBatchError(null),
+    reportBatchError,
     setSelectionMode,
     setSelectionDraft,
     togglePageSelection,
@@ -440,14 +484,11 @@ export function useConverterWorkflow(): ConverterWorkflow {
     setPdfOutputName,
     setPageSize,
     setImageOutputName,
-    setPreviewPage,
-    setActiveImageId,
-    setZoom,
     rotateImage,
     flipImage,
-    moveImage,
     reorderImages,
     removeImage,
     convert,
+    cancel,
   };
 }
