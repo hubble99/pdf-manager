@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
-from routers import pdf_to_image, image_to_pdf, pdf_info, settings as settings_router, organize, protect, preview, edit_canvas, edit_content, fonts
+from routers import pdf_to_image, settings as settings_router, organize, edit_canvas, edit_content, fonts
 from version import APP_VERSION
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -225,12 +225,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # ── Routers ─────────────────────────────────────────────────────────────────────
 app.include_router(pdf_to_image.router, prefix="/api/v1")
-app.include_router(image_to_pdf.router, prefix="/api/v1")
-app.include_router(pdf_info.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(organize.router, prefix="/api/v1")
-app.include_router(protect.router, prefix="/api/v1")
-app.include_router(preview.router, prefix="/api/v1")
 app.include_router(edit_canvas.router, prefix="/api/v1")
 app.include_router(edit_content.router, prefix="/api/v1")
 app.include_router(fonts.router, prefix="/api/v1")

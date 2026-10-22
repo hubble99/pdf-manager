@@ -1,3 +1,18 @@
+# Dokuwu 1.10.0 — Release Notes
+
+**Release type:** minor. Phase 2 of the move to the native Rust core: more tools
+run without the Python backend. The detailed entry is in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+## 1.10.0 highlights
+- **PDF & Image, Merge PDF, Split PDF, Protect PDF and QR & Barcode** now run on the Rust core: files are read from disk, progress is shown, jobs can be cancelled, and big files no longer fill memory.
+- **Split PDF:** hold Shift and click to select a range of pages.
+- **Long lists** (Merge PDF, Images to PDF, Compress Photos) scroll in their own box, so the buttons stay in view; Compress Photos uses two columns.
+- **Protect PDF:** the confusing Owner Password field is gone; permissions still apply.
+- Results are saved to Downloads under a free name and never overwrite a file.
+
+---
+
 # Dokuwu 1.9.1 — Release Notes
 
 **Release type:** patch. Fixes found while testing 1.9.0 on real documents. The

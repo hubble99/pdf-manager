@@ -1,11 +1,9 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 
-const { post } = vi.hoisted(() => ({ post: vi.fn() }));
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
-vi.mock('../api/client', () => ({
-  default: { post },
-}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
 import { PreviewCanvas } from '../components/preview/PreviewCanvas';
 
@@ -19,7 +17,7 @@ function deferred<T>() {
 
 describe('PreviewCanvas', () => {
   beforeEach(() => {
-    post.mockReset();
+    invoke.mockReset();
     vi.stubGlobal('Image', class {
       naturalWidth = 595;
       naturalHeight = 842;
@@ -38,15 +36,14 @@ describe('PreviewCanvas', () => {
   });
 
   it('does not commit a late response for a page that is no longer current', async () => {
-    const pageOne = deferred<{ data: Blob }>();
-    const pageTwo = deferred<{ data: Blob }>();
-    post.mockReturnValueOnce(pageOne.promise).mockReturnValueOnce(pageTwo.promise);
+    const pageOne = deferred<ArrayBuffer>();
+    const pageTwo = deferred<ArrayBuffer>();
+    invoke.mockReturnValueOnce(pageOne.promise).mockReturnValueOnce(pageTwo.promise);
 
-    vi.spyOn(URL, 'createObjectURL')
-      .mockReturnValueOnce('blob:page-one')
-      .mockReturnValueOnce('blob:page-two');
-    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const file = new File(['pdf'], 'two-pages.pdf', { type: 'application/pdf' });
+    // The stale page is dropped before it gets an object URL.
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValueOnce('blob:page-two');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const file = 'C:\\docs\\two-pages.pdf';
     const { rerender, queryByAltText, queryByText } = render(
       <PreviewCanvas file={file} pageNumber={1} zoom={1} />,
     );
@@ -54,33 +51,33 @@ describe('PreviewCanvas', () => {
     rerender(<PreviewCanvas file={file} pageNumber={2} zoom={1} />);
 
     await act(async () => {
-      pageOne.resolve({ data: new Blob(['page one']) });
-      pageTwo.resolve({ data: new Blob(['page two']) });
+      pageOne.resolve(new ArrayBuffer(1));
+      pageTwo.resolve(new ArrayBuffer(2));
     });
 
     await waitFor(() => {
       expect(queryByAltText('Preview')).toHaveAttribute('src', 'blob:page-two');
     });
     expect(queryByText('Preview unavailable')).not.toBeInTheDocument();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:page-one');
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the committed page stage while the next page is loading', async () => {
-    const pageOne = deferred<{ data: Blob }>();
-    const pageTwo = deferred<{ data: Blob }>();
-    post.mockReturnValueOnce(pageOne.promise).mockReturnValueOnce(pageTwo.promise);
+    const pageOne = deferred<ArrayBuffer>();
+    const pageTwo = deferred<ArrayBuffer>();
+    invoke.mockReturnValueOnce(pageOne.promise).mockReturnValueOnce(pageTwo.promise);
 
     vi.spyOn(URL, 'createObjectURL')
       .mockReturnValueOnce('blob:page-one')
       .mockReturnValueOnce('blob:page-two');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const file = new File(['pdf'], 'two-pages.pdf', { type: 'application/pdf' });
+    const file = 'C:\\docs\\two-pages.pdf';
     const { rerender, getByAltText, getByLabelText, queryByLabelText } = render(
       <PreviewCanvas file={file} pageNumber={1} zoom={1} />,
     );
 
     await act(async () => {
-      pageOne.resolve({ data: new Blob(['page one']) });
+      pageOne.resolve(new ArrayBuffer(1));
     });
     await waitFor(() => expect(getByAltText('Preview')).toHaveAttribute('src', 'blob:page-one'));
 
@@ -89,7 +86,7 @@ describe('PreviewCanvas', () => {
     expect(getByLabelText('Loading preview')).toBeInTheDocument();
 
     await act(async () => {
-      pageTwo.resolve({ data: new Blob(['page two']) });
+      pageTwo.resolve(new ArrayBuffer(2));
     });
     await waitFor(() => expect(getByAltText('Preview')).toHaveAttribute('src', 'blob:page-two'));
     expect(queryByLabelText('Loading preview')).not.toBeInTheDocument();

@@ -1,10 +1,9 @@
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ invoke: vi.fn(), post: vi.fn() }));
+const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
-vi.mock('../api/client', () => ({ default: { post: mocks.post } }));
 
 import { NativeCoreError } from '../api/nativeCore';
 import { fetchPagePreview, getPdfInfo, isAbort, previewKey, renderPdfPage } from '../api/pdfRender';
@@ -13,7 +12,6 @@ import { PreviewCanvas } from '../components/preview/PreviewCanvas';
 describe('native PDF render client', () => {
   beforeEach(() => {
     mocks.invoke.mockReset();
-    mocks.post.mockReset();
   });
 
   it('asks the core for a page and wraps the bytes as a PNG blob', async () => {
@@ -39,17 +37,10 @@ describe('native PDF render client', () => {
     expect(mocks.invoke).toHaveBeenCalledWith('core_pdf_info', { path: 'C:\\a.pdf' });
   });
 
-  it('sends a path to the core and a File to the sidecar', async () => {
+  it('sends the path to the core', async () => {
     mocks.invoke.mockResolvedValue(new ArrayBuffer(2));
-    mocks.post.mockResolvedValue({ data: new Blob(['x']) });
     const signal = new AbortController().signal;
     await fetchPagePreview('C:\\a.pdf', { page: 1, dpi: 40, quality: 'low', signal });
-    expect(mocks.invoke).toHaveBeenCalledTimes(1);
-    expect(mocks.post).not.toHaveBeenCalled();
-
-    await fetchPagePreview(new File(['pdf'], 'b.pdf'), { page: 2, dpi: 40, quality: 'low', signal });
-    expect(mocks.post).toHaveBeenCalledTimes(1);
-    expect(mocks.post.mock.calls[0][0]).toBe('/api/v1/preview/');
     expect(mocks.invoke).toHaveBeenCalledTimes(1);
   });
 
@@ -69,10 +60,8 @@ describe('native PDF render client', () => {
       .rejects.toSatisfy(isAbort);
   });
 
-  it('keys a path by page and a File by name, size and date', () => {
+  it('keys a path by page', () => {
     expect(previewKey('C:\\a.pdf', 2)).toBe('C:\\a.pdf:2');
-    const file = new File(['abc'], 'b.pdf', { lastModified: 5 });
-    expect(previewKey(file, 1)).toBe('b.pdf:3:5:1');
   });
 });
 

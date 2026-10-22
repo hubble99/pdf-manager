@@ -23,7 +23,6 @@ describe('converter routes', () => {
   beforeEach(() => {
     postMock.mockReset();
     postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/preview/') return { data: new Blob(['png']), headers: {} };
       throw new Error(`Unexpected request: ${url}`);
     });
     window.history.pushState({}, '', '/');
