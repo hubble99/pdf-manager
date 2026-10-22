@@ -13,6 +13,14 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 const INTEGRITY: &str = "REJECTED_COLLATERAL_INTEGRITY";
+
+/// Diagnostic: with EDIT_CONTENT_TRACE_INTEGRITY set, names the source line that rejected.
+fn integrity(line: u32) -> &'static str {
+    if std::env::var_os("EDIT_CONTENT_TRACE_INTEGRITY").is_some() {
+        eprintln!("INTEGRITY_TRACE verification.rs:{line}");
+    }
+    INTEGRITY
+}
 pub const VERIFIER_POLICY: &str = "edit-content-acceptance/v4";
 #[path = "backdrop.rs"]
 mod backdrop;
@@ -134,15 +142,15 @@ impl ImageGroup {
 }
 
 fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, ImageGroup>, &'static str> {
-    let bindings = page["imageResourceBindings"].as_array().ok_or(INTEGRITY)?;
+    let bindings = page["imageResourceBindings"].as_array().ok_or_else(|| integrity(line!()))?;
     let resources = if page["nativeMarkedOwnership"].is_array() { &page["markedContentProof"]["resources"] }
         else { &page["preservationResources"] };
-    let dependencies = resources["/XObject"].as_array().ok_or(INTEGRITY)?;
+    let dependencies = resources["/XObject"].as_array().ok_or_else(|| integrity(line!()))?;
     if count < 2 || bindings.len() != count || dependencies.len() != count {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let hash = |value: &Value| value.as_str().filter(|s| s.len() == 64 &&
-        s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).map(str::to_owned).ok_or(INTEGRITY);
+        s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))).map(str::to_owned).ok_or_else(|| integrity(line!()));
     let mut groups = BTreeMap::<String, ImageGroup>::new();
     let mut actual = Vec::new();
     for binding in bindings {
@@ -158,7 +166,7 @@ fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, 
     let mut expected = dependencies.iter().map(hash).collect::<Result<Vec<_>, _>>()?;
     expected.sort();
     actual.sort();
-    if actual != expected { return Err(INTEGRITY); }
+    if actual != expected { return Err(integrity(line!())); }
     Ok(groups)
 }
 
@@ -189,7 +197,7 @@ fn finite(value: f32) -> Result<f64, &'static str> {
     if value.is_finite() {
         Ok(value as f64)
     } else {
-        Err(INTEGRITY)
+        Err(integrity(line!()))
     }
 }
 
@@ -213,14 +221,14 @@ fn simple_clip_path(object: &PdfPageObject<'_>) -> Result<Value, &'static str> {
         return Ok(json!([]));
     }
     if clip.len() > MAX_CLIP_PATHS {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     if clip.len() == 1 {
-        return convex_clip_polygon(&clip.get(0).map_err(|_| INTEGRITY)?);
+        return convex_clip_polygon(&clip.get(0).map_err(|_| integrity(line!()))?);
     }
     let mut polygons = Vec::with_capacity(usize::from(clip.len()));
     for index in 0..clip.len() {
-        polygons.push(convex_clip_polygon(&clip.get(index).map_err(|_| INTEGRITY)?)?);
+        polygons.push(convex_clip_polygon(&clip.get(index).map_err(|_| integrity(line!()))?)?);
     }
     Ok(json!({ "intersection": polygons }))
 }
@@ -238,16 +246,16 @@ fn convex_clip_polygon(path: &PdfClipPathSegments<'_>) -> Result<Value, &'static
             .any(|segment| segment.is_close())
         || !segments.last().is_some_and(|segment| segment.is_close())
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let points = segments
         .iter()
         .map(|segment| Ok([finite(segment.x().value)?, finite(segment.y().value)?]))
         .collect::<Result<Vec<_>, &'static str>>()?;
     let first = points[0];
-    let last = *points.last().ok_or(INTEGRITY)?;
+    let last = *points.last().ok_or_else(|| integrity(line!()))?;
     if !near(first[0], last[0], 0.000001, 0.0) || !near(first[1], last[1], 0.000001, 0.0) {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let vertices = &points[..points.len() - 1];
     let mut orientation = 0.0_f64;
@@ -257,12 +265,12 @@ fn convex_clip_polygon(path: &PdfClipPathSegments<'_>) -> Result<Value, &'static
         let c = vertices[(index + 2) % vertices.len()];
         let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
         if !cross.is_finite() || cross.abs() <= 0.000001 {
-            return Err(INTEGRITY);
+            return Err(integrity(line!()));
         }
         if orientation == 0.0 {
             orientation = cross.signum();
         } else if cross.signum() != orientation {
-            return Err(INTEGRITY);
+            return Err(integrity(line!()));
         }
     }
     Ok(json!(segments
@@ -284,29 +292,29 @@ pub fn capture(
 ) -> Result<Snapshot, &'static str> {
     let artifact_hash = file_hash(path)?;
     let InspectionOutcome::Supported(resources) = inspector.inspect(path) else {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     };
     let document = pdfium
         .load_pdf_from_file(path, None)
-        .map_err(|_| INTEGRITY)?;
+        .map_err(|_| integrity(line!()))?;
     if document.pages().len() > 256 {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let mut registry = ObjectRegistry::new("verification-only");
     let native =
-        discover_document(&document, &resources, &mut registry, revision).map_err(|_| INTEGRITY)?;
+        discover_document(&document, &resources, &mut registry, revision).map_err(|_| integrity(line!()))?;
     let mut pages = Vec::new();
     let mut objects = Vec::new();
-    let resource_pages = resources["pages"].as_array().ok_or(INTEGRITY)?;
+    let resource_pages = resources["pages"].as_array().ok_or_else(|| integrity(line!()))?;
     if resource_pages.len() != native.pages.len() {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     for descriptor in &native.pages {
         let page_objects_start = objects.len();
         let resource_page = resource_pages
             .iter()
             .find(|page| page["pageIndex"].as_u64() == Some(descriptor.page_index as u64))
-            .ok_or(INTEGRITY)?;
+            .ok_or_else(|| integrity(line!()))?;
         let marked = resource_page["nativeMarkedOwnership"].as_array();
         let preservation = if marked.is_some() { &resource_page["markedContentProof"]["resources"] }
             else { &resource_page["preservationResources"] };
@@ -315,7 +323,7 @@ pub fn capture(
                 .as_str()
                 .is_none_or(|hash| hash.len() != 64)
         {
-            return Err(INTEGRITY);
+            return Err(integrity(line!()));
         }
         let geometry = [
             descriptor.width_pt,
@@ -337,24 +345,24 @@ pub fn capture(
         let page = document
             .pages()
             .get(descriptor.page_index as _)
-            .map_err(|_| INTEGRITY)?;
-        if marked.is_some_and(|m| m.len() != page.objects().len() as usize) { return Err(INTEGRITY); }
+            .map_err(|_| integrity(line!()))?;
+        if marked.is_some_and(|m| m.len() != page.objects().len() as usize) { return Err(integrity(line!())); }
         let image_count = page.objects().iter().filter(|o| o.as_image_object().is_some()).count();
         let mut image_bindings = if image_count > 1 {
             Some(proven_image_bindings(resource_page, image_count)?)
         } else { None };
         for (index, object) in page.objects().iter().enumerate() {
-            if !object.is_active().map_err(|_| INTEGRITY)? {
-                return Err(INTEGRITY);
+            if !object.is_active().map_err(|_| integrity(line!()))? {
+                return Err(integrity(line!()));
             }
-            let bounds = object.bounds().map_err(|_| INTEGRITY)?;
+            let bounds = object.bounds().map_err(|_| integrity(line!()))?;
             let quad = vec![
                 [finite(bounds.x1().value)?, finite(bounds.y1().value)?],
                 [finite(bounds.x2().value)?, finite(bounds.y2().value)?],
                 [finite(bounds.x3().value)?, finite(bounds.y3().value)?],
                 [finite(bounds.x4().value)?, finite(bounds.y4().value)?],
             ];
-            let matrix = object.matrix().map_err(|_| INTEGRITY)?;
+            let matrix = object.matrix().map_err(|_| integrity(line!()))?;
             let matrix = [
                 matrix.a(),
                 matrix.b(),
@@ -368,7 +376,7 @@ pub fn capture(
             .collect::<Result<Vec<_>, _>>()?;
             let mut style = json!({"matrix": matrix});
             if let Some(marked) = marked {
-                if marked[index]["kind"].as_i64() != Some(object.object_type() as i64) { return Err(INTEGRITY); }
+                if marked[index]["kind"].as_i64() != Some(object.object_type() as i64) { return Err(integrity(line!())); }
                 style["graphicsState"] = marked[index]["graphicsState"].clone();
                 // Existing MCIDs are semantic marked-content membership, not
                 // ordinal identity. Duplicate marks still need unique matching.
@@ -377,14 +385,14 @@ pub fn capture(
             style["clipPath"] = simple_clip_path(&object)?;
             if object.as_text_object().is_some() || object.as_path_object().is_some() {
                 style["strokeWidth"] =
-                    json!(finite(object.stroke_width().map_err(|_| INTEGRITY)?.value)?);
-                style["join"] = json!(format!("{:?}", object.line_join().map_err(|_| INTEGRITY)?));
-                style["cap"] = json!(format!("{:?}", object.line_cap().map_err(|_| INTEGRITY)?));
+                    json!(finite(object.stroke_width().map_err(|_| integrity(line!()))?.value)?);
+                style["join"] = json!(format!("{:?}", object.line_join().map_err(|_| integrity(line!()))?));
+                style["cap"] = json!(format!("{:?}", object.line_cap().map_err(|_| integrity(line!()))?));
                 style["dashPhase"] =
-                    json!(finite(object.dash_phase().map_err(|_| INTEGRITY)?.value)?);
+                    json!(finite(object.dash_phase().map_err(|_| integrity(line!()))?.value)?);
                 style["dashArray"] = json!(object
                     .dash_array()
-                    .map_err(|_| INTEGRITY)?
+                    .map_err(|_| integrity(line!()))?
                     .into_iter()
                     .map(|p| finite(p.value))
                     .collect::<Result<Vec<_>, _>>()?);
@@ -397,20 +405,20 @@ pub fn capture(
                         text.page_index == descriptor.page_index
                             && text.source_scope.object_path == vec![index]
                     })
-                    .ok_or(INTEGRITY)?;
-                let font_id = descriptor.font.resource_object.as_ref().ok_or(INTEGRITY)?;
-                let fonts = resource_page["fonts"].as_array().ok_or(INTEGRITY)?;
+                    .ok_or_else(|| integrity(line!()))?;
+                let font_id = descriptor.font.resource_object.as_ref().ok_or_else(|| integrity(line!()))?;
+                let fonts = resource_page["fonts"].as_array().ok_or_else(|| integrity(line!()))?;
                 let matches = fonts.iter().filter(|font| {
                     font["fontObject"].as_str() == Some(font_id.as_str()) && font["scope"] == "page"
                 });
-                let font = crate::resource_inspector::unique_font(matches).ok_or(INTEGRITY)?;
+                let font = crate::resource_inspector::unique_font(matches).ok_or_else(|| integrity(line!()))?;
                 let fingerprint = font["semanticSha256"]
                     .as_str()
                     .filter(|hash| hash.len() == 64)
-                    .ok_or(INTEGRITY)?;
+                    .ok_or_else(|| integrity(line!()))?;
                 style["fontSize"] = json!(finite(descriptor.font_size_pt)?);
-                style["fillColor"] = color(text.fill_color().map_err(|_| INTEGRITY)?);
-                style["strokeColor"] = color(text.stroke_color().map_err(|_| INTEGRITY)?);
+                style["fillColor"] = color(text.fill_color().map_err(|_| integrity(line!()))?);
+                style["strokeColor"] = color(text.stroke_color().map_err(|_| integrity(line!()))?);
                 style["renderMode"] = json!(descriptor.render_mode);
                 style["rotation"] = json!(finite(descriptor.rotation)?);
                 style["font"] = json!({"name": descriptor.font.name, "family": descriptor.font.family,
@@ -418,19 +426,19 @@ pub fn capture(
                 ("text", Some(text.text()), Value::Null)
             } else if let Some(path) = object.as_path_object() {
                 if path.has_transparency() && marked.is_none() {
-                    return Err(INTEGRITY);
+                    return Err(integrity(line!()));
                 }
-                style["fillColor"] = color(path.fill_color().map_err(|_| INTEGRITY)?);
-                style["strokeColor"] = color(path.stroke_color().map_err(|_| INTEGRITY)?);
+                style["fillColor"] = color(path.fill_color().map_err(|_| integrity(line!()))?);
+                style["strokeColor"] = color(path.stroke_color().map_err(|_| integrity(line!()))?);
                 style["strokeWidth"] =
-                    json!(finite(path.stroke_width().map_err(|_| INTEGRITY)?.value)?);
-                style["join"] = json!(format!("{:?}", path.line_join().map_err(|_| INTEGRITY)?));
-                style["cap"] = json!(format!("{:?}", path.line_cap().map_err(|_| INTEGRITY)?));
+                    json!(finite(path.stroke_width().map_err(|_| integrity(line!()))?.value)?);
+                style["join"] = json!(format!("{:?}", path.line_join().map_err(|_| integrity(line!()))?));
+                style["cap"] = json!(format!("{:?}", path.line_cap().map_err(|_| integrity(line!()))?));
                 style["dashPhase"] =
-                    json!(finite(path.dash_phase().map_err(|_| INTEGRITY)?.value)?);
+                    json!(finite(path.dash_phase().map_err(|_| integrity(line!()))?.value)?);
                 style["dashArray"] = json!(path
                     .dash_array()
-                    .map_err(|_| INTEGRITY)?
+                    .map_err(|_| integrity(line!()))?
                     .into_iter()
                     .map(|p| finite(p.value))
                     .collect::<Result<Vec<_>, _>>()?);
@@ -443,20 +451,20 @@ pub fn capture(
                 (
                     "path",
                     None,
-                    json!({"fill": format!("{:?}", path.fill_mode().map_err(|_| INTEGRITY)?),
-                    "stroked": path.is_stroked().map_err(|_| INTEGRITY)?, "segments": points}),
+                    json!({"fill": format!("{:?}", path.fill_mode().map_err(|_| integrity(line!()))?),
+                    "stroked": path.is_stroked().map_err(|_| integrity(line!()))?, "segments": points}),
                 )
             } else if let Some(image) = object.as_image_object() {
                 // Native pixels omit masks. A unique encoded stream binds each
                 // named image to its complete resource identity, including masks.
                 let dependencies = preservation["/XObject"]
                     .as_array()
-                    .ok_or(INTEGRITY)?;
+                    .ok_or_else(|| integrity(line!()))?;
                 if image_count == 1 && dependencies.len() != 1 {
-                    return Err(INTEGRITY);
+                    return Err(integrity(line!()));
                 }
-                let width = image.width().map_err(|_| INTEGRITY)?;
-                let height = image.height().map_err(|_| INTEGRITY)?;
+                let width = image.width().map_err(|_| integrity(line!()))?;
+                let height = image.height().map_err(|_| integrity(line!()))?;
                 if width <= 0
                     || height <= 0
                     || (width as u64)
@@ -464,16 +472,16 @@ pub fn capture(
                         .saturating_mul(4)
                         > 64 * 1024 * 1024
                 {
-                    return Err(INTEGRITY);
+                    return Err(integrity(line!()));
                 }
                 let resource_identity = if let Some(bindings) = image_bindings.as_mut() {
-                    let bytes = image.get_raw_image_data().map_err(|_| INTEGRITY)?;
-                    if bytes.is_empty() || bytes.len() > 64 * 1024 * 1024 { return Err(INTEGRITY); }
-                    let raw_hash = sha256_reader(&mut std::io::Cursor::new(bytes)).map_err(|_| INTEGRITY)?;
+                    let bytes = image.get_raw_image_data().map_err(|_| integrity(line!()))?;
+                    if bytes.is_empty() || bytes.len() > 64 * 1024 * 1024 { return Err(integrity(line!())); }
+                    let raw_hash = sha256_reader(&mut std::io::Cursor::new(bytes)).map_err(|_| integrity(line!()))?;
                     // Each native image consumes exactly one use of its stored stream;
                     // duplicate native images cannot stand in for a missing resource use.
-                    let group = bindings.get_mut(&raw_hash).ok_or(INTEGRITY)?;
-                    if group.remaining == 0 { return Err(INTEGRITY); }
+                    let group = bindings.get_mut(&raw_hash).ok_or_else(|| integrity(line!()))?;
+                    if group.remaining == 0 { return Err(integrity(line!())); }
                     group.remaining -= 1;
                     if group.is_unambiguous() {
                         json!(group.all[0])
@@ -481,27 +489,27 @@ pub fn capture(
                         // Identical stored bytes with different palettes or masks cannot be
                         // told apart by name. The image as PDFium renders it, with its mask and
                         // palette applied, binds this object to what it actually shows.
-                        let rendered = image.get_processed_image(&document).map_err(|_| INTEGRITY)?;
-                        if rendered.as_bytes().len() > 64 * 1024 * 1024 { return Err(INTEGRITY); }
+                        let rendered = image.get_processed_image(&document).map_err(|_| integrity(line!()))?;
+                        if rendered.as_bytes().len() > 64 * 1024 * 1024 { return Err(integrity(line!())); }
                         let mut material = format!("ambiguous-image/v1|{}|{}x{}|{:?}|", group.all.join(","),
                             rendered.width(), rendered.height(), rendered.color()).into_bytes();
                         material.extend_from_slice(rendered.as_bytes());
-                        json!(sha256_reader(&mut std::io::Cursor::new(material)).map_err(|_| INTEGRITY)?)
+                        json!(sha256_reader(&mut std::io::Cursor::new(material)).map_err(|_| integrity(line!()))?)
                     }
                 } else { dependencies[0].clone() };
-                let bitmap = image.get_raw_image().map_err(|_| INTEGRITY)?;
+                let bitmap = image.get_raw_image().map_err(|_| integrity(line!()))?;
                 let fingerprint = sha256_reader(&mut std::io::Cursor::new(bitmap.as_bytes()))
-                    .map_err(|_| INTEGRITY)?;
+                    .map_err(|_| integrity(line!()))?;
                 (
                     "image",
                     None,
                     json!({"width": width, "height": height, "pixels": fingerprint,
                     "resourceIdentity": resource_identity,
-                    "colorSpace": format!("{:?}", image.color_space().map_err(|_| INTEGRITY)?),
-                    "bitsPerPixel": image.bits_per_pixel().map_err(|_| INTEGRITY)?}),
+                    "colorSpace": format!("{:?}", image.color_space().map_err(|_| integrity(line!()))?),
+                    "bitsPerPixel": image.bits_per_pixel().map_err(|_| integrity(line!()))?}),
                 )
             } else {
-                return Err(INTEGRITY);
+                return Err(integrity(line!()));
             };
             objects.push(ObjectEvidence {
                 page: descriptor.page_index,
@@ -516,11 +524,11 @@ pub fn capture(
         }
         // Only same-byte native bindings may authorize this optional proof.
         bind_empty_paint(resource_page, &mut objects[page_objects_start..]);
-        if image_bindings.is_some_and(|bindings| bindings.values().any(|group| group.remaining != 0)) { return Err(INTEGRITY); }
+        if image_bindings.is_some_and(|bindings| bindings.values().any(|group| group.remaining != 0)) { return Err(integrity(line!())); }
     }
     drop(document);
     if file_hash(path)? != artifact_hash {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     Ok(Snapshot {
         artifact_hash,
@@ -598,9 +606,9 @@ impl VerifiedCandidate {
     }
     pub fn recheck(&self) -> Result<(), &'static str> {
         if file_hash(self.path())? != self.report.candidate_hash
-            || fs::metadata(self.path()).map_err(|_| INTEGRITY)?.len() != self.candidate.bytes
+            || fs::metadata(self.path()).map_err(|_| integrity(line!()))?.len() != self.candidate.bytes
         {
-            Err(INTEGRITY)
+            Err(integrity(line!()))
         } else {
             Ok(())
         }
@@ -621,18 +629,18 @@ pub fn verify(
         || baseline.revision != candidate.revision
         || file_hash(&candidate.path)? != candidate.sha256
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let reopened = capture(pdfium, &candidate.path, inspector, candidate.revision)?;
     let report = compare(baseline, &reopened, &candidate.expectation)?;
     if reopened.artifact_hash != candidate.sha256 {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let mut permissions = fs::metadata(&candidate.path)
-        .map_err(|_| INTEGRITY)?
+        .map_err(|_| integrity(line!()))?
         .permissions();
     permissions.set_readonly(true);
-    fs::set_permissions(&candidate.path, permissions).map_err(|_| INTEGRITY)?;
+    fs::set_permissions(&candidate.path, permissions).map_err(|_| integrity(line!()))?;
     let verified = VerifiedCandidate { candidate, report };
     verified.recheck()?;
     Ok(verified)
@@ -649,7 +657,7 @@ pub fn compare(
         .chain(&candidate.objects)
         .any(|object| !has_supported_preservation_evidence(object))
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     if baseline.revision != candidate.revision
         || baseline.pages.len() != candidate.pages.len()
@@ -659,7 +667,7 @@ pub fn compare(
             .zip(&candidate.pages)
             .all(|(a, b)| equivalent(a, b, "page"))
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let target = baseline
         .objects
@@ -669,11 +677,11 @@ pub fn compare(
                 && edit.target.object_path == vec![object.index]
                 && object.text.as_deref() == Some(edit.target.text.as_str())
         })
-        .ok_or(INTEGRITY)?;
+        .ok_or_else(|| integrity(line!()))?;
     if baseline.objects.len() as i64 + edit.object_count_delta as i64
         != candidate.objects.len() as i64
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let mut correspondence = Vec::new();
     let mut used = vec![false; candidate.objects.len()];
@@ -719,17 +727,17 @@ pub fn compare(
             _ => None,
         };
         let Some(chosen) = chosen.filter(|candidate| !used[*candidate]) else {
-            return Err(INTEGRITY);
+            return Err(integrity(line!()));
         };
         used[chosen] = true;
         correspondence.push((index, chosen));
     }
     if used.iter().any(|used| !used) {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let occurrences = |text: &str| text.matches(&edit.old_text).count();
     if edit.old_text.is_empty() {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let before = baseline
         .objects
@@ -745,13 +753,13 @@ pub fn compare(
         .map(occurrences)
         .sum::<usize>();
     if after != expected {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     if !edit.removed {
         let (_, mapped) = correspondence
             .iter()
             .find(|(index, _)| *index == target)
-            .ok_or(INTEGRITY)?;
+            .ok_or_else(|| integrity(line!()))?;
         check_layout(
             baseline,
             &baseline.objects[target],
@@ -846,7 +854,7 @@ fn intersection(subject: &[[f64; 2]], clip: &[[f64; 2]]) -> Result<f64, &'static
         || clip.len() != 4
         || subject.iter().chain(clip).flatten().any(|v| !v.is_finite())
     {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     // Strictly disjoint finite envelopes prove zero intersection even when an
     // unchanged object's native quad is degenerate. Touching envelopes still
@@ -862,7 +870,7 @@ fn intersection(subject: &[[f64; 2]], clip: &[[f64; 2]]) -> Result<f64, &'static
     }
     let orientation = area(clip).signum();
     if area(clip) == 0.0 || area(subject) == 0.0 {
-        return Err(INTEGRITY);
+        return Err(integrity(line!()));
     }
     let mut output = subject.to_vec();
     for (a, b) in clip.iter().zip(clip.iter().cycle().skip(1)).take(4) {
@@ -894,7 +902,7 @@ fn intersection(subject: &[[f64; 2]], clip: &[[f64; 2]]) -> Result<f64, &'static
     if result.is_finite() {
         Ok(result)
     } else {
-        Err(INTEGRITY)
+        Err(integrity(line!()))
     }
 }
 
@@ -911,8 +919,8 @@ fn check_layout(
     let changed_quad=supported_quad.as_deref().unwrap_or(&changed.quad);
     let geometry = baseline.pages[original.page as usize]["geometry"]
         .as_array()
-        .ok_or(INTEGRITY)?;
-    let get = |index: usize| geometry.get(index).and_then(Value::as_f64).ok_or(INTEGRITY);
+        .ok_or_else(|| integrity(line!()))?;
+    let get = |index: usize| geometry.get(index).and_then(Value::as_f64).ok_or_else(|| integrity(line!()));
     let (left, bottom, right, top) = (get(2)?, get(3)?, get(4)?, get(5)?);
     let page = [[left, bottom], [right, bottom], [right, top], [left, top]];
     // Compare escape itself, not only total visible area (which changes with text).

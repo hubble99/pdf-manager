@@ -164,9 +164,19 @@ fn encode_image(image: &Image, ctm: &Matrix, bbox: Rect, ox: f32, oy: f32) -> Co
             (ctm.f - oy - bbox.y0) * sy,
         );
         let device = Device::from_pixmap(&pixmap).map_err(|e| mupdf_error("image device", e))?;
+        // `fill_image` ignores the soft mask (SMask); the PDF interpreter
+        // normally clips with it first. Without this a logo stored as black
+        // colour data plus alpha comes out as a black box.
+        let mask = image.mask();
+        if let Some(mask) = &mask {
+            device.clip_image_mask(mask, &m).map_err(|e| mupdf_error("image mask", e))?;
+        }
         device
             .fill_image(image, &m, 1.0, ColorParams::default())
             .map_err(|e| mupdf_error("drawing image", e))?;
+        if mask.is_some() {
+            device.pop_clip().map_err(|e| mupdf_error("image mask", e))?;
+        }
     }
     Ok(Some(encode_rgba(&pixmap)?))
 }

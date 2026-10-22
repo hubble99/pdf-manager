@@ -151,6 +151,13 @@ def build():
     page_with(doc, png(photo(seed=9)))
     save(doc, "encrypted.pdf", encryption=fitz.PDF_ENCRYPT_AES_256, user_pw="secret", owner_pw="owner")
 
+    # Encrypted with an owner password only: opens without asking, but
+    # editing, copying and annotating are not permitted (printing is).
+    doc = fitz.open()
+    page_with(doc, png(photo(seed=9)))
+    save(doc, "owner-only.pdf", encryption=fitz.PDF_ENCRYPT_AES_128, user_pw="", owner_pw="owner",
+         permissions=fitz.PDF_PERM_PRINT)
+
     # Not a PDF at all.
     (OUT / "not-a-pdf.pdf").write_bytes(b"this is not a pdf\n" * 20)
 
