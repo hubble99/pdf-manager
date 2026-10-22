@@ -5,6 +5,7 @@
 **Fixed**
 
 - **PDF to Word:** letterheads and logos that are stored with transparency (a soft mask) no longer turn into black boxes in the `.docx`; the transparent background is kept.
+- **Compress PDF:** a PDF that is only permission-restricted (it opens without a password, but editing or copying is not allowed) is now compressed instead of refused as "password required". Its restrictions are kept in the result.
 
 ## 1.9.0 — 2026-10-21 · Phase 1: native Rust core and new tools
 
