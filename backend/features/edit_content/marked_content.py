@@ -136,8 +136,12 @@ def marked_content_proof(page, resources):
                 values = args
             require(all(isinstance(v, (ByteStringObject, TextStringObject)) or
                 (op == b'TJ' and isinstance(v, (int, float)) and math.isfinite(float(v))) for v in values))
-            require(any(isinstance(v, (ByteStringObject, TextStringObject)) and len(v) for v in values))
-            paint(1)
+            # An empty string draws nothing and creates no native object (browser
+            # print engines emit many). It is not counted as a painted object; a
+            # native object PDFium creates for it anyway breaks the worker's
+            # object-count check and is rejected there.
+            if any(isinstance(v, (ByteStringObject, TextStringObject)) and len(v) for v in values):
+                paint(1)
         elif op == b'Do':
             require(not in_text and not path_pending and len(args) == 1 and isinstance(args[0], NameObject))
             require(args[0] in resources.get('/XObject', {}))

@@ -112,6 +112,20 @@ fn alpha_page() -> Vec<u8> {
     ])
 }
 
+/// Browser-printed page: tagged content, empty `Tj` strings, and an alpha-0 text layer
+/// next to the visible text (the kind of certificate printed from a web page).
+fn browser_print_page() -> Vec<u8> {
+    pdf_bytes(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> /ExtGState << /A0 6 0 R /A1 7 0 R >> >> /Contents 4 0 R >>".into(),
+        stream("/P <</MCID 0>> BDC q /A1 gs BT /F1 12 Tf 30 150 Td () Tj (ghost) Tj ET Q EMC\n/P <</MCID 1>> BDC q /A0 gs BT /F1 12 Tf 30 100 Td () Tj (shown) Tj ET Q EMC", ""),
+        HELVETICA.into(),
+        "<< /Type /ExtGState /ca 1 /CA 1 >>".into(),
+        "<< /Type /ExtGState /ca 0 /CA 0 >>".into(),
+    ])
+}
+
 /// A Tm-based letter body plus an appended BSrE-style stamp (`BT x y Td ... ET`)
 /// and a signature widget whose /P points back at its page.
 fn signed_page() -> Vec<u8> {
@@ -407,6 +421,10 @@ fn corpus() -> Vec<Case> {
             name: "text and paths under several nested clip paths",
             pdf: single_page("q 10 10 280 180 re W n q 20 20 200 150 re W n 0.5 g 30 30 80 20 re f BT /F1 12 Tf 30 100 Td (word) Tj ET Q Q"),
             old: "word", new: "wor", expect: PREPARED,
+        },
+        Case {
+            name: "tagged page with empty Tj strings and an alpha-0 text layer",
+            pdf: browser_print_page(), old: "shown", new: "shows", expect: PREPARED,
         },
         Case { name: "signed letter body next to a BSrE-style stamp", pdf: signed_page(), old: "Kepada Yth", new: "Kepada Yts", expect: PREPARED },
         Case { name: "BSrE-style stamp text (BT x y Td)", pdf: signed_page(), old: "Dokumen", new: "Dokumex", expect: PREPARED },

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+
+- **Edit Content:** tagged PDFs that contain empty text strings (common in PDFs printed from a web browser, for example certificates) are no longer rejected as a whole because of them. Empty strings draw nothing and are not counted as text objects.
+
 ## 1.9.0 — 2026-10-21 · Phase 1: native Rust core and new tools
 
 > The first tools that run on the new Rust core (`dokuwu-core`) instead of the

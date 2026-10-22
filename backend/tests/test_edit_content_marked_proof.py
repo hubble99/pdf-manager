@@ -89,11 +89,15 @@ def test_unproven_graphics_dependencies_are_not_normalized_away(key, value):
     b'/P <</MCID 1>> BDC /P <</MCID 2>> BDC EMC EMC',
     b'/P <</MCID 99 /ActualText (hidden)>> BDC EMC',
     b'/P <</MCID 99 /Lang 42>> BDC EMC', b'/OC BMC EMC',
-    b'/Missing gs', b'0 0 m /P <</MCID 99>> BDC 2 2 l S EMC',
-    b'BT /A 12 Tf [] TJ ET'])
+    b'/Missing gs', b'0 0 m /P <</MCID 99>> BDC 2 2 l S EMC'])
 def test_unsupported_or_ambiguous_grammar_fails_closed(extra):
     with pytest.raises(UnprovenPreservation):
         inspect(marked_pdf(extra))
+
+
+@pytest.mark.parametrize('extra', [b'BT /A 12 Tf [] TJ ET', b'BT /A 12 Tf () Tj ET', b'BT /A 12 Tf [-120] TJ ET'])
+def test_text_operators_without_characters_paint_nothing_and_are_not_counted(extra):
+    assert inspect(marked_pdf(extra)) == inspect(marked_pdf())
 
 
 @pytest.mark.parametrize('alpha', [-0.01, 1.01, float('inf')])
