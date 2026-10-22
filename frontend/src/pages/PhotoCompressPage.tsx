@@ -233,7 +233,7 @@ export function PhotoCompressPage() {
       />
 
       <div className="page-body">
-        <div className={`form-col${paths.length > 0 ? '' : ' form-col--center'}`}>
+        <div className={`form-col${paths.length > 0 ? ' form-col--balanced' : ' form-col--center'}`}>
           {!desktop ? (
             <p className="empty-hint" role="status">{t('This tool is available in the desktop app.')}</p>
           ) : paths.length === 0 ? (
@@ -259,8 +259,9 @@ export function PhotoCompressPage() {
             </>
           ) : (
             <>
+              <div className="col-stack">
               {/* Files */}
-              <div className={`card card--flush${isDragOver ? ' drag-over' : ''}`}>
+              <div className={`card card--flush photo-files-card${isDragOver ? ' drag-over' : ''}`}>
                 <div className="card-head">
                   <span className="card-head-title">
                     <FileImage size={16} className="card-head-icon" aria-hidden="true" />
@@ -294,6 +295,59 @@ export function PhotoCompressPage() {
                 </ul>
               </div>
 
+              {/* Result */}
+              {report && report.succeeded > 0 && (
+                <div className="card card--flush">
+                  <div className="card-head">
+                    <span className="card-head-title">
+                      <CheckCircle size={16} className="card-head-icon" aria-hidden="true" />
+                      {tn(report.succeeded, '{n} photo compressed', '{n} photos compressed')}
+                    </span>
+                    <span className="card-head-actions">
+                      <button type="button" className="btn btn-ghost btn-sm" id="photo-compress-open-folder-btn" onClick={openResultFolder}>
+                        <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
+                      </button>
+                    </span>
+                  </div>
+                  <p className="card-body photo-compress-total">
+                    <small className="hint">{t('Saved to your Downloads folder')}</small>
+                  </p>
+                  <ul className="image-format-list">
+                    {doneFiles.map((file) => (
+                      <li key={file.source} className="image-format-row">
+                        <Filename name={baseName(file.output ?? file.source)} className="file-item-name" />
+                        <small className="file-item-meta photo-compress-size">
+                          {file.keptOriginal
+                            ? t('Already as small as possible')
+                            : `${formatBytes(file.originalBytes ?? 0)} → ${formatBytes(file.outputBytes ?? 0)}`}
+                        </small>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {failedFiles.length > 0 && (
+                <div className="card card--flush" role="alert">
+                  <div className="card-head">
+                    <span className="card-head-title">
+                      <AlertTriangle size={16} className="card-head-icon image-format-warn" aria-hidden="true" />
+                      {tn(failedFiles.length, '{n} photo was not compressed', '{n} photos were not compressed')}
+                    </span>
+                  </div>
+                  <ul className="image-format-list">
+                    {failedFiles.map((file) => (
+                      <li key={file.source} className="image-format-row image-format-row--failed">
+                        <Filename name={baseName(file.source)} className="file-item-name" />
+                        <small className="file-item-meta" title={file.error?.message}>{compressErrorText(file.error?.code)}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              </div>
+
+              <div className="col-stack">
               {/* Level, size and format */}
               <div className="card card--flush">
                 <div className="card-head">
@@ -399,56 +453,6 @@ export function PhotoCompressPage() {
                 </div>
               )}
 
-              {/* Result */}
-              {report && report.succeeded > 0 && (
-                <div className="card card--flush">
-                  <div className="card-head">
-                    <span className="card-head-title">
-                      <CheckCircle size={16} className="card-head-icon" aria-hidden="true" />
-                      {tn(report.succeeded, '{n} photo compressed', '{n} photos compressed')}
-                    </span>
-                    <span className="card-head-actions">
-                      <button type="button" className="btn btn-ghost btn-sm" id="photo-compress-open-folder-btn" onClick={openResultFolder}>
-                        <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
-                      </button>
-                    </span>
-                  </div>
-                  <p className="card-body photo-compress-total">
-                    <small className="hint">{t('Saved to your Downloads folder')}</small>
-                  </p>
-                  <ul className="image-format-list">
-                    {doneFiles.map((file) => (
-                      <li key={file.source} className="image-format-row">
-                        <Filename name={baseName(file.output ?? file.source)} className="file-item-name" />
-                        <small className="file-item-meta photo-compress-size">
-                          {file.keptOriginal
-                            ? t('Already as small as possible')
-                            : `${formatBytes(file.originalBytes ?? 0)} → ${formatBytes(file.outputBytes ?? 0)}`}
-                        </small>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {failedFiles.length > 0 && (
-                <div className="card card--flush" role="alert">
-                  <div className="card-head">
-                    <span className="card-head-title">
-                      <AlertTriangle size={16} className="card-head-icon image-format-warn" aria-hidden="true" />
-                      {tn(failedFiles.length, '{n} photo was not compressed', '{n} photos were not compressed')}
-                    </span>
-                  </div>
-                  <ul className="image-format-list">
-                    {failedFiles.map((file) => (
-                      <li key={file.source} className="image-format-row image-format-row--failed">
-                        <Filename name={baseName(file.source)} className="file-item-name" />
-                        <small className="file-item-meta" title={file.error?.message}>{compressErrorText(file.error?.code)}</small>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
               <div className="form-actions">
                 <button className="btn btn-primary" id="photo-compress-run-btn" onClick={handleCompress} disabled={!canCompress}>
                   {running ? (
@@ -457,6 +461,7 @@ export function PhotoCompressPage() {
                     <><ImageMinus size={15} /> {tn(paths.length, 'Compress {n} photo', 'Compress {n} photos')}</>
                   )}
                 </button>
+              </div>
               </div>
             </>
           )}
