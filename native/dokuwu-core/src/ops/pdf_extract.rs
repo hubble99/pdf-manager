@@ -163,9 +163,11 @@ fn combine(
     let count = pages.len() as u64;
     // Bytes copied so far, estimated as the file's share taken by the selection.
     let per_page = source_size / total.max(1) as u64;
+    // Declared first, so it is dropped last: the temporary files can only be
+    // deleted once the document and its copy map that read them are gone.
+    let mut spill = Spill::new(dir, base);
     let mut target = PdfDocument::new();
     let mut map = target.new_graft_map().map_err(|e| internal("copy map", e))?;
-    let mut spill = Spill::new(dir, base);
     let mut held = 0u64;
     ctx.report(STAGE_PAGES, 0, Some(count));
     for (done, &page) in pages.iter().enumerate() {
@@ -177,12 +179,14 @@ fn combine(
             target = spill.flush(target)?;
             // The old copy map points into the document that was just saved.
             map = target.new_graft_map().map_err(|e| internal("copy map", e))?;
+            spill.reap();
             held = 0;
         }
     }
     ctx.check_cancelled()?;
     ctx.report(STAGE_SAVING, 0, None);
     target.save_with_options(path_str(part)?, write_options()).map_err(|e| save_error(part, e))?;
+    drop(map);
     drop(target);
     spill.clean();
     Ok(pages.len() as u32)
