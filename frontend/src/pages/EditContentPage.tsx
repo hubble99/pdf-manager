@@ -78,14 +78,15 @@ function isTextField(target: EventTarget | null): boolean {
     && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable);
 }
 
-function EditContentLimits() {
+function EditContentLimits({ collapsed = false }: { collapsed?: boolean }) {
+  const Wrapper = collapsed ? 'details' : 'aside';
   return (
-    <aside className="edit-content-limits" aria-label={t('Edit Content V1 limits')}>
-      <strong>{t('Edit Content V1 limits')}</strong>
+    <Wrapper className="edit-content-limits" aria-label={collapsed ? undefined : t('Edit Content V1 limits')}>
+      {collapsed ? <summary>{t('Edit Content V1 limits')}</summary> : <strong>{t('Edit Content V1 limits')}</strong>}
       <p>{t('Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.')}</p>
       <p>{t('These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.')}</p>
       <p>{t('Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.')}</p>
-    </aside>
+    </Wrapper>
   );
 }
 
@@ -591,6 +592,15 @@ export function EditContentPage() {
   const renderKey = session ? `${session.sessionId}:${session.acceptedRevision}:${pageIndex}:${renderAttempt}` : '';
   const renderError = renderFailure?.key === renderKey ? renderFailure.message : null;
 
+  // Shown under the Apply button while a text object is selected, so the result
+  // of Apply is next to the control that caused it.
+  const statusBanners = (
+    <>
+      {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</div>}
+      {notice && !error && <div className="status-banner status-banner--info" role="status"><Check size={16} aria-hidden="true" />{notice}</div>}
+    </>
+  );
+
   return (
     <div className="feature-page edit-content-page">
       <PageHeader
@@ -705,8 +715,7 @@ export function EditContentPage() {
                 </div>
               )}
 
-              {error && <div className="status-banner status-banner--error" role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</div>}
-              {notice && !error && <div className="status-banner status-banner--info" role="status"><Check size={16} aria-hidden="true" />{notice}</div>}
+              {!selected && statusBanners}
 
               {savedName && !unsaved && (
                 <div className="card status-card status-card--ok" id="edit-content-saved">
@@ -738,11 +747,11 @@ export function EditContentPage() {
                 <div className="edit-content-section-heading">
                   <div>
                     <h2>{selected ? t('Selected native text') : t('Select text on the page')}</h2>
-                    <p>{selected ? t('Edit the text only. Position, font, and styling remain owned by the PDF.') : t('Click a supported native text object in the document.')}</p>
+                    {!selected && <p>{t('Click a supported native text object in the document.')}</p>}
                   </div>
                   {selected && <span className="badge badge-info">{t('Exact object')}</span>}
                 </div>
-                <EditContentLimits />
+                <EditContentLimits collapsed={Boolean(selected)} />
                 {pickableObjects.length > 0 && (
                   <div className="edit-content-object-picker">
                     <span className="input-label">{t('Native text object')}</span>
@@ -846,7 +855,7 @@ export function EditContentPage() {
                       </button>
                       <button className="btn btn-ghost" onClick={() => requestAction({ kind: 'deselect' })} disabled={busy}>{t('Deselect')}</button>
                     </div>
-                    <p className="edit-content-hint">{t('Typing changes this draft only. The PDF is regenerated once when you Apply or Save.')}</p>
+                    {statusBanners}
                   </>
                 ) : (
                   <StateView icon={FilePenLine} title={t('No text selected')} description={t('Scanned, outlined, Type 3, split, hidden, or uncertain text remains view-only.')} />
