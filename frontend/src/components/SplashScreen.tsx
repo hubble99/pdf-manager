@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { t } from '../i18n';
 import { APP_NAME } from '../config/app';
+import { BrandLogo } from './BrandLogo';
 
 interface SplashScreenProps {
   onReady: () => void;
@@ -106,29 +107,8 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
       }}
     >
       {/* Logo area */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, marginBottom: 48 }}>
-        <div
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: 20,
-            background: 'linear-gradient(135deg, #4A9EFF 0%, #1a6dd1 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(74, 158, 255, 0.35)',
-            animation: 'float 3s ease-in-out infinite',
-          }}
-        >
-          {/* PDF icon */}
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginBottom: 40 }}>
+        <BrandLogo size={160} animated />
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--on-surface)', letterSpacing: '-0.02em', margin: 0 }}>
             {APP_NAME}
@@ -236,10 +216,6 @@ export function SplashScreen({ onReady, onError }: SplashScreenProps) {
       </div>
 
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-8px); }
-        }
         @keyframes pulse-dot {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.5; transform: scale(0.8); }
