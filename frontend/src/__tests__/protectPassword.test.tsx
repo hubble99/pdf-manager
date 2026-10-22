@@ -132,7 +132,6 @@ describe('Protect PDF', () => {
   it('protects with the chosen passwords and permissions, then clears the passwords', async () => {
     await openWithPdf();
     fillAdd();
-    type('protect-owner-pw', 'boss-1');
     type('protect-output-name', 'Rahasia');
     fireEvent.click(screen.getByLabelText('Allow Copying'));
     fireEvent.click(addButton());
@@ -141,7 +140,7 @@ describe('Protect PDF', () => {
     expect(calls('core_pdf_protect_start')[0][1]).toEqual({
       inputPath: PDF,
       options: {
-        userPassword: 'secret-1', ownerPassword: 'boss-1', allowPrint: true, allowCopy: false, allowModify: true, outputName: 'Rahasia',
+        userPassword: 'secret-1', allowPrint: true, allowCopy: false, allowModify: true, outputName: 'Rahasia',
       },
     });
     emit(CORE_PROGRESS_EVENT, { jobId: 41, kind: 'pdf_protect', stage: 'checking', done: 0 });
@@ -156,7 +155,6 @@ describe('Protect PDF', () => {
     expect(await screen.findByText('PDF encrypted and saved')).toBeInTheDocument();
     expect(field('protect-user-pw').value).toBe('');
     expect(field('protect-confirm-pw').value).toBe('');
-    expect(field('protect-owner-pw').value).toBe('');
     fireEvent.click(document.getElementById('protect-open-folder-btn') as HTMLButtonElement);
     await waitFor(() => expect(calls('core_reveal_path')[0][1]).toEqual({ path: 'C:\\Users\\a\\Downloads\\Rahasia.pdf' }));
   });

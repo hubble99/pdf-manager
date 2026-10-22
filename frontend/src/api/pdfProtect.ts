@@ -8,8 +8,6 @@ import { runCoreJob, type CoreJobOptions } from './nativeCore';
 
 export interface ProtectOptions {
   userPassword: string;
-  /** Empty means the user password is used. */
-  ownerPassword: string;
   allowPrint: boolean;
   allowCopy: boolean;
   allowModify: boolean;
@@ -18,7 +16,7 @@ export interface ProtectOptions {
 }
 
 export interface UnprotectOptions {
-  /** The user password or the owner password. */
+  /** The password the PDF opens with. */
   password: string;
   /** File name without extension; empty means `<name>_unlocked`. */
   outputName?: string;

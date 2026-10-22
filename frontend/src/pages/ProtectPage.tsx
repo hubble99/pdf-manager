@@ -58,7 +58,6 @@ export function ProtectPage() {
   // Form State
   const [userPw, setUserPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
-  const [ownerPw, setOwnerPw] = useState('');
   const [removePw, setRemovePw] = useState('');
   const [outputName, setOutputName] = useState('');
 
@@ -84,7 +83,6 @@ export function ProtectPage() {
   const resetForm = () => {
     setUserPw('');
     setConfirmPw('');
-    setOwnerPw('');
     setRemovePw('');
     setOutputName('');
     setAllowPrint(true);
@@ -148,8 +146,7 @@ export function ProtectPage() {
       // The passwords are not needed any more.
       setUserPw('');
       setConfirmPw('');
-      setOwnerPw('');
-      setRemovePw('');
+        setRemovePw('');
       addHistoryEntry({
         filename,
         action: action === 'add' ? 'Protected PDF' : 'Removed Password',
@@ -182,7 +179,7 @@ export function ProtectPage() {
     if (userPw !== confirmPw) { showToast({ type: 'error', title: t('Passwords do not match'), message: t('Re-enter the password in both fields.') }); return; }
     void run('add', (signal, onProgress) => protectPdf(
       path,
-      { userPassword: userPw, ownerPassword: ownerPw, allowPrint, allowCopy, allowModify, outputName },
+      { userPassword: userPw, allowPrint, allowCopy, allowModify, outputName },
       { signal, onProgress },
     ));
   };
@@ -332,14 +329,6 @@ export function ProtectPage() {
                     error={confirmPw && userPw !== confirmPw ? t('Passwords do not match.') : undefined}
                     autoComplete="new-password"
                   />
-                  <PasswordField
-                    id="protect-owner-pw"
-                    label={t('Owner Password (Optional, Required to Edit)')}
-                    value={ownerPw}
-                    onChange={setOwnerPw}
-                    placeholder={t('Password to restrict permissions')}
-                    autoComplete="new-password"
-                  />
                   <div className="field-gap">
                     <label className="input-label" htmlFor="protect-output-name">{t('Output Filename (optional)')}</label>
                     <input
@@ -353,7 +342,7 @@ export function ProtectPage() {
                     />
                   </div>
                   <div className="field-gap">
-                    <label className="input-label input-label--spaced">{t('Permissions (require Owner Password to change)')}</label>
+                    <label className="input-label input-label--spaced">{t('Permissions')}</label>
                     <div className="check-row-group">
                       <label className="check-row">
                         <input type="checkbox" checked={allowPrint} onChange={(e) => setAllowPrint(e.target.checked)} />
@@ -369,7 +358,7 @@ export function ProtectPage() {
                       </label>
                     </div>
                     <p className="text-muted text-body-sm hint-gap">
-                      {t('If an owner password is not set, some PDF readers may ignore these restrictions.')}
+                      {t('Some PDF readers may ignore these restrictions.')}
                     </p>
                   </div>
                 </div>

@@ -25,8 +25,6 @@ fn downloads<R: Runtime>(app: &AppHandle<R>) -> CoreResult<PathBuf> {
 #[serde(rename_all = "camelCase")]
 pub struct ProtectArgs {
     pub user_password: String,
-    #[serde(default)]
-    pub owner_password: String,
     pub allow_print: bool,
     pub allow_copy: bool,
     pub allow_modify: bool,
@@ -60,7 +58,10 @@ pub(crate) fn start_protect<R: Runtime>(
         std::fs::create_dir_all(&dir).map_err(|e| CoreError::io(&dir, e))?;
         let options = ProtectOptions {
             user_password: args.user_password,
-            owner_password: args.owner_password,
+            // Not asked from the person: a random owner password that nobody
+            // keeps, so the permissions bind whoever opens the copy with the
+            // user password (a shared password would grant full rights).
+            owner_password: random_owner_password(),
             allow_print: args.allow_print,
             allow_copy: args.allow_copy,
             allow_modify: args.allow_modify,
@@ -69,6 +70,10 @@ pub(crate) fn start_protect<R: Runtime>(
         };
         protect(&input, &options, ctx)
     })
+}
+
+fn random_owner_password() -> String {
+    format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
 }
 
 /// What the page sends to remove a password. No `Debug`.
