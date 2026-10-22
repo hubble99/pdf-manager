@@ -44,10 +44,15 @@ const FORMAT_OPTIONS = [
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
- * The QR preview is always made at this module size and shown scaled to its box, so the
- * size slider never redraws it. The file is made at the chosen size when it is saved.
+ * The QR preview is always made at this module size (the largest the slider offers, so it
+ * stays sharp when shown smaller) and never redrawn when the slider moves. The slider
+ * only changes how big it is drawn, and the file is made at the chosen size when saved.
  */
-const PREVIEW_MODULE_PX = 10;
+const PREVIEW_MODULE_PX = 20;
+/** Edge of the QR in the preview box at the largest size; smaller sizes scale down from it. */
+const PREVIEW_EDGE_PX = 280;
+const PREVIEW_MIN_EDGE_PX = 48;
+const MAX_QR_SIZE = 20;
 
 
 // Custom hook for debouncing value
@@ -176,7 +181,15 @@ export function QrBarcodePage() {
         const svgText = new TextDecoder().decode(bytes);
         const blob = new Blob([svgText], { type: 'image/svg+xml' });
         const blobUrl = URL.createObjectURL(blob);
-        setPreviewData({ url: blobUrl, isSvgText: true, svgText, content, kind: activeTab, format });
+        setPreviewData({
+          url: blobUrl,
+          isSvgText: true,
+          svgText,
+          content,
+          kind: activeTab,
+          format,
+          qr: isQr ? { content, errorCorrection: qrErrorCorrection } : undefined,
+        });
       } else {
         const blob = new Blob([bytes], { type: 'image/png' });
         setPreviewData({
@@ -244,6 +257,14 @@ export function QrBarcodePage() {
           height: (shownPreview.pixels.height / PREVIEW_MODULE_PX) * qrSize,
         }
       : shownPreview.pixels
+    : null;
+
+  // A QR is drawn in proportion to the chosen size, so the difference can be seen at once;
+  // an SVG has no size, so it is shown at full edge.
+  const qrEdge = shownPreview?.qr
+    ? shownPreview.format === 'svg'
+      ? PREVIEW_EDGE_PX
+      : Math.max(PREVIEW_MIN_EDGE_PX, Math.round((PREVIEW_EDGE_PX * qrSize) / MAX_QR_SIZE))
     : null;
 
   const startDownload = (href: string, filename: string, revokeLater: boolean) => {
@@ -431,7 +452,11 @@ export function QrBarcodePage() {
                       <span>{t('Generating...')}</span>
                     </div>
                   ) : shownPreview ? (
-                    <img src={shownPreview.url} alt={t('Preview')} />
+                    <img
+                      src={shownPreview.url}
+                      alt={t('Preview')}
+                      style={qrEdge ? { width: qrEdge, height: qrEdge, maxWidth: 'none', maxHeight: 'none' } : undefined}
+                    />
                   ) : (
                     <div className="preview-empty">
                       {activeTab === 'qr' ? <QrCode size={32} aria-hidden="true" /> : <Barcode size={32} aria-hidden="true" />}
@@ -450,7 +475,7 @@ export function QrBarcodePage() {
                     <RangeField
                       id="qr-size-slider"
                       min={1}
-                      max={20}
+                      max={MAX_QR_SIZE}
                       value={qrSize}
                       onChange={setQrSize}
                       disabled={format === 'svg'}

@@ -54,7 +54,7 @@ describe('QrBarcodePage', () => {
 
     await waitFor(() => expect(generateQr).toHaveBeenCalledTimes(1), { timeout: 3000 });
     expect(generateQr).toHaveBeenCalledWith(
-      expect.objectContaining({ content: 'hello world', size: 10, errorCorrection: 'M', format: 'png', border: 4 })
+      expect.objectContaining({ content: 'hello world', size: 20, errorCorrection: 'M', format: 'png', border: 4 })
     );
 
     // A runaway regeneration loop would keep issuing requests after the
@@ -146,9 +146,14 @@ describe('QrBarcodePage', () => {
 
     // The label follows the slider at once; the preview is not redrawn at all.
     expect(await screen.findByText('Saved image: 580 × 580 px')).toBeInTheDocument();
+    expect(screen.getByAltText('Preview')).toHaveStyle({ width: '280px', height: '280px' });
+    fireEvent.change(slider, { target: { value: '10' } });
+    expect(await screen.findByText('Saved image: 290 × 290 px')).toBeInTheDocument();
+    expect(screen.getByAltText('Preview')).toHaveStyle({ width: '140px', height: '140px' });
+    fireEvent.change(slider, { target: { value: '20' } });
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(generateQr).toHaveBeenCalledTimes(1);
-    expect(generateQr).toHaveBeenLastCalledWith(expect.objectContaining({ size: 10 }));
+    expect(generateQr).toHaveBeenLastCalledWith(expect.objectContaining({ size: 20 }));
   }, 20000);
 
   it('saves the QR at the chosen size, remaking it only then', async () => {
@@ -158,17 +163,18 @@ describe('QrBarcodePage', () => {
     fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
     await waitFor(() => expect(screen.getByRole('button', { name: /Save PNG/i })).toBeEnabled(), { timeout: 3000 });
 
-    // At the preview's own size the picture on screen is what gets saved.
+    // At the preview's own size (the largest) the picture on screen is what gets saved.
+    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '20' } });
     fireEvent.click(screen.getByRole('button', { name: /Save PNG/i }));
     expect(click).toHaveBeenCalledTimes(1);
     expect(generateQr).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '20' } });
+    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '5' } });
     fireEvent.click(screen.getByRole('button', { name: /Save PNG/i }));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(2));
     expect(generateQr).toHaveBeenCalledTimes(2);
     expect(generateQr).toHaveBeenLastCalledWith(
-      expect.objectContaining({ content: 'hello', size: 20, errorCorrection: 'M', format: 'png' })
+      expect.objectContaining({ content: 'hello', size: 5, errorCorrection: 'M', format: 'png' })
     );
   }, 20000);
 

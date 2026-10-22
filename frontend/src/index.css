@@ -4590,6 +4590,11 @@ select.input {
 }
 
 /* The saved QR keeps its full quiet zone; the preview crops most of it so the code fills the card. */
+.preview-box--qr {
+  /* Fixed height: the QR inside grows and shrinks with the size slider, the card must not. */
+  min-height: 300px;
+}
+
 .preview-box--qr img {
   max-height: 280px;
   transform: scale(1.22);
