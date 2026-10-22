@@ -171,6 +171,7 @@ export const ID: Record<string, string> = {
   'Checking the new file…': 'Memeriksa file baru…',
   'This PDF already has a password. Use Remove Password first.': 'PDF ini sudah memakai kata sandi. Gunakan Hapus Kata Sandi dulu.',
   'This PDF has no password to remove.': 'PDF ini tidak memakai kata sandi.',
+  'Tip: hold Shift and click to select a range of pages.': 'Tips: tahan Shift lalu klik untuk memilih beberapa halaman sekaligus.',
   'Conversion cancelled': 'Konversi dibatalkan',
   'Saving the merged PDF…': 'Menyimpan PDF gabungan…',
   'Merging file {done} of {total}…': 'Menggabungkan file {done} dari {total}…',

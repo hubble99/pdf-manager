@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { Check } from 'lucide-react';
 import { fetchPagePreview, isAbort, type PdfSource } from '../../api/pdfRender';
 import { t } from '../../i18n';
@@ -37,10 +38,10 @@ interface PageThumbProps {
   selected: boolean;
   interactive: boolean;
   dpi: number;
-  onToggle: (page: number) => void;
+  onPick: (page: number, shift: boolean) => void;
 }
 
-function PageThumb({ file, page, selected, interactive, dpi, onToggle }: PageThumbProps) {
+function PageThumb({ file, page, selected, interactive, dpi, onPick }: PageThumbProps) {
   const holder = useRef<HTMLButtonElement>(null);
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
   const [url, setUrl] = useState<string | null>(null);
@@ -88,7 +89,8 @@ function PageThumb({ file, page, selected, interactive, dpi, onToggle }: PageThu
       aria-pressed={interactive ? selected : undefined}
       aria-label={selected ? t('Page {n}, selected', { n: page }) : t('Page {n}', { n: page })}
       disabled={!interactive}
-      onClick={() => onToggle(page)}
+      onMouseDown={(event) => { if (event.shiftKey) event.preventDefault(); }}
+      onClick={(event: MouseEvent) => onPick(page, event.shiftKey)}
     >
       <span className={`thumb-page${url ? ' has-image' : ''}`}>
         {url && <img src={url} alt="" draggable={false} />}
@@ -106,12 +108,34 @@ export interface PageThumbGridProps {
   /** When false the grid only displays the selection (it cannot be edited). */
   interactive?: boolean;
   onToggle: (page: number) => void;
+  /**
+   * Shift + click: every page from the last page clicked to this one, inclusive,
+   * is set to what that last click did (selected or cleared). Without this the
+   * grid treats a shift-click like a plain click.
+   */
+  onSelectRange?: (from: number, to: number, selected: boolean) => void;
   dpi?: number;
 }
 
 export function PageThumbGrid({
-  file, totalPages, selected, interactive = true, onToggle, dpi = 40,
+  file, totalPages, selected, interactive = true, onToggle, onSelectRange, dpi = 40,
 }: PageThumbGridProps) {
+  // The page a shift-click extends from, and whether that click selected it.
+  const anchor = useRef<{ page: number; selected: boolean } | null>(null);
+  useEffect(() => {
+    anchor.current = null;
+  }, [file, totalPages]);
+
+  const pick = (page: number, shift: boolean) => {
+    const from = anchor.current;
+    if (shift && onSelectRange && from) {
+      onSelectRange(Math.min(from.page, page), Math.max(from.page, page), from.selected);
+      return;
+    }
+    anchor.current = { page, selected: !selected.has(page) };
+    onToggle(page);
+  };
+
   return (
     <div className="thumb-grid" role="group" aria-label={t('Pages')}>
       {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
@@ -122,7 +146,7 @@ export function PageThumbGrid({
           selected={selected.has(page)}
           interactive={interactive}
           dpi={dpi}
-          onToggle={onToggle}
+          onPick={pick}
         />
       ))}
     </div>

@@ -185,6 +185,15 @@ export function ExtractPage() {
     else next.add(page);
     setPageRanges(formatPageNumbers(next));
   };
+  /** Shift + click on the grid: the range between the two clicks is set in one go. */
+  const selectRange = (from: number, to: number, select: boolean) => {
+    const next = new Set(selectedPages);
+    for (let page = from; page <= to; page += 1) {
+      if (select) next.add(page);
+      else next.delete(page);
+    }
+    setPageRanges(formatPageNumbers(next));
+  };
   const selectAllPages = () => setPageRanges(totalPages > 0 ? `1-${totalPages}` : '');
   const clearPages = () => setPageRanges('');
 
@@ -283,13 +292,21 @@ export function ExtractPage() {
                 </span>
               </div>
               {totalPages > 0 ? (
-                <PageThumbGrid
-                  file={path}
-                  totalPages={totalPages}
-                  selected={selectedPages}
-                  interactive={gridEditable}
-                  onToggle={togglePage}
-                />
+                <>
+                  <PageThumbGrid
+                    file={path}
+                    totalPages={totalPages}
+                    selected={selectedPages}
+                    interactive={gridEditable}
+                    onToggle={togglePage}
+                    onSelectRange={selectRange}
+                  />
+                  {gridEditable && totalPages > 1 && (
+                    <p className="empty-hint" id="extract-shift-hint">
+                      {t('Tip: hold Shift and click to select a range of pages.')}
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="empty-hint">
                   {infoLoading
