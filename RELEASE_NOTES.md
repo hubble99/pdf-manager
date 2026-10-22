@@ -1,3 +1,13 @@
+# Dokuwu 1.10.1 — Release Notes
+
+**Release type:** patch. A fix found while testing 1.10.0 on Windows. The
+detailed entry is in [`CHANGELOG.md`](CHANGELOG.md).
+
+## 1.10.1 highlights
+- **Split PDF / Merge PDF:** a very large job no longer leaves temporary `.spillN.pdf.part` files in the output folder on Windows.
+
+---
+
 # Dokuwu 1.10.0 — Release Notes
 
 **Release type:** minor. Phase 2 of the move to the native Rust core: more tools

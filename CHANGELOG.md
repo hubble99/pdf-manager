@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.10.1 — 2026-10-22 · Temporary files fix
+
 **Fixed**
 
 - **Split PDF / Merge PDF:** on Windows, a very large Extract or Merge that had to use temporary files could leave `.extracted_*.spillN.pdf.part` files behind in the output folder. They are now deleted when the job ends.
