@@ -302,6 +302,9 @@ export function EditContentPage() {
       setZoom(0.75);
       zoomedByUser.current = false;
       selectTarget(null);
+      if (reply.result.permissionsRemoved) {
+        setNotice(t('This PDF restricts editing. The edited copy will not carry that restriction.'));
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : t('Edit Content engine is unavailable.'));
     } finally {

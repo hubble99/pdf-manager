@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+
+- **Edit Content:** a PDF that only restricts editing (it opens without a password) can now be opened. The edited copy does not carry the restriction, and a notice says so. A PDF that needs a password is still refused.
+
 ## 1.9.0 — 2026-10-21 · Phase 1: native Rust core and new tools
 
 > The first tools that run on the new Rust core (`dokuwu-core`) instead of the
