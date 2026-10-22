@@ -4629,6 +4629,36 @@ select.input {
   }
 }
 
+/* Two equal columns (Compress Photos): the file list on the left, the options on the right. */
+.form-col--balanced {
+  max-width: 1040px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* The file card fills its column, so both columns end at the same height; a long
+   list scrolls inside it. */
+.photo-files-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-files-card > .image-format-list {
+  flex: 1;
+  min-height: 0;
+  max-height: max(280px, 55vh);
+}
+
+@media (max-width: 820px) {
+  .form-col--balanced {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+
 /* A single-choice row inside a flush card. */
 .mode-row {
   display: flex;
@@ -4946,6 +4976,14 @@ select.input {
 /* Images to PDF: the card is also a drop target for more images. */
 .converter-image-drop {
   padding: 16px;
+}
+
+/* A long list of previews scrolls inside its card, like the page grid of Split PDF,
+   so the options beside it stay in view. */
+.converter-image-drop,
+.merge-quick-scroll {
+  max-height: max(320px, 60vh);
+  overflow-y: auto;
 }
 
 /* A segmented control whose options share the full width equally. */

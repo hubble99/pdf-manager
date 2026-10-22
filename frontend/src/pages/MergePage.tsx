@@ -294,6 +294,7 @@ export function MergePage() {
                 <span className="grow-spacer" />
                 <span className="text-muted card-title-note">{t('Drag the previews to reorder')}</span>
               </div>
+              <div className="merge-quick-scroll">
               <SortableCardGrid
                 idPrefix="merge"
                 compact
@@ -331,6 +332,7 @@ export function MergePage() {
                   };
                 })}
               />
+              </div>
             </div>
 
             {/* Right: add more, output name, actions */}
