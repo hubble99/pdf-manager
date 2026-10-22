@@ -36,20 +36,31 @@ const asCoreError = (err: unknown): NativeCoreError => {
   return new NativeCoreError('internal', err instanceof Error ? err.message : String(err));
 };
 
-async function generate(command: string, args: Record<string, unknown>): Promise<ArrayBuffer> {
+/**
+ * The image bytes as the webview delivers them: an `ArrayBuffer` over the
+ * fast IPC route, a plain number array over the fallback route.
+ */
+function toBytes(data: unknown): Uint8Array<ArrayBuffer> {
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) return Uint8Array.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  if (Array.isArray(data)) return Uint8Array.from(data as number[]);
+  throw new NativeCoreError('internal', `unexpected answer from the core (${typeof data})`);
+}
+
+async function generate(command: string, args: Record<string, unknown>): Promise<Uint8Array<ArrayBuffer>> {
   try {
-    return await invoke<ArrayBuffer>(command, args);
+    return toBytes(await invoke<unknown>(command, args));
   } catch (err) {
     throw asCoreError(err);
   }
 }
 
 /** A QR code as PNG or SVG bytes. */
-export const generateQr = ({ content, size, errorCorrection, format, border }: QrRequest): Promise<ArrayBuffer> =>
+export const generateQr = ({ content, size, errorCorrection, format, border }: QrRequest): Promise<Uint8Array<ArrayBuffer>> =>
   generate('core_qr_generate', { content, size, errorCorrection, format, border });
 
 /** A barcode as PNG or SVG bytes. */
-export const generateBarcode = ({ content, barcodeType, format }: BarcodeRequest): Promise<ArrayBuffer> =>
+export const generateBarcode = ({ content, barcodeType, format }: BarcodeRequest): Promise<Uint8Array<ArrayBuffer>> =>
   generate('core_barcode_generate', { content, barcodeType, format });
 
 /** The core's message without the "invalid input: " label it adds. */
@@ -63,7 +74,7 @@ const plainMessage = (message: string): string => message.replace(/^invalid inpu
 export function generationErrorText(err: unknown): string {
   const { code, message } = asCoreError(err);
   const text = plainMessage(message);
-  if (code !== 'invalid_input') return t('Unexpected error while generating.');
+  if (code !== 'invalid_input') return t('Unexpected error while generating: {message}', { message: text });
 
   if (text === 'Content is too long for a QR code.') return t('Content is too long for a QR code.');
   if (text === 'Content is too long for a barcode.') return t('Content is too long for a barcode.');

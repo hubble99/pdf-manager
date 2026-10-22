@@ -752,7 +752,7 @@ export const ID: Record<string, string> = {
   'Undo (Ctrl+Z)': 'Urungkan (Ctrl+Z)',
   'Unexpected error while compressing this photo.': 'Terjadi kesalahan tak terduga saat mengompres foto ini.',
   'Unexpected error while converting this image.': 'Terjadi kesalahan tak terduga saat mengonversi gambar ini.',
-  'Unexpected error while generating.': 'Terjadi kesalahan tak terduga saat membuat kode.',
+  'Unexpected error while generating: {message}': 'Terjadi kesalahan tak terduga saat membuat kode: {message}',
   'Unknown error': 'Kesalahan tidak diketahui',
   'Unsaved changes': 'Perubahan belum disimpan',
   'Unsupported file.': 'File tidak didukung.',

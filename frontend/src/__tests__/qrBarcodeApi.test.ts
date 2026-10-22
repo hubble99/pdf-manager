@@ -14,11 +14,10 @@ describe('qr and barcode commands', () => {
   afterEach(() => applyLanguage('en'));
 
   it('calls the QR command with camelCase arguments and returns the bytes', async () => {
-    const bytes = new Uint8Array([1, 2, 3]).buffer;
-    invokeMock.mockResolvedValue(bytes);
+    invokeMock.mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
     await expect(
       generateQr({ content: 'hi', size: 8, errorCorrection: 'Q', format: 'svg', border: 2 })
-    ).resolves.toBe(bytes);
+    ).resolves.toEqual(new Uint8Array([1, 2, 3]));
     expect(invokeMock).toHaveBeenCalledWith('core_qr_generate', {
       content: 'hi',
       size: 8,
@@ -35,6 +34,24 @@ describe('qr and barcode commands', () => {
       content: '590123412345',
       barcodeType: 'ean13',
       format: 'png',
+    });
+  });
+
+  it('accepts the bytes as a typed array or a plain number array too', async () => {
+    invokeMock.mockResolvedValueOnce([137, 80, 78, 71]);
+    await expect(generateBarcode({ content: 'a', barcodeType: 'code128', format: 'png' })).resolves.toEqual(
+      new Uint8Array([137, 80, 78, 71])
+    );
+    invokeMock.mockResolvedValueOnce(new Uint8Array([1, 2]));
+    await expect(generateBarcode({ content: 'a', barcodeType: 'code128', format: 'png' })).resolves.toEqual(
+      new Uint8Array([1, 2])
+    );
+  });
+
+  it('reports an answer that is not bytes instead of drawing garbage', async () => {
+    invokeMock.mockResolvedValueOnce('oops');
+    await expect(generateQr({ content: 'a', size: 8, errorCorrection: 'M', format: 'png' })).rejects.toMatchObject({
+      code: 'internal',
     });
   });
 
@@ -63,8 +80,10 @@ describe('qr and barcode commands', () => {
     );
   });
 
-  it('does not show internal error text to the user', () => {
-    expect(generationErrorText(new NativeCoreError('internal', 'internal error: boom'))).toBe('Unexpected error while generating.');
-    expect(generationErrorText(new Error('weird'))).toBe('Unexpected error while generating.');
+  it('shows the reason for an unexpected failure so it can be reported', () => {
+    expect(generationErrorText(new NativeCoreError('internal', 'internal error: boom'))).toBe(
+      'Unexpected error while generating: internal error: boom'
+    );
+    expect(generationErrorText(new Error('weird'))).toBe('Unexpected error while generating: weird');
   });
 });
