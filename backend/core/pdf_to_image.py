@@ -15,7 +15,7 @@ from PIL import Image
 
 from config import settings
 from core import render_color  # noqa: F401  (switches on ICC colour management)
-from core.pdf_extract import parse_page_ranges, ExtractError
+from core.page_ranges import parse_page_ranges, ExtractError
 
 logger = logging.getLogger("pdf_manager.core.pdf_to_image")
 

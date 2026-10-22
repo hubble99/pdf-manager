@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 
 from config import settings
 from models.common import SuccessResponse, ErrorResponse
-from routers import merge, extract, pdf_to_image, image_to_pdf, pdf_info, settings as settings_router, organize, protect, preview, edit_canvas, edit_content, fonts
+from routers import pdf_to_image, image_to_pdf, pdf_info, settings as settings_router, organize, protect, preview, edit_canvas, edit_content, fonts
 from version import APP_VERSION
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -112,12 +112,6 @@ async def lifespan(app: FastAPI):
         organize_documents_registry.release_all()
     except Exception:
         logger.exception("Organize documents were not all released cleanly")
-    try:
-        from features.merge.folders import registry as merge_folders_registry
-
-        merge_folders_registry.release_all()
-    except Exception:
-        logger.exception("Merge folder registrations were not all released cleanly")
     _clean_directory(settings.TEMP_DIR, "temp")
     _clean_directory(settings.OUTPUT_DIR, "output")
     logger.info("Shutdown cleanup complete.")
@@ -230,8 +224,6 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # ── Routers ─────────────────────────────────────────────────────────────────────
-app.include_router(merge.router, prefix="/api/v1")
-app.include_router(extract.router, prefix="/api/v1")
 app.include_router(pdf_to_image.router, prefix="/api/v1")
 app.include_router(image_to_pdf.router, prefix="/api/v1")
 app.include_router(pdf_info.router, prefix="/api/v1")
