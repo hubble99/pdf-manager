@@ -1,3 +1,19 @@
+# Dokuwu 1.9.0 — Release Notes
+
+**Release type:** minor. This release adds the first tools built on the new Rust
+core and fixes Edit Content edge cases. The detailed entry is in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+## 1.9.0 highlights
+- **PDF to Word:** convert a PDF to an editable Word document.
+- **WEBP to PNG/JPG:** batch image conversion.
+- **Compress Photos:** make JPEG and PNG photos smaller in batches.
+- **Compress PDF** now keeps memory flat on large files and can be cancelled.
+- **Canvas PDF** accepts images (move, resize, rotate, opacity).
+- **Edit Content:** buttons no longer clip in Indonesian, rejected edits keep your text, and more macOS-made PDFs are accepted.
+
+---
+
 # Dokuwu 1.8.0 — Release Notes
 
 **Release type:** cumulative. This release publishes everything built since

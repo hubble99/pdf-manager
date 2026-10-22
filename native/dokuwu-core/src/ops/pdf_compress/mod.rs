@@ -160,6 +160,10 @@ fn run(
     ctx: &JobContext,
     probe: Arc<dyn MemoryProbe>,
 ) -> CoreResult<PdfCompressReport> {
+    // Declared before `doc` so that, on an early return, the document is
+    // dropped (and its file closed) before the working folder is removed;
+    // Windows cannot delete a file that is still open.
+    let mut work_dir: Option<WorkDir> = None;
     let mut doc = open_pdf(input)?;
     if is_encrypted(&doc)? {
         return Err(CoreError::PasswordRequired);
@@ -172,7 +176,6 @@ fn run(
     // A file smaller than one batch can never hold more re-encoded data than a
     // batch, so it is edited in memory and saved once. A bigger one is edited
     // on a working copy that receives incremental saves.
-    let mut work_dir: Option<WorkDir> = None;
     let mut working_file: Option<PathBuf> = None;
     if size_before >= batch_bytes {
         let work = WorkDir::create()?;
@@ -461,7 +464,7 @@ impl Pipeline<'_> {
 // ── files ────────────────────────────────────────────────────────────────
 
 fn open_pdf(path: &Path) -> CoreResult<PdfDocument> {
-    PdfDocument::open(path).map_err(|e| CoreError::InvalidInput(format!("cannot open PDF: {e}")))
+    PdfDocument::open(path_str(path)?).map_err(|e| CoreError::InvalidInput(format!("cannot open PDF: {e}")))
 }
 
 fn is_encrypted(doc: &PdfDocument) -> CoreResult<bool> {
@@ -553,7 +556,16 @@ impl WorkDir {
 
 impl Drop for WorkDir {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        // A virus scanner or indexer can hold a freshly written file for a
+        // moment on Windows, so retry briefly before giving up.
+        for attempt in 0..10 {
+            if fs::remove_dir_all(&self.0).is_ok() || !self.0.exists() {
+                return;
+            }
+            if attempt < 9 {
+                thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
     }
 }
 
