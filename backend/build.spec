@@ -8,7 +8,6 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        ('.venv/Lib/site-packages/barcode/fonts/DejaVuSansMono.ttf', 'barcode/fonts'),
         ('../native/edit-content-engine/pdfium-artifacts.json', 'edit-content'),
     ],
     hiddenimports=[
@@ -43,11 +42,6 @@ a = Analysis(
         'PIL.Image',
         'PIL.ImageOps',
         'PIL.ImageFile',
-        # QR / barcode
-        'qrcode',
-        'qrcode.image.pil',
-        'barcode',
-        'barcode.writer',
         # pydantic
         'pydantic',
         'pydantic_settings',

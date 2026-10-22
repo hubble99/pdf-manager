@@ -4,7 +4,7 @@
 
 **Changed**
 
-- **QR & Barcode:** codes are now made by the native Rust core instead of the Python backend, so the preview no longer waits on a local server call. PNG and SVG look and measure like before (same sizes, same Code 128, EAN-13, EAN-8 and Code 39 bars, same text under the bars). The SVG has no `svg:` namespace prefix any more. Two small behaviour changes: an EAN-13 or EAN-8 typed with a wrong check digit is refused with the right digit named (the old code silently replaced it), and when a code cannot be made the preview now says why (for example a character Code 39 cannot hold). The Python route stays until the Windows check is done.
+- **QR & Barcode:** codes are now made by the native Rust core instead of the Python backend, so the preview no longer waits on a local server call. PNG and SVG look and measure like before (same sizes, same Code 128, EAN-13, EAN-8 and Code 39 bars, same text under the bars). The SVG has no `svg:` namespace prefix any more. Two small behaviour changes: an EAN-13 or EAN-8 typed with a wrong check digit is refused with the right digit named (the old code silently replaced it), and when a code cannot be made the preview now says why (for example a character Code 39 cannot hold). The old Python QR/barcode route, its code and the `qrcode` and `python-barcode` packages are removed.
 - **PDF to Word:** now carries a BETA badge (sidebar, Home card and page header) and a note that the result can look messy when the PDF contains pictures or a letterhead.
 
 ## 1.9.1 — 2026-10-22 · Edit Content and conversion fixes

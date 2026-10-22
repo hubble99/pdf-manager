@@ -19,8 +19,6 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/pdf-to-image/pages"),
     ("POST", "/api/v1/pdf-to-image/page"),
     ("POST", "/api/v1/image-to-pdf/"),
-    ("POST", "/api/v1/qr-barcode/qr"),
-    ("POST", "/api/v1/qr-barcode/barcode"),
     ("POST", "/api/v1/pdf-info/"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
@@ -123,21 +121,6 @@ REQUEST_BODY_CONTRACTS = {
         "media_type": "application/json",
         "required": {"root_id", "files"},
         "defaults": {"output_filename": "merged_output.pdf", "skip_invalid": True},
-    },
-    ("POST", "/api/v1/qr-barcode/qr"): {
-        "media_type": "application/json",
-        "required": {"content"},
-        "defaults": {
-            "size": 10,
-            "error_correction": "M",
-            "format": "png",
-            "border": 4,
-        },
-    },
-    ("POST", "/api/v1/qr-barcode/barcode"): {
-        "media_type": "application/json",
-        "required": {"content"},
-        "defaults": {"barcode_type": "code128", "format": "png"},
     },
     ("POST", "/api/v1/pdf-info/"): {
         "media_type": "multipart/form-data",
