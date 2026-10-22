@@ -2,10 +2,24 @@
 
 ## Unreleased
 
-**Changed**
+## 1.10.0 — 2026-10-22 · Phase 2: more tools on the native Rust core
 
-- **QR & Barcode:** codes are now made by the native Rust core instead of the Python backend, so the preview no longer waits on a local server call. PNG and SVG look and measure like before (same sizes, same Code 128, EAN-13, EAN-8 and Code 39 bars, same text under the bars). The SVG has no `svg:` namespace prefix any more. Two small behaviour changes: an EAN-13 or EAN-8 typed with a wrong check digit is refused with the right digit named (the old code silently replaced it), and when a code cannot be made the preview now says why (for example a character Code 39 cannot hold). The old Python QR/barcode route, its code and the `qrcode` and `python-barcode` packages are removed.
+> PDF & Image, Merge PDF, Split PDF, Protect PDF, QR & Barcode and every page preview now run on the Rust core (`dokuwu-core`) instead of the Python backend. They read and write files directly on disk, show progress, can be cancelled, and keep memory use flat for large files. Results are saved to Downloads under a free name (`name (1).pdf`); an existing file is never overwritten, and a "Show in folder" button opens the result.
+
+**Improved**
+
+- **Merge PDF (Quick and Folder) and Split PDF:** work on file paths, so large files no longer wait on an upload. Memory stays flat even for very large merges. Links, highlights, notes and form fields of the source pages are kept.
+- **Split PDF:** hold Shift and click a page to select a whole range of pages at once. Clicking a page with the mouse no longer leaves a thick focus outline behind.
+- **PDF & Image:** converting PDF pages to images and images to PDF runs on the Rust core with progress and Cancel.
+- **Protect PDF:** adds or removes an AES-256 password on the Rust core, checks the new file before saving it, and clears the typed passwords after each run. The Owner Password field is gone: the app sets a random owner password it does not keep, so the Print / Copy / Modify permissions bind whoever opens the file with the password.
+- **QR & Barcode:** codes are now made by the native Rust core instead of the Python backend, so the preview no longer waits on a local server call. PNG and SVG look and measure like before (same sizes, same Code 128, EAN-13, EAN-8 and Code 39 bars, same text under the bars). The SVG has no `svg:` namespace prefix any more. Two small behaviour changes: an EAN-13 or EAN-8 typed with a wrong check digit is refused with the right digit named (the old code silently replaced it), and when a code cannot be made the preview now says why (for example a character Code 39 cannot hold).
+- **Layout:** long page and file lists (Merge PDF Quick and Folder, Images to PDF, Compress Photos) scroll inside a fixed-height box, so the controls beside them and the Merge / Convert buttons stay in view. Compress Photos uses two balanced columns on wide windows.
 - **PDF to Word:** now carries a BETA badge (sidebar, Home card and page header) and a note that the result can look messy when the PDF contains pictures or a letterhead.
+
+**Internal**
+
+- Page previews and PDF facts (page count, size, metadata) come from the Rust core. The Python routes for PDF to image, image to PDF, Merge, Split, Protect, `/preview` and `/pdf-info`, their code and tests, and the `qrcode` and `python-barcode` packages are removed. Only the page-image routes used by Canvas PDF stay in Python until Phase 3.
+- Dependency updates: `npm audit` reports 0 vulnerabilities, and the Tauri npm packages are pinned to the crates' minor version.
 
 ## 1.9.1 — 2026-10-22 · Edit Content and conversion fixes
 

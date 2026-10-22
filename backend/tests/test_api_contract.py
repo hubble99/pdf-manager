@@ -7,20 +7,14 @@ from main import app
 
 
 EXPECTED_API_ROUTES = {
-    ("POST", "/api/v1/pdf-to-image/"),
     ("POST", "/api/v1/pdf-to-image/pages"),
     ("POST", "/api/v1/pdf-to-image/page"),
-    ("POST", "/api/v1/image-to-pdf/"),
-    ("POST", "/api/v1/pdf-info/"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
     ("POST", "/api/v1/organize/documents/"),
     ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
     ("DELETE", "/api/v1/organize/documents/{document_id}"),
     ("POST", "/api/v1/organize/assemble/"),
-    ("POST", "/api/v1/protect/"),
-    ("POST", "/api/v1/protect/remove"),
-    ("POST", "/api/v1/preview/"),
     ("POST", "/api/v1/edit-canvas/save"),
     ("POST", "/api/v1/edit-content/sessions"),
     ("POST", "/api/v1/edit-content/shutdown"),
@@ -40,16 +34,6 @@ EXPECTED_API_ROUTES = {
 
 
 REQUEST_BODY_CONTRACTS = {
-    ("POST", "/api/v1/pdf-to-image/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {
-            "page_ranges": "",
-            "format": "png",
-            "dpi": 150,
-            "output_filename": "",
-        },
-    },
     ("POST", "/api/v1/pdf-to-image/pages"): {
         "media_type": "multipart/form-data",
         "required": {"file"},
@@ -60,16 +44,6 @@ REQUEST_BODY_CONTRACTS = {
         "required": {"file", "page_index"},
         "defaults": {"dpi": 200},
     },
-    ("POST", "/api/v1/image-to-pdf/"): {
-        "media_type": "multipart/form-data",
-        "required": {"files"},
-        "defaults": {
-            "page_size": "a4",
-            "output_filename": "output.pdf",
-            "rotations": "[]",
-            "flips": "[]",
-        },
-    },
     ("POST", "/api/v1/organize/documents/"): {
         "media_type": "multipart/form-data",
         "required": {"file"},
@@ -79,32 +53,6 @@ REQUEST_BODY_CONTRACTS = {
         "media_type": "application/json",
         "required": {"pages"},
         "defaults": {"output_filename": "organized.pdf"},
-    },
-    ("POST", "/api/v1/pdf-info/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {},
-    },
-    ("POST", "/api/v1/protect/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file", "user_pw"},
-        "defaults": {
-            "owner_pw": "",
-            "output_filename": "protected.pdf",
-            "allow_print": True,
-            "allow_copy": True,
-            "allow_modify": True,
-        },
-    },
-    ("POST", "/api/v1/protect/remove"): {
-        "media_type": "multipart/form-data",
-        "required": {"file", "user_pw"},
-        "defaults": {"output_filename": ""},
-    },
-    ("POST", "/api/v1/preview/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {"page": 1, "dpi": 72, "quality_hint": "auto"},
     },
     ("POST", "/api/v1/edit-canvas/save"): {
         "media_type": "multipart/form-data",
@@ -255,7 +203,7 @@ async def test_missing_required_request_fields_use_fastapi_validation_shape(meth
 async def test_validation_error_shape_is_stable():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/api/v1/pdf-info/")
+        response = await client.post("/api/v1/pdf-to-image/pages")
 
     assert response.status_code == 422
     assert response.headers["content-type"].startswith("application/json")
@@ -279,7 +227,7 @@ async def test_health_response_and_exposed_headers_are_stable():
     body = response.json()
     assert body["status"] == "success"
     assert body["message"] == "PDF Manager API is running"
-    assert body["data"]["version"] == "1.9.1"
+    assert body["data"]["version"] == "1.10.0"
     assert isinstance(body["data"]["temp_dir"], str)
     assert isinstance(body["data"]["output_dir"], str)
 

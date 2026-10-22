@@ -1,19 +1,16 @@
 /**
  * Page previews and PDF facts from the native core (`ops::pdf_render`).
  *
- * A PDF is named by its path on disk; nothing is uploaded. The browser
- * `File` route to the Python sidecar still exists for pages that have not
- * moved to paths yet (see `fetchPagePreview`).
+ * A PDF is named by its path on disk; nothing is uploaded.
  */
 import { invoke } from '@tauri-apps/api/core';
 import axios from 'axios';
-import apiClient from './client';
 import { NativeCoreError, type CoreErrorCode } from './nativeCore';
 
 export type PreviewQuality = 'low' | 'auto' | 'high';
 
-/** A PDF to preview: a path (native core) or a browser file (Python sidecar). */
-export type PdfSource = File | string;
+/** A PDF to preview: its path on disk. */
+export type PdfSource = string;
 
 export interface PdfMetadata {
   format: string;
@@ -69,17 +66,14 @@ export async function renderPdfPage(
 
 /** Stable text for "same PDF, same page", usable as a React key. */
 export function previewKey(source: PdfSource, page: number): string {
-  return typeof source === 'string'
-    ? `${source}:${page}`
-    : `${source.name}:${source.size}:${source.lastModified}:${page}`;
+  return `${source}:${page}`;
 }
 
 export const isAbort = (err: unknown): boolean =>
   axios.isCancel(err) || (err instanceof DOMException && err.name === 'AbortError');
 
 /**
- * Loads the preview image of one page for either kind of source. A path goes
- * to the native core; a `File` is uploaded to the Python sidecar, as before.
+ * Loads the preview image of one page from the native core.
  * Throws an abort error when `signal` fires first.
  */
 export async function fetchPagePreview(
@@ -87,17 +81,8 @@ export async function fetchPagePreview(
   options: { page: number; dpi: number; quality: PreviewQuality; signal: AbortSignal },
 ): Promise<Blob> {
   const { page, dpi, quality, signal } = options;
-  if (typeof source === 'string') {
-    if (signal.aborted) throw new DOMException('Preview request aborted', 'AbortError');
-    const blob = await renderPdfPage(source, page, dpi, quality);
-    if (signal.aborted) throw new DOMException('Preview request aborted', 'AbortError');
-    return blob;
-  }
-  const form = new FormData();
-  form.append('file', source, source.name || 'preview.pdf');
-  form.append('page', String(page));
-  form.append('dpi', String(dpi));
-  form.append('quality_hint', quality);
-  const res = await apiClient.post('/api/v1/preview/', form, { responseType: 'blob', signal });
-  return new Blob([res.data], { type: 'image/png' });
+  if (signal.aborted) throw new DOMException('Preview request aborted', 'AbortError');
+  const blob = await renderPdfPage(source, page, dpi, quality);
+  if (signal.aborted) throw new DOMException('Preview request aborted', 'AbortError');
+  return blob;
 }

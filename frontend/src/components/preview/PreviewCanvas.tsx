@@ -100,20 +100,16 @@ export function PreviewCanvas({
       const abortController = new AbortController();
       let currentUrl: string | null = null;
       let isCurrent = true;
-      
-      // A big upload is slow, so large files get the lightest preview; a path
-      // is read from disk and costs nothing to send.
-      const isLargeFile = typeof file !== 'string' && file.size > 50 * 1024 * 1024; // >50MB
-      const quality = isLargeFile ? 'low' : 'auto';
+      const source = file;
 
       async function loadPdfPreview() {
         setLoading(true);
         setError(false);
         try {
-          const blob = await fetchPagePreview(file as PdfSource, {
+          const blob = await fetchPagePreview(source, {
             page: pageNumber,
             dpi: 72, // ≈ 600px width for A4
-            quality,
+            quality: 'auto',
             signal: abortController.signal,
           });
           currentUrl = URL.createObjectURL(blob);
@@ -225,13 +221,6 @@ export function PreviewCanvas({
             color: 'var(--on-surface-variant)'
           }}
         >
-          {file && typeof file !== 'string' && file.size > 50 * 1024 * 1024 ? (
-            <div style={{ textAlign: 'center' }}>
-              <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
-              <p style={{ fontWeight: 500 }}>{t('Large file detected')}</p>
-              <p style={{ fontSize: 13, opacity: 0.7 }}>{t('Rendering preview may take longer...')}</p>
-            </div>
-          ) : null}
         </div>
       ) : displayError || !displayUrl ? (
         <div
