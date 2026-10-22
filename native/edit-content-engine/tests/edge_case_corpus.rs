@@ -325,6 +325,12 @@ struct Case {
     expect: Expect,
 }
 
+/// Page 1 holds two different embedded TrueType subsets that carry the same /BaseFont name
+/// (as Quartz writes them); page 2 holds Helvetica text. See make_two_same_name_fonts.py.
+fn two_same_name_fonts() -> Vec<u8> {
+    include_bytes!("fixtures/two-same-name-fonts.pdf").to_vec()
+}
+
 fn corpus() -> Vec<Case> {
     let word = || single_page("BT /F1 12 Tf 30 100 Td (word) Tj ET");
     vec![
@@ -421,6 +427,11 @@ fn corpus() -> Vec<Case> {
             name: "text and paths under several nested clip paths",
             pdf: single_page("q 10 10 280 180 re W n q 20 20 200 150 re W n 0.5 g 30 30 80 20 re f BT /F1 12 Tf 30 100 Td (word) Tj ET Q Q"),
             old: "word", new: "wor", expect: PREPARED,
+        },
+        Case {
+            // Editing text in another font must not be refused because two other fonts share a name.
+            name: "text beside two embedded fonts that share a BaseFont name",
+            pdf: two_same_name_fonts(), old: "gamma", new: "gamme", expect: PREPARED,
         },
         Case {
             name: "tagged page with empty Tj strings and an alpha-0 text layer",

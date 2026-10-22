@@ -219,7 +219,9 @@ fn describe_text_object(
             crate::resource_inspector::unique_font(page["fonts"].as_array()?.iter().filter(|font|
                 font["scope"] == "page" && font["fontObject"].as_str() == Some(id)))
         });
-    let matched_font = proven.or_else(|| matching_font(inspection, page_index, &font_name, &font_family));
+    let matched_font = proven
+        .or_else(|| matching_font(inspection, page_index, &font_name, &font_family))
+        .or_else(|| matching_font_by_program(inspection, page_index, &font_name, &font_family, &font));
     let resource_subtype = matched_font
         .and_then(|value| value.get("subtype"))
         .and_then(Value::as_str)
@@ -346,6 +348,16 @@ fn matching_font<'a>(
     native_name: &str,
     native_family: &str,
 ) -> Option<&'a Value> {
+    crate::resource_inspector::unique_font(named_fonts(inspection, page_index, native_name, native_family)?)
+}
+
+/// Fonts of the page whose base-font name equals the native name or family.
+fn named_fonts<'a>(
+    inspection: &'a Value,
+    page_index: u16,
+    native_name: &str,
+    native_family: &str,
+) -> Option<impl Iterator<Item = &'a Value>> {
     let normalize = |value: &str| {
         value
             .trim_start_matches('/')
@@ -363,7 +375,7 @@ fn matching_font<'a>(
         .find(|page| page.get("pageIndex").and_then(Value::as_u64) == Some(page_index as u64))?
         .get("fonts")?
         .as_array()?;
-    let matches = fonts.iter().filter(|font| {
+    Some(fonts.iter().filter(move |font| {
         ["effectiveBaseFont", "baseFont"]
             .iter()
             .filter_map(|key| font.get(key).and_then(Value::as_str))
@@ -373,8 +385,44 @@ fn matching_font<'a>(
                     .iter()
                     .any(|name| !name.is_empty() && *name == candidate)
             })
+    }))
+}
+
+/// Several page fonts can carry one name (Quartz writes a subset per use). The embedded
+/// font program tells them apart: the native font's bytes must equal the decoded program
+/// of exactly one of the equally named dictionaries. Anything else stays unmatched.
+fn matching_font_by_program<'a>(
+    inspection: &'a Value,
+    page_index: u16,
+    native_name: &str,
+    native_family: &str,
+    font: &pdfium_render::prelude::PdfFont,
+) -> Option<&'a Value> {
+    const MAX_PROGRAM_BYTES: usize = 32 * 1024 * 1024;
+    if !font.is_embedded().ok()? {
+        return None;
+    }
+    let data = font.data().ok()?;
+    if data.is_empty() || data.len() > MAX_PROGRAM_BYTES {
+        return None;
+    }
+    let native_hash = crate::sha256_reader(&mut std::io::Cursor::new(&data)).ok()?;
+    let has_program = |value: &Value| {
+        value["fontPrograms"]
+            .as_array()
+            .is_some_and(|programs| programs.iter().any(|p| p["sha256"].as_str() == Some(&native_hash)))
+    };
+    let matching = named_fonts(inspection, page_index, native_name, native_family)?.filter(|candidate| {
+        has_program(candidate)
+            || candidate["descendants"]
+                .as_array()
+                .is_some_and(|descendants| descendants.iter().any(has_program))
     });
-    crate::resource_inspector::unique_font(matches)
+    let mut matching = matching.collect::<Vec<_>>();
+    // Two dictionaries with one identical program are the same font resource only
+    // when `unique_font` can prove it; otherwise the match stays ambiguous.
+    matching.dedup_by(|a, b| a["fontObject"] == b["fontObject"]);
+    crate::resource_inspector::unique_font(matching.into_iter())
 }
 
 fn native_type_name(object_type: PdfPageObjectType) -> &'static str {
