@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import fitz
 import pytest
 from httpx import ASGITransport, AsyncClient
-from pypdf import PdfReader, PdfWriter
 
 from features.edit_content.open_unlock import unlock_permission_only
 from main import app
@@ -10,21 +10,33 @@ from routers import edit_content
 
 
 def _pdf(path, *, user_password="", owner_password=None):
-    writer = PdfWriter()
-    writer.add_blank_page(100, 100)
-    if owner_password is not None:
-        writer.encrypt(user_password, owner_password=owner_password, algorithm="AES-128")
-    with path.open("wb") as handle:
-        writer.write(handle)
+    # Built with PyMuPDF so the tests need nothing beyond the app's own dependencies.
+    with fitz.open() as doc:
+        doc.new_page(width=100, height=100)
+        if owner_password is None:
+            doc.save(str(path))
+        else:
+            doc.save(
+                str(path),
+                encryption=fitz.PDF_ENCRYPT_AES_128,
+                owner_pw=owner_password,
+                user_pw=user_password,
+            )
     return path
+
+
+def _is_encrypted(path):
+    # An owner-only PDF opens with the empty password, so is_encrypted alone is False.
+    with fitz.open(str(path)) as doc:
+        return bool(doc.is_encrypted or doc.metadata.get("encryption"))
 
 
 def test_owner_only_pdf_becomes_an_unprotected_copy(tmp_path):
     source = _pdf(tmp_path / "restricted.pdf", owner_password="owner")
-    assert PdfReader(str(source)).is_encrypted
+    assert _is_encrypted(source)
     assert unlock_permission_only(source) is True
-    reader = PdfReader(str(source))
-    assert not reader.is_encrypted and len(reader.pages) == 1
+    with fitz.open(str(source)) as unlocked:
+        assert not _is_encrypted(source) and unlocked.page_count == 1
     assert list(tmp_path.iterdir()) == [source]
 
 
@@ -54,7 +66,7 @@ async def test_open_hands_the_engine_an_unprotected_copy_and_says_so(monkeypatch
 
     class FakeRegistry:
         def open(self, source):
-            seen["encrypted"] = PdfReader(str(source)).is_encrypted
+            seen["encrypted"] = _is_encrypted(source)
             raise RuntimeError("stop after the check")
 
     monkeypatch.setattr(edit_content, "get_content_registry", lambda: FakeRegistry())
