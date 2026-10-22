@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Filename } from '../components/Filename';
 import { PageHeader } from '../components/ui';
+import { PDF_TO_WORD_BETA_NOTE } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
 import { isTauri, openFilePicker, openOutputFolder } from '../utils/tauriDialog';
@@ -135,10 +136,18 @@ export function PdfToWordPage() {
         icon={FileType2}
         title={t('PDF to Word')}
         description={t('Turn a PDF into an editable Word document (.docx)')}
+        badge={{ label: 'BETA', title: PDF_TO_WORD_BETA_NOTE }}
       />
 
       <div className="page-body">
         <div className={`form-col${inputPath ? '' : ' form-col--center'}`}>
+          <div className="card status-card" role="note" id="pdf-to-word-beta-note">
+            <Info size={20} aria-hidden="true" />
+            <div className="status-card-copy">
+              <b>{t('Beta')}</b>
+              <small>{PDF_TO_WORD_BETA_NOTE}</small>
+            </div>
+          </div>
           {!desktop ? (
             <div className="card status-card" role="note">
               <Info size={20} aria-hidden="true" />

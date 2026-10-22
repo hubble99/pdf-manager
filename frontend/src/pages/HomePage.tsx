@@ -52,7 +52,7 @@ export function HomePage() {
                         </span>
                         <span className="home-card-name">{feature.name}</span>
                         {feature.beta && (
-                          <span className="home-card-badge" title={BETA_TOOLTIP}>BETA</span>
+                          <span className="home-card-badge" title={feature.betaNote ?? BETA_TOOLTIP}>BETA</span>
                         )}
                       </span>
                       <span className="home-card-description">{feature.description}</span>

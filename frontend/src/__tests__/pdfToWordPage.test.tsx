@@ -26,6 +26,12 @@ describe('PDF to Word page', () => {
     expect(screen.getByText('PDF to Word runs in the Dokuwu desktop app')).toBeTruthy();
   });
 
+  it('shows the BETA badge and the note about pictures and letterheads', () => {
+    const { container } = render(<PdfToWordPage />);
+    expect(container.querySelector('.page-header-badge')).toHaveTextContent('BETA');
+    expect(container.querySelector('#pdf-to-word-beta-note')).toHaveTextContent(/pictures or a letterhead/);
+  });
+
   it('passes the output name to the core command', async () => {
     const { invoke } = await import('@tauri-apps/api/core');
     const invokeMock = vi.mocked(invoke);

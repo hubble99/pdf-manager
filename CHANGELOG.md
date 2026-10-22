@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Changed**
+
+- **PDF to Word:** now carries a BETA badge (sidebar, Home card and page header) and a note that the result can look messy when the PDF contains pictures or a letterhead.
+
 ## 1.9.1 — 2026-10-22 · Edit Content and conversion fixes
 
 **Fixed**

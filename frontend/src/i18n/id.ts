@@ -81,6 +81,8 @@ export const ID: Record<string, string> = {
   'Before you pay, check that your payment app shows this name.': 'Sebelum membayar, pastikan aplikasi pembayaran Anda menampilkan nama ini.',
   'Beta feature': 'Fitur beta',
   'Beta: this feature is still unstable.': 'Beta: fitur ini masih belum stabil.',
+  'Beta: the result can look messy when the PDF contains pictures or a letterhead.': 'Beta: hasilnya bisa berantakan jika PDF berisi gambar atau kop surat.',
+  'Beta': 'Beta',
   'Better quality': 'Kualitas lebih baik',
   'Bring Forward': 'Majukan',
   'Bring Forward (Ctrl+])': 'Majukan (Ctrl+])',

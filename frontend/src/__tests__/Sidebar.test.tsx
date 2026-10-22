@@ -88,6 +88,13 @@ describe('Sidebar Component', () => {
     expect(badge).toHaveAttribute('title', 'Beta: this feature is still unstable.');
   });
 
+  it('marks PDF to Word as Beta and says why', () => {
+    const { container } = renderSidebar();
+    const badge = container.querySelector('#nav-beta-pdf-to-word');
+    expect(badge).toHaveTextContent('BETA');
+    expect(badge).toHaveAttribute('title', expect.stringContaining('pictures or a letterhead'));
+  });
+
   it('renames Edit Canvas to Canvas PDF in the sidebar', () => {
     const { container } = renderSidebar();
     expect(container.querySelector('#nav-edit-canvas')).toHaveTextContent('Canvas PDF');

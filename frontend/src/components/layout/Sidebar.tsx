@@ -19,6 +19,8 @@ interface NavEntryProps {
   end?: boolean;
   /** Renders the BETA chip and its tooltip beside the label. */
   beta?: boolean;
+  /** Overrides the shared BETA tooltip. */
+  betaNote?: string;
 }
 
 /**
@@ -27,7 +29,7 @@ interface NavEntryProps {
  * `aria-current` on its own.
  */
 function NavEntry({
-  id, label, icon: Icon, path, collapsed, accent = false, end = false, beta = false,
+  id, label, icon: Icon, path, collapsed, accent = false, end = false, beta = false, betaNote,
 }: NavEntryProps) {
   return (
     <NavLink
@@ -47,7 +49,7 @@ function NavEntry({
         <>
           <span className="nav-item-label">{label}</span>
           {beta && (
-            <span className="nav-item-badge" title={BETA_TOOLTIP} id={`nav-beta-${id}`}>
+            <span className="nav-item-badge" title={betaNote ?? BETA_TOOLTIP} id={`nav-beta-${id}`}>
               BETA
             </span>
           )}
@@ -114,6 +116,7 @@ export function Sidebar() {
                 path={feature.route}
                 collapsed={collapsed}
                 beta={feature.beta}
+                betaNote={feature.betaNote}
               />
             ))}
           </Fragment>
