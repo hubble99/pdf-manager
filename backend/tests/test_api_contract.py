@@ -15,8 +15,6 @@ EXPECTED_API_ROUTES = {
     ("POST", "/api/v1/merge/folder/merge/"),
     ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/extract/"),
-    ("POST", "/api/v1/compress/stream"),
-    ("GET", "/api/v1/compress/download/{download_id}"),
     ("POST", "/api/v1/pdf-to-image/"),
     ("POST", "/api/v1/pdf-to-image/pages"),
     ("POST", "/api/v1/pdf-to-image/page"),
@@ -65,11 +63,6 @@ REQUEST_BODY_CONTRACTS = {
             "output_mode": "combine",
             "output_filename": "",
         },
-    },
-    ("POST", "/api/v1/compress/stream"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {"quality": 70, "output_filename": ""},
     },
     ("POST", "/api/v1/pdf-to-image/"): {
         "media_type": "multipart/form-data",
@@ -215,7 +208,6 @@ NO_BODY_ROUTES = {
     ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
     ("DELETE", "/api/v1/organize/documents/{document_id}"),
-    ("GET", "/api/v1/compress/download/{download_id}"),
     ("POST", "/api/v1/settings/clear-temp"),
     ("POST", "/api/v1/settings/open-downloads"),
     ("POST", "/api/v1/edit-content/shutdown"),
@@ -280,23 +272,11 @@ def test_openapi_no_body_routes_and_download_path_parameter_match_contract():
         operation = paths[path][method.lower()]
         assert "requestBody" not in operation
 
-    download = paths["/api/v1/compress/download/{download_id}"]["get"]
-    assert download["parameters"] == [
-        {
-            "name": "download_id",
-            "in": "path",
-            "required": True,
-            "schema": {"type": "string", "title": "Download Id"},
-        }
-    ]
-
 
 def test_openapi_documents_validation_responses_for_all_validated_operations():
     paths = app.openapi()["paths"]
 
-    for method, path in set(REQUEST_BODY_CONTRACTS) | {
-        ("GET", "/api/v1/compress/download/{download_id}"),
-    }:
+    for method, path in set(REQUEST_BODY_CONTRACTS):
         operation = paths[path][method.lower()]
         assert "422" in operation["responses"], f"Missing validation response: {method} {path}"
 
@@ -347,20 +327,6 @@ async def test_validation_error_shape_is_stable():
     assert body["detail"][0]["loc"] == ["body", "file"]
     assert body["detail"][0]["type"] == "missing"
 
-
-@pytest.mark.asyncio
-async def test_expired_compress_download_error_contract_is_stable():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/compress/download/not-in-cache")
-
-    assert response.status_code == 404
-    assert response.headers["content-type"].startswith("application/json")
-    assert response.json() == {
-        "status": "error",
-        "message": "Download not found or expired.",
-        "detail": "Download not found or expired.",
-    }
 
 
 @pytest.mark.asyncio
