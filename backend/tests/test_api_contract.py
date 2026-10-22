@@ -7,14 +7,6 @@ from main import app
 
 
 EXPECTED_API_ROUTES = {
-    ("POST", "/api/v1/merge/"),
-    ("POST", "/api/v1/merge/folder/roots/"),
-    ("POST", "/api/v1/merge/folder/roots/{root_id}/list/"),
-    ("POST", "/api/v1/merge/folder/inspect/"),
-    ("POST", "/api/v1/merge/folder/info/"),
-    ("POST", "/api/v1/merge/folder/merge/"),
-    ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
-    ("POST", "/api/v1/extract/"),
     ("POST", "/api/v1/pdf-to-image/"),
     ("POST", "/api/v1/pdf-to-image/pages"),
     ("POST", "/api/v1/pdf-to-image/page"),
@@ -48,20 +40,6 @@ EXPECTED_API_ROUTES = {
 
 
 REQUEST_BODY_CONTRACTS = {
-    ("POST", "/api/v1/merge/"): {
-        "media_type": "multipart/form-data",
-        "required": {"files"},
-        "defaults": {"output_filename": "merged_output.pdf"},
-    },
-    ("POST", "/api/v1/extract/"): {
-        "media_type": "multipart/form-data",
-        "required": {"file"},
-        "defaults": {
-            "page_ranges": "1",
-            "output_mode": "combine",
-            "output_filename": "",
-        },
-    },
     ("POST", "/api/v1/pdf-to-image/"): {
         "media_type": "multipart/form-data",
         "required": {"file"},
@@ -101,26 +79,6 @@ REQUEST_BODY_CONTRACTS = {
         "media_type": "application/json",
         "required": {"pages"},
         "defaults": {"output_filename": "organized.pdf"},
-    },
-    ("POST", "/api/v1/merge/folder/roots/"): {
-        "media_type": "application/json",
-        "required": {"path"},
-        "defaults": {},
-    },
-    ("POST", "/api/v1/merge/folder/inspect/"): {
-        "media_type": "application/json",
-        "required": {"root_id", "files"},
-        "defaults": {},
-    },
-    ("POST", "/api/v1/merge/folder/info/"): {
-        "media_type": "application/json",
-        "required": {"root_id", "files"},
-        "defaults": {},
-    },
-    ("POST", "/api/v1/merge/folder/merge/"): {
-        "media_type": "application/json",
-        "required": {"root_id", "files"},
-        "defaults": {"output_filename": "merged_output.pdf", "skip_invalid": True},
     },
     ("POST", "/api/v1/pdf-info/"): {
         "media_type": "multipart/form-data",
@@ -187,8 +145,6 @@ for edit_content_path in (
     }
 
 NO_BODY_ROUTES = {
-    ("POST", "/api/v1/merge/folder/roots/{root_id}/list/"),
-    ("DELETE", "/api/v1/merge/folder/roots/{root_id}"),
     ("POST", "/api/v1/organize/documents/{document_id}/thumbnails/"),
     ("DELETE", "/api/v1/organize/documents/{document_id}"),
     ("POST", "/api/v1/settings/clear-temp"),
