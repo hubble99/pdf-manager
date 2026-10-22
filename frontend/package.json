@@ -51,5 +51,11 @@
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.7"
+  },
+  "overrides": {
+    "fabric": {
+      "canvas": "^4.0.0-rc3",
+      "jsdom": "$jsdom"
+    }
   }
 }
