@@ -1,6 +1,7 @@
 import { createContext } from 'react';
 
-export type FeatureFileData = File | File[] | Array<{ file: File }> | null;
+/** What a feature keeps while the user is on another page: browser files, or paths for native features. */
+export type FeatureFileData = File | string | File[] | Array<{ file: File }> | Array<{ path: string }> | null;
 
 export interface FileContextValue {
   featureFiles: Record<string, FeatureFileData>;

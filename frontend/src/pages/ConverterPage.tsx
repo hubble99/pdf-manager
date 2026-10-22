@@ -5,6 +5,7 @@ import {
   FileText,
   FolderOpen,
   Images,
+  Info,
   Loader2,
   RotateCw,
   Trash2,
@@ -17,7 +18,9 @@ import { PageHeader, RadioCardGroup, SegmentedControl, Tabs } from '../component
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
 import { DPI_OPTIONS, FORMAT_OPTIONS, PAGE_SIZE_OPTIONS, formatBytes } from '../features/converter/options';
-import { openOutputFolder } from '../utils/tauriDialog';
+import { IMAGE_EXTENSIONS, baseName } from '../features/converter/batch';
+import { useNativePaths } from '../hooks/useNativePaths';
+import { revealPath } from '../api/nativeCore';
 import { t, tn } from '../i18n';
 
 function FlipIcon() {
@@ -30,23 +33,24 @@ function FlipIcon() {
 
 type ConverterTab = 'pdf' | 'images';
 
-const TAB_COPY: Record<ConverterTab, { label: string; description: string; accept: string }> = {
+const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
+const IMAGE_FILTER = { name: 'Images', extensions: IMAGE_EXTENSIONS };
+
+const TAB_COPY: Record<ConverterTab, { label: string; description: string }> = {
   pdf: {
     label: t('PDF to Images'),
     description: t('Export the pages you choose from one PDF as images'),
-    accept: '.pdf',
   },
   images: {
     label: t('Images to PDF'),
     description: t('Combine one or more images into a single PDF document'),
-    accept: '.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff',
   },
 };
 
 export function ConverterPage() {
   const converter = useConverterWorkflow();
   const {
-    kind, pdfFile, images, batchError, error, result, isConverting,
+    kind, pdfPath, images, imageSizes, batchError, error, skippedNotice, result, isConverting, progress,
     pdfInfoState, selection, selectionMode, selectionDraft, pdfBlockReason,
     format, dpi, pdfOutputName, pageSize, imageOutputName,
   } = converter;
@@ -54,27 +58,54 @@ export function ConverterPage() {
   // The tab chooses the direction while nothing is loaded; loaded files decide it after that.
   const [chosenTab, setChosenTab] = useState<ConverterTab>('pdf');
   const activeTab: ConverterTab = kind === 'empty' ? chosenTab : kind;
-  const accept = TAB_COPY[activeTab].accept;
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const replaceIntentRef = useRef(false);
+
+  // Each tab takes its own kind of file: the system dialog and window drops are
+  // routed to the hook of the active tab only.
+  const handlePaths = (tab: ConverterTab) => (accepted: string[], rejected: number) => {
+    if (accepted.length === 0) {
+      if (rejected > 0) {
+        converter.reportBatchError(tab === 'pdf'
+          ? t('This tab takes one PDF. To combine images into a PDF, use the Images to PDF tab.')
+          : t('This tab takes images. To export PDF pages as images, use the PDF to Images tab.'));
+      }
+      return;
+    }
+    if (rejected > 0) {
+      // A drop is taken whole or not at all.
+      replaceIntentRef.current = false;
+      converter.reportBatchError(t('PDFs and images cannot share a batch. Choose one PDF or only images.'));
+      return;
+    }
+    if (replaceIntentRef.current) {
+      replaceIntentRef.current = false;
+      converter.replacePaths(accepted);
+    } else {
+      converter.addPaths(accepted, tab);
+    }
+  };
+  const pdfPicker = useNativePaths({
+    filter: PDF_FILTER,
+    multiple: true,
+    pickerTitle: t('Choose a PDF'),
+    disabled: isConverting || activeTab !== 'pdf',
+    onPaths: handlePaths('pdf'),
+  });
+  const imagePicker = useNativePaths({
+    filter: IMAGE_FILTER,
+    multiple: true,
+    pickerTitle: t('Choose images'),
+    disabled: isConverting || activeTab !== 'images',
+    onPaths: handlePaths('images'),
+  });
+  const { desktop } = pdfPicker;
+  const picker = activeTab === 'pdf' ? pdfPicker : imagePicker;
 
   const openPicker = (intent: 'add' | 'replace' = 'add') => {
     if (isConverting) return;
     replaceIntentRef.current = intent === 'replace';
-    inputRef.current?.click();
-  };
-
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const incoming = Array.from(event.target.files ?? []);
-    event.target.value = '';
-    if (incoming.length === 0) return;
-    if (replaceIntentRef.current) {
-      replaceIntentRef.current = false;
-      converter.replaceFiles(incoming);
-      return;
-    }
-    converter.addFiles(incoming, activeTab);
+    void picker.pick();
   };
 
   const selectionEditable = selectionMode === 'selected' && pdfInfoState === 'ready' && !isConverting;
@@ -83,7 +114,7 @@ export function ConverterPage() {
   const canConvertPdf = kind === 'pdf' && pdfInfoState === 'ready' && selection.valid && selection.pages.size > 0 && !isConverting;
   const canConvertImages = kind === 'images' && images.length > 0 && !isConverting;
   const canConvert = kind === 'pdf' ? canConvertPdf : canConvertImages;
-  const totalPages = converter.pdfInfo?.total_pages ?? 0;
+  const totalPages = converter.pdfInfo?.pages ?? 0;
   const formatOption = FORMAT_OPTIONS.find((option) => option.value === format);
   const dpiOption = DPI_OPTIONS.find((option) => option.value === dpi);
 
@@ -92,26 +123,16 @@ export function ConverterPage() {
     tabIndex: 0,
     onClick: () => openPicker(),
     onKeyDown: (event: React.KeyboardEvent) => event.key === 'Enter' && openPicker(),
-    onDragOver: (event: React.DragEvent) => event.preventDefault(),
-    onDrop: (event: React.DragEvent) => {
-      event.preventDefault();
-      converter.addFiles(Array.from(event.dataTransfer.files), activeTab);
-    },
   };
 
-  const fileInput = (
-    <input
-      ref={inputRef}
-      id="converter-file-input"
-      type="file"
-      accept={accept}
-      multiple
-      className="converter-file-input"
-      onChange={handleInputChange}
-      tabIndex={-1}
-      aria-hidden="true"
-    />
-  );
+  const percent = progress?.total ? Math.round((progress.done / progress.total) * 100) : null;
+  const progressTitle = kind === 'pdf'
+    ? (progress?.total
+      ? t('Exporting page {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
+      : t('Reading the PDF…'))
+    : (progress?.total
+      ? t('Adding image {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
+      : t('Preparing the images…'));
 
   const outcome = (
     <>
@@ -128,6 +149,25 @@ export function ConverterPage() {
         </div>
       )}
 
+      {skippedNotice && (
+        <p className="converter-message converter-message--error" role="status">{skippedNotice}</p>
+      )}
+
+      {isConverting && (
+        <div className="card status-card" role="status" aria-live="polite">
+          <Loader2 size={20} className="converter-spin" aria-hidden="true" />
+          <div className="status-card-copy">
+            <b>{progressTitle}</b>
+            <div className={`size-bar size-bar--spaced${percent === null || progress?.done === 0 ? ' size-bar--busy' : ''}`}>
+              <i style={{ width: `${percent ?? 0}%` }} />
+            </div>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" id="converter-cancel" onClick={converter.cancel}>
+            {t('Cancel')}
+          </button>
+        </div>
+      )}
+
       {result && (
         <div className="card status-card status-card--ok">
           <CheckCircle size={22} aria-hidden="true" />
@@ -139,11 +179,11 @@ export function ConverterPage() {
             type="button"
             className="btn btn-ghost btn-sm"
             id="converter-open-folder"
-            onClick={() => openOutputFolder()}
-            title={t('Open folder')}
+            onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
+            title={t('Show in folder')}
           >
             <FolderOpen size={14} aria-hidden="true" />
-            {t('Open Folder')}
+            {t('Show in folder')}
           </button>
         </div>
       )}
@@ -210,14 +250,22 @@ export function ConverterPage() {
       />
 
       <div className="page-body">
-        {fileInput}
+        {!desktop && (
+          <div className="card status-card" role="note">
+            <Info size={20} aria-hidden="true" />
+            <div className="status-card-copy">
+              <b>{t('PDF & Image runs in the Dokuwu desktop app')}</b>
+              <small>{t('It works on the files directly on your computer, which the browser preview cannot do.')}</small>
+            </div>
+          </div>
+        )}
 
         {/* ── Nothing added yet: each tab has its own uploader ──────────────── */}
-        {kind === 'empty' && (
+        {desktop && kind === 'empty' && (
           <div className="form-col form-col--center">
             <div
               id="converter-drop-zone"
-              className="drop-zone"
+              className={`drop-zone${picker.isDragOver ? ' drag-over' : ''}`}
               aria-label={activeTab === 'pdf'
                 ? t('Drop a PDF here, or press Enter to browse')
                 : t('Drop images here, or press Enter to browse')}
@@ -254,14 +302,14 @@ export function ConverterPage() {
         )}
 
         {/* ── One PDF: pick pages, set the output ───────────────────────────── */}
-        {kind === 'pdf' && pdfFile && (
+        {desktop && kind === 'pdf' && pdfPath && (
           <div className="form-col form-col--split">
             <div className="card card--flush">
               <div className="card-head">
                 <span className="card-head-title">
                   <FileText size={16} className="card-head-icon" aria-hidden="true" />
-                  <Filename name={pdfFile.name} className="file-item-name" />
-                  <span className="chip">{formatBytes(pdfFile.size)}</span>
+                  <Filename name={baseName(pdfPath)} className="file-item-name" />
+                  {converter.pdfInfo && <span className="chip">{formatBytes(converter.pdfInfo.sizeBytes)}</span>}
                   {pdfInfoState === 'loading' && (
                     <Loader2 size={12} className="converter-spin" aria-hidden="true" />
                   )}
@@ -269,6 +317,7 @@ export function ConverterPage() {
                     <span className="chip">{t('Total:')} {totalPages} {t('pages')}</span>
                   )}
                   {pdfInfoState === 'error' && <span className="badge badge-error">{t('Page count unavailable')}</span>}
+                  {pdfInfoState === 'protected' && <span className="badge badge-error">{t('Password protected')}</span>}
                 </span>
                 <span className="card-head-actions">
                   <button
@@ -294,7 +343,7 @@ export function ConverterPage() {
               </div>
               {pdfInfoState === 'ready' && totalPages > 0 ? (
                 <PageThumbGrid
-                  file={pdfFile}
+                  file={pdfPath}
                   totalPages={totalPages}
                   selected={selection.pages}
                   interactive={selectionEditable}
@@ -433,7 +482,7 @@ export function ConverterPage() {
         )}
 
         {/* ── Images: previews on the left, page size and output on the right ── */}
-        {kind === 'images' && (
+        {desktop && kind === 'images' && (
           <div className="form-col form-col--split">
             <div className="card card--flush">
               <div className="card-head">
@@ -456,14 +505,7 @@ export function ConverterPage() {
                   </button>
                 </span>
               </div>
-              <div
-                className="converter-image-drop"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  converter.addFiles(Array.from(event.dataTransfer.files), activeTab);
-                }}
-              >
+              <div className={`converter-image-drop${imagePicker.isDragOver ? ' drag-over' : ''}`}>
                 <SortableCardGrid
                   idPrefix="converter"
                   ariaLabel={t('Images to Convert')}
@@ -472,11 +514,11 @@ export function ConverterPage() {
                   onRemove={converter.removeImage}
                   cards={images.map((entry) => ({
                     id: entry.id,
-                    title: entry.file.name,
+                    title: baseName(entry.path),
                     thumbnail: (
-                      <ConverterThumbnail file={entry.file} rotation={entry.rotation} flipH={entry.flipH} />
+                      <ConverterThumbnail path={entry.path} rotation={entry.rotation} flipH={entry.flipH} />
                     ),
-                    meta: <span>{formatBytes(entry.file.size)}</span>,
+                    meta: imageSizes[entry.id] != null ? <span>{formatBytes(imageSizes[entry.id] as number)}</span> : undefined,
                     actions: (
                       <>
                         <button
@@ -484,7 +526,7 @@ export function ConverterPage() {
                           className="btn btn-ghost btn-icon btn-sm"
                           onClick={() => converter.rotateImage(entry.id)}
                           disabled={isConverting}
-                          aria-label={t('Rotate {name} 90 degrees', { name: entry.file.name })}
+                          aria-label={t('Rotate {name} 90 degrees', { name: baseName(entry.path) })}
                           title={t('Rotate 90°')}
                         >
                           <RotateCw size={14} aria-hidden="true" />
@@ -494,7 +536,7 @@ export function ConverterPage() {
                           className="btn btn-ghost btn-icon btn-sm"
                           onClick={() => converter.flipImage(entry.id)}
                           disabled={isConverting}
-                          aria-label={t('Mirror {name} horizontally', { name: entry.file.name })}
+                          aria-label={t('Mirror {name} horizontally', { name: baseName(entry.path) })}
                           title={t('Mirror horizontally')}
                         >
                           <FlipIcon />

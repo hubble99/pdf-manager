@@ -2,6 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { extensionOf } from '../utils/paths';
 import { isTauri, openFilePicker } from '../utils/tauriDialog';
 
+// One import shared by every picker on the page; the webview API loads lazily
+// because it only exists inside the desktop shell.
+let webviewApi: Promise<typeof import('@tauri-apps/api/webview')> | null = null;
+const loadWebviewApi = () => {
+  const loading = webviewApi ?? import('@tauri-apps/api/webview');
+  webviewApi = loading;
+  loading.catch(() => { webviewApi = null; });
+  return loading;
+};
+
 export interface NativePathFilter {
   /** Label in the system dialog, e.g. "PDF". */
   name: string;
@@ -66,7 +76,7 @@ export function useNativePaths({ filter, multiple = false, pickerTitle, disabled
     if (!desktop) return undefined;
     let unlisten: (() => void) | undefined;
     let disposed = false;
-    void import('@tauri-apps/api/webview')
+    void loadWebviewApi()
       .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
         const { payload } = event;
         if (payload.type === 'enter' || payload.type === 'over') setIsDragOver(true);

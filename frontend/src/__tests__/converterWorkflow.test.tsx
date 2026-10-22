@@ -1,45 +1,51 @@
 import { useState } from 'react';
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CORE_FINISHED_EVENT, CORE_PROGRESS_EVENT } from '../api/nativeCore';
 import { FileProvider } from '../context/FileContext';
 import { ToastProvider } from '../context/ToastContext';
 import { ConverterPage } from '../pages/ConverterPage';
 
-const { postMock, downloadMock } = vi.hoisted(() => ({ postMock: vi.fn(), downloadMock: vi.fn() }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
 
-vi.mock('../api/client', () => ({
-  default: { post: postMock },
-  checkHealth: vi.fn(async () => false),
+type DragHandler = (event: { payload: { type: string; paths?: string[] } }) => void;
+const drag = vi.hoisted(() => ({ handlers: [] as DragHandler[] }));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: async (handler: DragHandler) => {
+      drag.handlers.push(handler);
+      return () => { drag.handlers = drag.handlers.filter((h) => h !== handler); };
+    },
+  }),
 }));
 
-vi.mock('../utils/downloadHelper', () => ({
-  triggerBlobDownload: downloadMock,
-  getFilenameFromHeaders: (_headers: unknown, fallback: string) => fallback,
+const desktop = vi.hoisted(() => ({ on: true }));
+vi.mock('../utils/tauriDialog', () => ({
+  isTauri: () => desktop.on,
+  openFilePicker: vi.fn(async () => null),
+  openOutputFolder: vi.fn(async () => true),
 }));
 
 vi.mock('../components/PdfThumbnail', () => ({
   PdfThumbnail: ({ page = 1 }: { page?: number }) => <span data-testid={`thumb-${page}`} />,
 }));
 
-vi.mock('../utils/tauriDialog', () => ({
-  isTauri: () => false,
-  openFilePicker: vi.fn(async () => null),
-  openOutputFolder: vi.fn(async () => true),
-}));
+type Handler = (event: { payload: unknown }) => void;
+const invokeMock = vi.mocked(invoke);
+const listenMock = vi.mocked(listen);
+let handlers: Record<string, Handler[]>;
+const emit = (event: string, payload: unknown) => act(() => { handlers[event]?.forEach((h) => h({ payload })); });
 
-const pdfInfoResponse = (totalPages: number) => ({
-  data: { status: 'success', data: { filename: 'doc.pdf', total_pages: totalPages, file_size_bytes: 512 } },
-  headers: {},
-});
+const PDF = 'C:\\Docs\\document.pdf';
+const pic = (name: string) => `C:\\Pics\\${name}`;
 
-function pdf(name = 'document.pdf') {
-  return new File(['pdf-bytes'], name, { type: 'application/pdf' });
-}
-
-function image(name = 'photo.png', type = 'image/png') {
-  return new File(['image-bytes'], name, { type });
-}
+let pageCount = 5;
+let encrypted = false;
+let infoGate: Promise<void> | null = null;
 
 function renderConverter() {
   return render(
@@ -53,18 +59,23 @@ function renderConverter() {
   );
 }
 
+/** Drops files on the window, the way the desktop shell reports them. */
+async function dropPaths(paths: string[]) {
+  // One listener per picker (PDF and images) once both are mounted.
+  await waitFor(() => expect(drag.handlers.length, `handlers ${drag.handlers.length}`).toBeGreaterThanOrEqual(2));
+  act(() => drag.handlers.forEach((h) => h({ payload: { type: 'drop', paths } })));
+}
+
 /** The tab is where the user states the direction, so images are added from Images to PDF. */
-function chooseTabFor(files: File[]) {
-  const wantsImages = files.some((file) => file.type.startsWith('image/'));
+function chooseTabFor(paths: string[]) {
+  const wantsImages = paths.some((p) => !/\.pdf$/i.test(p));
   const tab = screen.queryByRole('tab', { name: wantsImages ? 'Images to PDF' : 'PDF to Images' });
   if (tab && !tab.hasAttribute('disabled')) fireEvent.click(tab);
 }
 
-async function addFiles(files: File[]) {
-  chooseTabFor(files);
-  const input = document.getElementById('converter-file-input') as HTMLInputElement;
-  fireEvent.change(input, { target: { files } });
-  await waitFor(() => expect(postMock).toHaveBeenCalled());
+async function addPaths(paths: string[]) {
+  chooseTabFor(paths);
+  await dropPaths(paths);
 }
 
 function pageMode(name: 'All pages' | 'Selected pages') {
@@ -92,6 +103,30 @@ function convertButton() {
   return document.getElementById('converter-run') as HTMLButtonElement;
 }
 
+const startCalls = (cmd: string) => invokeMock.mock.calls.filter(([c]) => c === cmd);
+
+const pdfReport = (overrides: Record<string, unknown> = {}) => ({
+  outputPath: 'C:\\Users\\a\\Downloads\\document_images.zip',
+  outputSizeBytes: 1_500_000,
+  pages: 3,
+  isZip: true,
+  format: 'png',
+  dpi: 150,
+  reducedPages: [],
+  durationMs: 800,
+  ...overrides,
+});
+
+const pdfFromImagesReport = (overrides: Record<string, unknown> = {}) => ({
+  outputPath: 'C:\\Users\\a\\Downloads\\output.pdf',
+  outputSizeBytes: 900_000,
+  pages: 2,
+  pageSize: 'a4',
+  skipped: [],
+  durationMs: 300,
+  ...overrides,
+});
+
 describe('unified converter workspace', () => {
   beforeAll(() => {
     URL.createObjectURL = vi.fn(() => 'blob:mock-preview');
@@ -99,32 +134,60 @@ describe('unified converter workspace', () => {
   });
 
   beforeEach(() => {
-    postMock.mockReset();
-    downloadMock.mockReset();
+    handlers = {};
+    drag.handlers = [];
+    desktop.on = true;
+    pageCount = 5;
+    encrypted = false;
+    infoGate = null;
+    invokeMock.mockReset();
+    listenMock.mockReset();
     vi.mocked(URL.createObjectURL).mockClear();
     vi.mocked(URL.revokeObjectURL).mockClear();
-    postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/pdf-info/') return pdfInfoResponse(5);
-      if (url === '/api/v1/pdf-to-image/') {
-        return { data: new Blob(['img']), headers: { 'x-pages-exported': '1', 'x-format': 'PNG', 'x-dpi': '150' } };
-      }
-      if (url === '/api/v1/image-to-pdf/') {
-        return { data: new Blob(['pdf']), headers: { 'x-total-pages': '2', 'x-page-size': 'A4' } };
-      }
-      if (url === '/api/v1/preview/') {
-        return { data: new Blob(['png']), headers: {} };
-      }
-      throw new Error(`Unexpected request: ${url}`);
+    listenMock.mockImplementation(async (event, handler) => {
+      (handlers[event] ??= []).push(handler as unknown as Handler);
+      return () => undefined;
     });
+    invokeMock.mockImplementation(async (cmd, args) => {
+      switch (cmd) {
+        case 'core_pdf_info':
+          if (infoGate) await infoGate;
+          return { sizeBytes: 524_288, pages: encrypted ? 0 : pageCount, encrypted, metadata: {} };
+        case 'core_file_sizes':
+          return ((args as { paths: string[] }).paths).map(() => 2048);
+        case 'core_image_thumbnail':
+          return new ArrayBuffer(4);
+        case 'core_pdf_render_page':
+          return new ArrayBuffer(4);
+        case 'core_pdf_to_image_start':
+          return 7;
+        case 'core_image_to_pdf_start':
+          return 8;
+        case 'core_job_cancel':
+        case 'core_reveal_path':
+          return undefined;
+        default:
+          throw new Error(`unexpected ${cmd}`);
+      }
+    });
+  });
+
+  it('asks for the desktop app outside Tauri', () => {
+    desktop.on = false;
+    renderConverter();
+    expect(screen.getByText('PDF & Image runs in the Dokuwu desktop app')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Drop a PDF here, or press Enter to browse')).not.toBeInTheDocument();
   });
 
   it('derives PDF direction and keeps the page field disabled in All pages mode', async () => {
     renderConverter();
     expect(screen.queryByRole('radio', { name: /All pages/i })).not.toBeInTheDocument();
 
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
 
+    expect(screen.getByText('document.pdf')).toBeInTheDocument();
+    expect(screen.getByText('512.0 KB')).toBeInTheDocument();
     expect(pageMode('All pages')).toBeChecked();
     expect(rangeInput()).toBeDisabled();
     expect(rangeInput()).toHaveValue('');
@@ -135,24 +198,38 @@ describe('unified converter workspace', () => {
     expect(cells).toHaveLength(5);
     cells.forEach((cell) => expect(cell).toBeDisabled());
     expect(selectedPageCells()).toHaveLength(5);
+    // The page previews come from the PDF's path, not from an upload.
+    await waitFor(() => expect(startCalls('core_pdf_info')).toHaveLength(1));
+    expect(startCalls('core_pdf_info')[0][1]).toEqual({ path: PDF });
   });
 
-  it('derives image direction and shows only image controls', async () => {
+  it('derives image direction, shows file sizes and only image controls', async () => {
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    chooseTabFor([image(), image('second.jpg', 'image/jpeg')]);
-    fireEvent.change(input, { target: { files: [image(), image('second.jpg', 'image/jpeg')] } });
+    await addPaths([pic('photo.png'), pic('second.JPG')]);
 
     await screen.findByText('2 files');
     expect(screen.getByRole('radiogroup', { name: /Page Size/i })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /All pages/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Selected pages')).not.toBeInTheDocument();
     expect(convertButton()).toBeEnabled();
+    expect((await screen.findAllByText('2.0 KB')).length).toBe(2);
+    expect(startCalls('core_file_sizes')[0][1]).toEqual({ paths: [pic('photo.png'), pic('second.JPG')] });
+    await waitFor(() => expect(document.querySelectorAll('.sort-card img')).toHaveLength(2));
+  });
+
+  it('refuses a password-protected PDF with a plain explanation', async () => {
+    encrypted = true;
+    renderConverter();
+    await addPaths([PDF]);
+
+    expect(await screen.findByText('Password protected')).toBeInTheDocument();
+    expect(convertButton()).toBeDisabled();
+    expect(convertButton()).toHaveAttribute('title', expect.stringContaining('protected'));
   });
 
   it('enables page selection in Selected pages mode and reports the count', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
 
     fireEvent.click(pageMode('Selected pages'));
@@ -168,7 +245,7 @@ describe('unified converter workspace', () => {
 
   it.each(['', '0', '9', '4-2', '1,wrong'])('blocks conversion for the invalid draft %j', async (draft) => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
     fireEvent.change(rangeInput(), { target: { value: draft } });
@@ -180,7 +257,7 @@ describe('unified converter workspace', () => {
 
   it('keeps zero selected after the final page is cleared', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
     fireEvent.change(rangeInput(), { target: { value: '3' } });
@@ -196,7 +273,7 @@ describe('unified converter workspace', () => {
 
   it('synchronizes range text, page cells, and count from a grid edit', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
 
@@ -211,7 +288,7 @@ describe('unified converter workspace', () => {
 
   it('does not let the grid change the export while All pages is chosen', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
 
     fireEvent.click(pageCell(4));
@@ -224,7 +301,7 @@ describe('unified converter workspace', () => {
 
   it('retains a custom draft when toggling modes and ignores it for All pages', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
     fireEvent.click(pageMode('Selected pages'));
     fireEvent.change(rangeInput(), { target: { value: '2-3' } });
@@ -239,35 +316,120 @@ describe('unified converter workspace', () => {
     expect(screen.getByText('Selected: 2 of 5 pages')).toBeInTheDocument();
   });
 
-  it('sends the empty request range for All pages and the canonical range for Selected pages', async () => {
+  it('sends the empty range for All pages and the canonical range for Selected pages', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
 
     fireEvent.click(convertButton());
-    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/api/v1/pdf-to-image/', expect.any(FormData), expect.anything()));
-    let body = postMock.mock.calls.find(([url]) => url === '/api/v1/pdf-to-image/')?.[1] as FormData;
-    expect(body.get('page_ranges')).toBe('');
-    expect(body.get('format')).toBe('PNG');
-    expect(body.get('dpi')).toBe('150');
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    expect(startCalls('core_pdf_to_image_start')[0][1]).toEqual({
+      inputPath: PDF,
+      options: { format: 'png', dpi: 150, pageRanges: '', outputName: 'document' },
+    });
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
+    await screen.findByText('Saved to your Downloads folder');
 
-    postMock.mockClear();
+    invokeMock.mockClear();
     fireEvent.click(pageMode('Selected pages'));
     fireEvent.change(rangeInput(), { target: { value: '2, 4-5' } });
     fireEvent.click(convertButton());
-    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/api/v1/pdf-to-image/', expect.any(FormData), expect.anything()));
-    body = postMock.mock.calls.find(([url]) => url === '/api/v1/pdf-to-image/')?.[1] as FormData;
-    expect(body.get('page_ranges')).toBe('2, 4-5');
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    expect(startCalls('core_pdf_to_image_start')[0][1]).toMatchObject({ options: { pageRanges: '2, 4-5' } });
+  });
+
+  it('sends the chosen format, resolution and output name', async () => {
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'JPEG' }));
+    fireEvent.click(screen.getByRole('button', { name: '300' }));
+    fireEvent.change(screen.getByLabelText('Output Filename'), { target: { value: 'scan' } });
+    fireEvent.click(convertButton());
+
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    expect(startCalls('core_pdf_to_image_start')[0][1]).toEqual({
+      inputPath: PDF,
+      options: { format: 'jpeg', dpi: 300, pageRanges: '', outputName: 'scan' },
+    });
+  });
+
+  it('shows progress, can be cancelled, and saves nothing', async () => {
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+    fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+
+    emit(CORE_PROGRESS_EVENT, { jobId: 7, kind: 'pdf_to_image', stage: 'pages', done: 2, total: 5 });
+    expect(await screen.findByText('Exporting page 3 of 5…')).toBeInTheDocument();
+
+    fireEvent.click(document.getElementById('converter-cancel') as HTMLButtonElement);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_job_cancel', { jobId: 7 }));
+    emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'cancelled' });
+
+    await waitFor(() => expect(convertButton()).toBeEnabled());
+    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('prevents duplicate submissions while a conversion is running', async () => {
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+
+    const button = convertButton();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    expect(button).toBeDisabled();
+    expect(button).toHaveTextContent('Exporting…');
+
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
+    await screen.findByText('Saved to your Downloads folder');
+    expect(screen.getByText('document_images.zip')).toBeInTheDocument();
+    expect(screen.getByText(/3 pages · PNG · 150 DPI \(ZIP archive\) · 1\.43 MB/)).toBeInTheDocument();
+    expect(startCalls('core_pdf_to_image_start')).toHaveLength(1);
+  });
+
+  it('notes pages that were rendered at a lower resolution', async () => {
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+    fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    emit(CORE_FINISHED_EVENT, {
+      jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport({ pages: 1, isZip: false, reducedPages: [1] }),
+    });
+    expect(await screen.findByText(/1 large page used a lower DPI/)).toBeInTheDocument();
+  });
+
+  it('shows the saved file in its folder', async () => {
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+    fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+    emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
+    await screen.findByText('Saved to your Downloads folder');
+
+    fireEvent.click(document.getElementById('converter-open-folder') as HTMLButtonElement);
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_reveal_path', { path: 'C:\\Users\\a\\Downloads\\document_images.zip' }));
   });
 
   it('rejects a conflicting addition without losing the existing image batch', async () => {
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    chooseTabFor([image('keep.png')]);
-    fireEvent.change(input, { target: { files: [image('keep.png')] } });
+    await addPaths([pic('keep.png')]);
     await screen.findByText('1 file');
 
-    fireEvent.change(input, { target: { files: [pdf('other.pdf')] } });
+    await dropPaths([PDF]);
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/This tab takes images/i);
     expect(screen.getByText('1 file')).toBeInTheDocument();
@@ -276,20 +438,19 @@ describe('unified converter workspace', () => {
 
   it('rejects mixed categories and multiple PDFs atomically', async () => {
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
 
-    fireEvent.change(input, { target: { files: [pdf(), image()] } });
+    await dropPaths([PDF, pic('image.png')]);
     expect(await screen.findByRole('alert')).toHaveTextContent(/cannot share a batch/i);
     expect(screen.queryByText(/Total:/)).not.toBeInTheDocument();
 
-    fireEvent.change(input, { target: { files: [pdf('a.pdf'), pdf('b.pdf')] } });
-    expect(await screen.findByRole('alert')).toHaveTextContent(/one PDF at a time/i);
+    await dropPaths(['C:\\Docs\\a.pdf', 'C:\\Docs\\b.pdf']);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/one PDF at a time/i));
     expect(screen.queryByText(/Total:/)).not.toBeInTheDocument();
   });
 
   it('instructs the user to clear before changing direction from a PDF', async () => {
     renderConverter();
-    await addFiles([pdf()]);
+    await addPaths([PDF]);
     await screen.findByText(/Total: 5 pages/);
 
     expect(screen.queryByText(/Add more images/i)).not.toBeInTheDocument();
@@ -298,50 +459,19 @@ describe('unified converter workspace', () => {
     expect(await screen.findByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
   });
 
-  it('prevents duplicate submissions while a conversion is running', async () => {
-    let resolveRequest: (value: unknown) => void = () => {};
-    postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/pdf-info/') return pdfInfoResponse(3);
-      if (url === '/api/v1/preview/') return { data: new Blob(['png']), headers: {} };
-      return new Promise((resolve) => { resolveRequest = resolve; });
-    });
-
-    renderConverter();
-    await addFiles([pdf()]);
-    await screen.findByText(/Total: 3 pages/);
-
-    const button = convertButton();
-    fireEvent.click(button);
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(postMock.mock.calls.filter(([url]) => url === '/api/v1/pdf-to-image/')).toHaveLength(1);
-    expect(button).toBeDisabled();
-    expect(button).toHaveTextContent('Exporting…');
-
-    resolveRequest({
-      data: new Blob(['img']),
-      headers: { 'x-pages-exported': '3', 'x-format': 'PNG', 'x-dpi': '150' },
-    });
-    await screen.findByText('Saved to your Downloads folder');
-  });
-
   it('discards a late PDF page-count response after the batch is cleared', async () => {
-    let resolveInfo: (value: unknown) => void = () => {};
-    postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/pdf-info/') return new Promise((resolve) => { resolveInfo = resolve; });
-      throw new Error(`Unexpected request: ${url}`);
-    });
+    let open: () => void = () => {};
+    infoGate = new Promise<void>((resolve) => { open = resolve; });
+    pageCount = 9;
 
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [pdf()] } });
+    await dropPaths([PDF]);
     await waitFor(() => expect(document.getElementById('converter-replace-file')).toBeInTheDocument());
 
     fireEvent.click(document.getElementById('converter-clear') as HTMLButtonElement);
     expect(await screen.findByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
 
-    resolveInfo(pdfInfoResponse(9));
+    open();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(screen.getByText('Every page will appear here so you can choose which ones to convert.')).toBeInTheDocument();
@@ -349,75 +479,63 @@ describe('unified converter workspace', () => {
     expect(convertButton()).toBeNull();
   });
 
-  it('does not publish a conversion result after the converter unmounts', async () => {
-    let resolveConversion: (value: unknown) => void = () => {};
-    postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/pdf-info/') return pdfInfoResponse(3);
-      if (url === '/api/v1/preview/') return { data: new Blob(['png']), headers: {} };
-      return new Promise((resolve) => { resolveConversion = resolve; });
-    });
-
+  it('stops the job and publishes nothing after the converter unmounts', async () => {
     const view = renderConverter();
-    await addFiles([pdf()]);
-    await screen.findByText(/Total: 3 pages/);
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
     fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
 
     view.unmount();
-    resolveConversion({
-      data: new Blob(['img']),
-      headers: { 'x-pages-exported': '3', 'x-format': 'PNG', 'x-dpi': '150' },
-    });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_job_cancel', { jobId: 7 }));
+    emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
     await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(downloadMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
   });
 
   it('keeps the batch and a retry path after a failed conversion', async () => {
-    postMock.mockImplementation(async (url: string) => {
-      if (url === '/api/v1/pdf-info/') return pdfInfoResponse(3);
-      throw new Error('Backend unavailable');
+    renderConverter();
+    await addPaths([PDF]);
+    await screen.findByText(/Total: 5 pages/);
+    fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
+
+    emit(CORE_FINISHED_EVENT, {
+      jobId: 7, kind: 'pdf_to_image', status: 'failed', error: { code: 'io', message: 'disk full' },
     });
 
-    renderConverter();
-    await addFiles([pdf('retry-me.pdf')]);
-    await screen.findByText(/Total: 3 pages/);
-    fireEvent.click(convertButton());
-
-    expect(await screen.findByText('Backend unavailable')).toBeInTheDocument();
-    expect(screen.getAllByText('retry-me.pdf').length).toBeGreaterThan(0);
+    expect(await screen.findByText(/could not be saved/)).toBeInTheDocument();
+    expect(screen.getAllByText('document.pdf').length).toBeGreaterThan(0);
     expect(convertButton()).toBeEnabled();
-    expect(downloadMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
   });
 
-  it('aligns image request arrays with the displayed order and per-image transforms', async () => {
+  it('aligns image requests with the displayed order and per-image transforms', async () => {
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    chooseTabFor([image('first.png'), image('second.png')]);
-    fireEvent.change(input, { target: { files: [image('first.png'), image('second.png')] } });
+    await addPaths([pic('first.png'), pic('second.png')]);
     await screen.findByText('2 files');
-
-    const list = screen.getByLabelText('Images to Convert');
-    const rows = within(list).getAllByRole('button', { name: /Preview|Rotate|Mirror|Move|Remove/ });
-    expect(rows.length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /Rotate second.png 90 degrees/i }));
     fireEvent.click(screen.getByRole('button', { name: /Mirror second.png horizontally/i }));
     fireEvent.click(screen.getByRole('button', { name: /Move second.png earlier/i }));
 
     fireEvent.click(convertButton());
-    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/api/v1/image-to-pdf/', expect.any(FormData), expect.anything()));
-    const body = postMock.mock.calls.find(([url]) => url === '/api/v1/image-to-pdf/')?.[1] as FormData;
-    const files = body.getAll('files') as File[];
-    expect(files.map((file) => file.name)).toEqual(['second.png', 'first.png']);
-    expect(JSON.parse(body.get('rotations') as string)).toEqual([90, 0]);
-    expect(JSON.parse(body.get('flips') as string)).toEqual([true, false]);
+    await waitFor(() => expect(startCalls('core_image_to_pdf_start')).toHaveLength(1));
+    expect(startCalls('core_image_to_pdf_start')[0][1]).toEqual({
+      images: [
+        { path: pic('second.png'), rotation: 90, flipH: true },
+        { path: pic('first.png'), rotation: 0, flipH: false },
+      ],
+      pageSize: 'a4',
+      outputName: 'output.pdf',
+    });
   });
 
   it('sends A5/F4 preset values from the single batch page-size control', async () => {
     renderConverter();
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    chooseTabFor([image()]);
-    fireEvent.change(input, { target: { files: [image()] } });
+    await addPaths([pic('photo.png')]);
     await screen.findByText('1 file');
 
     const f4 = screen.getByRole('radio', { name: /F4/i });
@@ -425,9 +543,33 @@ describe('unified converter workspace', () => {
     fireEvent.click(f4);
     fireEvent.click(convertButton());
 
-    await waitFor(() => expect(postMock).toHaveBeenCalledWith('/api/v1/image-to-pdf/', expect.any(FormData), expect.anything()));
-    const body = postMock.mock.calls.find(([url]) => url === '/api/v1/image-to-pdf/')?.[1] as FormData;
-    expect(body.get('page_size')).toBe('f4');
+    await waitFor(() => expect(startCalls('core_image_to_pdf_start')).toHaveLength(1));
+    expect(startCalls('core_image_to_pdf_start')[0][1]).toMatchObject({ pageSize: 'f4' });
+  });
+
+  it('reports images the PDF had to leave out', async () => {
+    renderConverter();
+    await addPaths([pic('good.png'), pic('broken.jpg')]);
+    await screen.findByText('2 files');
+    fireEvent.click(convertButton());
+    await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
+    await waitFor(() => expect(startCalls('core_image_to_pdf_start')).toHaveLength(1));
+
+    emit(CORE_PROGRESS_EVENT, { jobId: 8, kind: 'image_to_pdf', stage: 'images', done: 1, total: 2 });
+    expect(await screen.findByText('Adding image 2 of 2…')).toBeInTheDocument();
+    emit(CORE_FINISHED_EVENT, {
+      jobId: 8,
+      kind: 'image_to_pdf',
+      status: 'succeeded',
+      result: pdfFromImagesReport({
+        pages: 1,
+        skipped: [{ source: pic('broken.jpg'), error: { code: 'unsupported', message: 'cannot read image' } }],
+      }),
+    });
+
+    await screen.findByText('Saved to your Downloads folder');
+    expect(screen.getByText(/Skipped because they could not be read: broken\.jpg/)).toBeInTheDocument();
+    expect(screen.getByText(/1 page · A4 · 878\.9 KB/)).toBeInTheDocument();
   });
 
   it('keeps preview resources valid when the converter is left and re-entered', async () => {
@@ -449,11 +591,9 @@ describe('unified converter workspace', () => {
     const revokeObjectURL = vi.mocked(URL.revokeObjectURL);
 
     render(<Harness />);
-    const input = document.getElementById('converter-file-input') as HTMLInputElement;
-    chooseTabFor([image('keep.png')]);
-    fireEvent.change(input, { target: { files: [image('keep.png')] } });
+    await addPaths([pic('keep.png')]);
     await screen.findByText('1 file');
-    expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview');
+    await waitFor(() => expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview'));
     const createdAfterAdd = createObjectURL.mock.calls.length;
     const revokedAfterAdd = revokeObjectURL.mock.calls.length;
 
@@ -464,7 +604,7 @@ describe('unified converter workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'toggle-view' }));
     await screen.findByText('1 file');
-    expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview');
+    await waitFor(() => expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview'));
     expect(createObjectURL.mock.calls.length).toBeGreaterThan(createdAfterAdd);
     expect(revokeObjectURL.mock.calls.length).toBe(revokedAfterLeave);
   });

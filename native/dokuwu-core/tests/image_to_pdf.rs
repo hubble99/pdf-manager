@@ -345,3 +345,35 @@ fn many_images_keep_their_order_and_cancelling_removes_the_partial_file() {
     assert!(err.is_cancelled());
     assert_eq!(std::fs::read_dir(cancel_out.path()).unwrap().count(), 0);
 }
+
+#[test]
+fn thumbnails_follow_exif_orientation_and_stay_small() {
+    use dokuwu_core::ops::image_thumb::{thumbnail_jpeg, ThumbService};
+    let src = tempfile::tempdir().unwrap();
+    let jpeg = std::fs::read(write_image(src.path(), "plain.jpg", &quadrants(400, 300), Kind::Jpeg)).unwrap();
+    let path = src.path().join("o6.jpg");
+    std::fs::write(&path, with_exif_orientation(&jpeg, 6)).unwrap();
+
+    let bytes = thumbnail_jpeg(&path, 100).unwrap();
+    let thumb = image::load_from_memory(&bytes).unwrap().to_rgb8();
+    // 400 x 300 turned by EXIF 6 is 300 x 400, scaled to fit 100.
+    assert_eq!((thumb.width(), thumb.height()), (75, 100));
+    let expected = turns(BASE, 90);
+    for (row, y) in [(0usize, 25u32), (1, 75)] {
+        for (col, x) in [(0usize, 19u32), (1, 56)] {
+            assert!(near(thumb.get_pixel(x, y).0, expected[row][col]), "quadrant ({row},{col})");
+        }
+    }
+
+    // Formats a browser cannot show, and the pool.
+    let tiff = write_image(src.path(), "t.tif", &quadrants(64, 48), Kind::Tiff);
+    let service = ThumbService::new();
+    let t = image::load_from_memory(&service.thumbnail(&tiff, 32).unwrap()).unwrap();
+    assert_eq!((t.width(), t.height()), (32, 24));
+    assert_eq!(service.thumbnail(&src.path().join("nope.png"), 32).unwrap_err().code(), "not_found");
+    let bad = src.path().join("bad.png");
+    std::fs::write(&bad, b"nope").unwrap();
+    assert_eq!(service.thumbnail(&bad, 32).unwrap_err().code(), "unsupported");
+    service.shutdown();
+    assert_eq!(service.thumbnail(&tiff, 32).unwrap_err().code(), "internal");
+}

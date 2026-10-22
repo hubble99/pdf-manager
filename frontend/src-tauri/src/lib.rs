@@ -4,6 +4,7 @@ use tauri::Manager;
 mod desktop_lifecycle;
 
 mod core_bridge;
+mod core_convert;
 mod core_pdf_compress;
 mod core_pdf_render;
 
@@ -17,6 +18,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .manage(core_bridge::CoreState::default())
     .manage(core_pdf_render::RenderState::default())
+    .manage(core_convert::ThumbState::default())
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
@@ -26,6 +28,9 @@ pub fn run() {
       core_bridge::core_reveal_path,
       core_bridge::core_file_sizes,
       core_bridge::core_job_cancel,
+      core_convert::core_pdf_to_image_start,
+      core_convert::core_image_to_pdf_start,
+      core_convert::core_image_thumbnail,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
       core_pdf_render::core_pdf_info,
@@ -104,6 +109,9 @@ pub fn run() {
       }
       if let Some(render) = app_handle.try_state::<core_pdf_render::RenderState>() {
         render.service.shutdown();
+      }
+      if let Some(thumbs) = app_handle.try_state::<core_convert::ThumbState>() {
+        thumbs.service.shutdown();
       }
 
       // ── Graceful shutdown sequence ──────────────────────────────────────────

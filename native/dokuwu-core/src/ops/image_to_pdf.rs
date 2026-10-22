@@ -383,7 +383,7 @@ fn decoder_orientation(bytes: &[u8]) -> Orientation {
 }
 
 /// Grey or RGB 8-bit samples, transparency flattened on white.
-fn flatten(img: DynamicImage) -> (bool, Vec<u8>) {
+pub(crate) fn flatten(img: DynamicImage) -> (bool, Vec<u8>) {
     let over_white = |c: u8, a: u8| ((c as u32 * a as u32 + 255 * (255 - a as u32) + 127) / 255) as u8;
     match img {
         DynamicImage::ImageLuma8(g) => (true, g.into_raw()),
