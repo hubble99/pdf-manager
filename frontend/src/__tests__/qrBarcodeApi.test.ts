@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { applyLanguage } from '../i18n';
 import { NativeCoreError } from '../api/nativeCore';
-import { generateBarcode, generateQr, generationErrorText } from '../api/qrBarcode';
+import { generateBarcode, generateQr, generationErrorText, pngDimensions } from '../api/qrBarcode';
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
@@ -85,5 +85,15 @@ describe('qr and barcode commands', () => {
       'Unexpected error while generating: internal error: boom'
     );
     expect(generationErrorText(new Error('weird'))).toBe('Unexpected error while generating: weird');
+  });
+
+  it('reads the size of a PNG from its header', () => {
+    const header = new Uint8Array(33);
+    header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    new DataView(header.buffer).setUint32(16, 660);
+    new DataView(header.buffer).setUint32(20, 330);
+    expect(pngDimensions(header)).toEqual({ width: 660, height: 330 });
+    expect(pngDimensions(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />'))).toBeNull();
+    expect(pngDimensions(new Uint8Array(4))).toBeNull();
   });
 });

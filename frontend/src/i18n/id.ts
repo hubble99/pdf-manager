@@ -610,6 +610,8 @@ export const ID: Record<string, string> = {
   'Save {format}': 'Simpan {format}',
   'Saved': 'Tersimpan',
   'Saved as': 'Disimpan sebagai',
+  'Saved image: {width} × {height} px': 'Gambar tersimpan: {width} × {height} px',
+  'SVG has no fixed pixel size, so it stays sharp at any size.': 'SVG tidak punya ukuran piksel tetap, jadi tetap tajam di ukuran berapa pun.',
   'Saved checkpoint': 'Titik simpan tersimpan',
   'Saved to your Downloads folder': 'Tersimpan di folder Unduhan Anda',
   'Saved {name} to your Downloads folder': '{name} tersimpan di folder Unduhan Anda',

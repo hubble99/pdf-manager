@@ -15,8 +15,15 @@ import { NativeCoreError } from '../api/nativeCore';
 import { ToastProvider } from '../context/ToastContext';
 import { QrBarcodePage } from '../pages/QrBarcodePage';
 
-const png = () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
-const svg = () => new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />').buffer;
+/** A PNG header for an image of the given size (enough for the page to read the dimensions). */
+const png = (width = 330, height = 330) => {
+  const bytes = new Uint8Array(33);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+  new DataView(bytes.buffer).setUint32(16, width);
+  new DataView(bytes.buffer).setUint32(20, height);
+  return bytes;
+};
+const svg = () => new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />');
 
 function renderPage() {
   return render(
@@ -106,9 +113,9 @@ describe('QrBarcodePage', () => {
   }, 20000);
 
   it('ignores an answer that arrives after the content changed', async () => {
-    let finishFirst: (bytes: ArrayBuffer) => void = () => {};
+    let finishFirst: (bytes: Uint8Array<ArrayBuffer>) => void = () => {};
     generateQr
-      .mockImplementationOnce(() => new Promise<ArrayBuffer>((resolve) => { finishFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<Uint8Array<ArrayBuffer>>((resolve) => { finishFirst = resolve; }))
       .mockResolvedValueOnce(png());
     let created = 0;
     vi.mocked(URL.createObjectURL).mockImplementation(() => `blob:preview-${++created}`);
@@ -124,5 +131,52 @@ describe('QrBarcodePage', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(created).toBe(1);
     expect(screen.getByAltText('Preview')).toHaveAttribute('src', 'blob:preview-1');
+  }, 20000);
+
+  it('tells how big the saved PNG is, since the preview is only scaled to fit', async () => {
+    generateQr.mockImplementation(async ({ size }: { size: number }) => png(29 * size, 29 * size));
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
+
+    expect(await screen.findByText('Saved image: 290 × 290 px', {}, { timeout: 3000 })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '20' } });
+    expect(await screen.findByText('Saved image: 580 × 580 px', {}, { timeout: 3000 })).toBeInTheDocument();
+  }, 20000);
+
+  it('keeps the old preview on screen while a new size is made and asks once after the slider settles', async () => {
+    let finish: (bytes: Uint8Array<ArrayBuffer>) => void = () => {};
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
+    await waitFor(() => expect(screen.getByAltText('Preview')).toBeInTheDocument(), { timeout: 3000 });
+    generateQr.mockClear();
+    generateQr.mockImplementation(() => new Promise<Uint8Array<ArrayBuffer>>((resolve) => { finish = resolve; }));
+
+    const slider = screen.getByLabelText(/^Size/);
+    for (const value of ['11', '12', '13', '14']) fireEvent.change(slider, { target: { value } });
+
+    await waitFor(() => expect(generateQr).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    expect(generateQr).toHaveBeenCalledWith(expect.objectContaining({ size: 14 }));
+    // The picture is still there, not replaced by a spinner.
+    expect(screen.getByAltText('Preview')).toBeInTheDocument();
+    expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
+    finish(png());
+  }, 20000);
+
+  it('cannot save a PNG preview as SVG, and the size slider is off for SVG', async () => {
+    let finishSvg: (bytes: Uint8Array<ArrayBuffer>) => void = () => {};
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save PNG/i })).toBeEnabled(), { timeout: 3000 });
+
+    generateQr.mockImplementationOnce(() => new Promise<Uint8Array<ArrayBuffer>>((resolve) => { finishSvg = resolve; }));
+    fireEvent.click(screen.getByRole('radio', { name: /^SVG/ }));
+
+    expect(screen.getByRole('button', { name: /Save SVG/i })).toBeDisabled();
+    expect(screen.getByLabelText(/^Size/)).toBeDisabled();
+    expect(screen.getByText(/SVG has no fixed pixel size/)).toBeInTheDocument();
+    await waitFor(() => expect(generateQr).toHaveBeenLastCalledWith(expect.objectContaining({ format: 'svg' })));
+    finishSvg(svg());
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save SVG/i })).toBeEnabled());
   }, 20000);
 });

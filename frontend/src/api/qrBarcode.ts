@@ -63,6 +63,14 @@ export const generateQr = ({ content, size, errorCorrection, format, border }: Q
 export const generateBarcode = ({ content, barcodeType, format }: BarcodeRequest): Promise<Uint8Array<ArrayBuffer>> =>
   generate('core_barcode_generate', { content, barcodeType, format });
 
+/** Width and height of a PNG, read from its header; `null` if the bytes are not a PNG. */
+export function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 24 || signature.some((b, i) => bytes[i] !== b)) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
 /** The core's message without the "invalid input: " label it adds. */
 const plainMessage = (message: string): string => message.replace(/^invalid input: /, '');
 

@@ -7,7 +7,7 @@ import {
   Loader2,
   QrCode,
 } from 'lucide-react';
-import { generateBarcode, generateQr, generationErrorText } from '../api/qrBarcode';
+import { generateBarcode, generateQr, generationErrorText, pngDimensions } from '../api/qrBarcode';
 import { useToast } from '../hooks/useToast';
 import { PageHeader, RadioCardGroup, RangeField, Tabs } from '../components/ui';
 import { buildOutputFilename } from '../utils/filenamePolicy';
@@ -65,7 +65,17 @@ export function QrBarcodePage() {
   // Shared state
   const [format, setFormat] = useState<'png' | 'svg'>('png');
   const [isLoading, setIsLoading] = useState(false);
-  const [previewData, setPreviewData] = useState<{ url: string; isSvgText: boolean; svgText?: string; content: string } | null>(null);
+  const [previewData, setPreviewData] = useState<{
+    url: string;
+    isSvgText: boolean;
+    svgText?: string;
+    content: string;
+    /** Which tab and format this preview was made for. */
+    kind: TabType;
+    format: 'png' | 'svg';
+    /** Pixel size of a PNG; the preview box only shows it scaled to fit. */
+    pixels?: { width: number; height: number };
+  } | null>(null);
   // Why the preview is empty when the core refused the content (wrong check digit, characters the barcode cannot hold, ...).
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -74,6 +84,8 @@ export function QrBarcodePage() {
   const [qrSize, setQrSize] = useState(10);
   const [qrErrorCorrection, setQrErrorCorrection] = useState('M');
   const debouncedQrContent = useDebounce(qrContent, 800);
+  // Dragging the size slider fires on every step; wait for it to settle.
+  const debouncedQrSize = useDebounce(qrSize, 120);
   
   // Barcode state
   const [barcodeContent, setBarcodeContent] = useState('');
@@ -133,11 +145,14 @@ export function QrBarcodePage() {
       }
     }
 
-    setIsLoading(true);
-    
+    // A quick answer (the usual case) swaps the picture without a spinner flash.
+    const slowTimer = window.setTimeout(() => {
+      if (requestId === requestIdRef.current) setIsLoading(true);
+    }, 200);
+
     try {
       const bytes = isQr
-        ? await generateQr({ content, size: qrSize, errorCorrection: qrErrorCorrection, format, border: 4 })
+        ? await generateQr({ content, size: debouncedQrSize, errorCorrection: qrErrorCorrection, format, border: 4 })
         : await generateBarcode({ content, barcodeType, format });
 
       if (requestId !== requestIdRef.current) {
@@ -149,10 +164,17 @@ export function QrBarcodePage() {
         const svgText = new TextDecoder().decode(bytes);
         const blob = new Blob([svgText], { type: 'image/svg+xml' });
         const blobUrl = URL.createObjectURL(blob);
-        setPreviewData({ url: blobUrl, isSvgText: true, svgText, content });
+        setPreviewData({ url: blobUrl, isSvgText: true, svgText, content, kind: activeTab, format });
       } else {
         const blob = new Blob([bytes], { type: 'image/png' });
-        setPreviewData({ url: URL.createObjectURL(blob), isSvgText: false, content });
+        setPreviewData({
+          url: URL.createObjectURL(blob),
+          isSvgText: false,
+          content,
+          kind: activeTab,
+          format,
+          pixels: pngDimensions(bytes) ?? undefined,
+        });
       }
 
       if (isUserAction) {
@@ -170,6 +192,7 @@ export function QrBarcodePage() {
       setPreviewError(message);
       setPreviewData(null);
     } finally {
+      window.clearTimeout(slowTimer);
       if (requestId === requestIdRef.current) {
         setIsLoading(false);
       }
@@ -178,7 +201,7 @@ export function QrBarcodePage() {
     activeTab, 
     debouncedQrContent, 
     debouncedBarcodeContent, 
-    qrSize, 
+    debouncedQrSize,
     qrErrorCorrection, 
     barcodeType, 
     format, 
@@ -195,9 +218,14 @@ export function QrBarcodePage() {
     };
   }, [generatePreview]);
 
+  // The preview of this tab. While a new one is being made the old one stays on screen,
+  // so the box does not jump; it is only saved when it matches the chosen format.
+  const shownPreview = previewData && previewData.kind === activeTab ? previewData : null;
+  const canSave = shownPreview !== null && shownPreview.format === format && !isLoading;
+
   // ── Download ────────────────────────────────────────────────────────────────
   const handleDownload = () => {
-    if (!previewData) return;
+    if (!previewData || !canSave) return;
 
     const isQr = activeTab === 'qr';
     const defaultName = isQr ? 'qrcode' : 'barcode';
@@ -364,13 +392,13 @@ export function QrBarcodePage() {
               </div>
               <div className="card-body">
                 <div className={`preview-box${activeTab === 'qr' ? ' preview-box--qr' : ''}`}>
-                  {isLoading ? (
+                  {isLoading && !shownPreview ? (
                     <div className="preview-empty">
                       <Loader2 size={24} className="spin" />
                       <span>{t('Generating...')}</span>
                     </div>
-                  ) : previewData ? (
-                    <img src={previewData.url} alt={t('Preview')} />
+                  ) : shownPreview ? (
+                    <img src={shownPreview.url} alt={t('Preview')} />
                   ) : (
                     <div className="preview-empty">
                       {activeTab === 'qr' ? <QrCode size={32} aria-hidden="true" /> : <Barcode size={32} aria-hidden="true" />}
@@ -392,6 +420,7 @@ export function QrBarcodePage() {
                       max={20}
                       value={qrSize}
                       onChange={setQrSize}
+                      disabled={format === 'svg'}
                       scale={(
                         <>
                           <span>{t('Small (1)')}</span>
@@ -400,6 +429,17 @@ export function QrBarcodePage() {
                       )}
                     />
                   </div>
+                )}
+
+                {shownPreview?.pixels && shownPreview.format === 'png' && (
+                  <p className="text-muted text-body-sm" id="preview-pixels">
+                    {t('Saved image: {width} × {height} px', shownPreview.pixels)}
+                  </p>
+                )}
+                {activeTab === 'qr' && format === 'svg' && (
+                  <p className="text-muted text-body-sm" id="preview-svg-note">
+                    {t('SVG has no fixed pixel size, so it stays sharp at any size.')}
+                  </p>
                 )}
 
                 <div className="field">
@@ -418,7 +458,7 @@ export function QrBarcodePage() {
                   <button
                     className="btn btn-primary"
                     onClick={handleDownload}
-                    disabled={!previewData || isLoading}
+                    disabled={!canSave}
                   >
                     <Download size={15} />
                     {t('Save {format}', { format: format.toUpperCase() })}
@@ -426,7 +466,7 @@ export function QrBarcodePage() {
                   <button
                     className="btn btn-secondary"
                     onClick={() => openOutputFolder()}
-                    disabled={!previewData || isLoading}
+                    disabled={!canSave}
                   >
                     <FolderOpen size={15} />
                     {t('Open Folder')}
