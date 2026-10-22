@@ -111,12 +111,15 @@ pub(crate) struct Spill {
     dir: PathBuf,
     stem: String,
     current: Option<PathBuf>,
+    /// Older files that could not be deleted yet: Windows refuses while a
+    /// graft map still keeps the document that read them open.
+    stale: Vec<PathBuf>,
     serial: u32,
 }
 
 impl Spill {
     pub(crate) fn new(dir: &Path, stem: &str) -> Self {
-        Self { dir: dir.to_path_buf(), stem: stem.to_string(), current: None, serial: 0 }
+        Self { dir: dir.to_path_buf(), stem: stem.to_string(), current: None, stale: Vec::new(), serial: 0 }
     }
 
     /// Saves `doc`, drops it and returns the saved file reopened.
@@ -130,16 +133,20 @@ impl Spill {
         doc.save_with_options(path_str(&path)?, PdfWriteOptions::default()).map_err(|e| save_error(&path, e))?;
         drop(doc);
         let reopened = open(&path).map_err(|e| internal("reopen merge so far", e))?;
-        if let Some(previous) = previous {
-            let _ = fs::remove_file(previous);
-        }
+        self.stale.extend(previous);
+        self.reap();
         Ok(reopened)
     }
 
+    /// Deletes the older temporary files; one that is still open stays for the
+    /// next call. Call it once nothing reads the older files any more.
+    pub(crate) fn reap(&mut self) {
+        self.stale.retain(|path| fs::remove_file(path).is_err() && path.exists());
+    }
+
     pub(crate) fn clean(&mut self) {
-        if let Some(path) = self.current.take() {
-            let _ = fs::remove_file(path);
-        }
+        self.stale.extend(self.current.take());
+        self.reap();
     }
 }
 

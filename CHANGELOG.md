@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Fixed**
+
+- **Split PDF / Merge PDF:** on Windows, a very large Extract or Merge that had to use temporary files could leave `.extracted_*.spillN.pdf.part` files behind in the output folder. They are now deleted when the job ends.
+
 ## 1.10.0 — 2026-10-22 · Phase 2: more tools on the native Rust core
 
 > PDF & Image, Merge PDF, Split PDF, Protect PDF, QR & Barcode and every page preview now run on the Rust core (`dokuwu-core`) instead of the Python backend. They read and write files directly on disk, show progress, can be cancelled, and keep memory use flat for large files. Results are saved to Downloads under a free name (`name (1).pdf`); an existing file is never overwritten, and a "Show in folder" button opens the result.
