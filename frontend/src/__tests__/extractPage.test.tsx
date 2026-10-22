@@ -123,6 +123,42 @@ describe('extract page', () => {
     expect(screen.getByText('2 of 6 pages selected')).toBeInTheDocument();
   });
 
+  it('selects a range of pages with Shift + click', async () => {
+    pageCount = 10;
+    renderPage();
+    await drop([PDF]);
+    await screen.findByText('10 pages');
+    expect(screen.getByText('Tip: hold Shift and click to select a range of pages.')).toBeInTheDocument();
+
+    // A plain click sets the starting point, Shift + click selects up to the page.
+    fireEvent.click(pageCell(3));
+    fireEvent.click(pageCell(6), { shiftKey: true });
+    expect(rangeInput().value).toBe('3-6');
+
+    // Another Shift + click extends from the same page, in either direction.
+    fireEvent.click(pageCell(9), { shiftKey: true });
+    expect(rangeInput().value).toBe('3-9');
+    fireEvent.click(pageCell(1), { shiftKey: true });
+    expect(rangeInput().value).toBe('1-9');
+
+    // After deselecting a page, Shift + click deselects the range.
+    fireEvent.change(rangeInput(), { target: { value: '1-10' } });
+    fireEvent.click(pageCell(4));
+    expect(rangeInput().value).toBe('1-3, 5-10');
+    fireEvent.click(pageCell(7), { shiftKey: true });
+    expect(rangeInput().value).toBe('1-3, 8-10');
+  });
+
+  it('treats Shift + click as a plain click when nothing was clicked before', async () => {
+    renderPage();
+    await drop([PDF]);
+    await screen.findByText('6 pages');
+    fireEvent.click(pageCell(4), { shiftKey: true });
+    expect(rangeInput().value).toBe('4');
+    fireEvent.click(pageCell(6), { shiftKey: true });
+    expect(rangeInput().value).toBe('4-6');
+  });
+
   it('extracts the typed ranges and reports the result', async () => {
     renderPage();
     await drop([PDF]);
