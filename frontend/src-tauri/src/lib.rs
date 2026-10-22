@@ -5,6 +5,7 @@ mod desktop_lifecycle;
 
 mod core_bridge;
 mod core_pdf_compress;
+mod core_pdf_render;
 
 struct DesktopLifecycleToken(String);
 
@@ -15,6 +16,7 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_shell::init())
     .manage(core_bridge::CoreState::default())
+    .manage(core_pdf_render::RenderState::default())
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
@@ -26,6 +28,8 @@ pub fn run() {
       core_bridge::core_job_cancel,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
+      core_pdf_render::core_pdf_info,
+      core_pdf_render::core_pdf_render_page,
     ])
     .on_window_event(|window, event| {
       if let tauri::WindowEvent::Resized(size) = event {
@@ -97,6 +101,9 @@ pub fn run() {
       // Stop native core jobs at their next checkpoint.
       if let Some(core) = app_handle.try_state::<core_bridge::CoreState>() {
         core.runner.cancel_all();
+      }
+      if let Some(render) = app_handle.try_state::<core_pdf_render::RenderState>() {
+        render.service.shutdown();
       }
 
       // ── Graceful shutdown sequence ──────────────────────────────────────────

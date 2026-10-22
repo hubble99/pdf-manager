@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { t } from '../i18n';
 import { FileText, Loader2 } from 'lucide-react';
-import axios from 'axios';
-import apiClient from '../api/client';
+import { fetchPagePreview, isAbort, type PdfSource } from '../api/pdfRender';
 
 interface PdfThumbnailProps {
-  file: File;
+  file: PdfSource;
   page?: number;
   dpi?: number;
   className?: string;
@@ -23,22 +22,11 @@ export function PdfThumbnail({ file, page = 1, dpi = 72, className = '', style }
     async function load() {
       setLoading(true);
       try {
-        const form = new FormData();
-        form.append('file', file, file.name || 'preview.pdf');
-        form.append('page', String(page));
-        form.append('dpi', String(dpi));
-        form.append('quality_hint', 'low');
-        
-        const res = await apiClient.post('/api/v1/preview/', form, { 
-          responseType: 'blob',
-          signal: abortController.signal
-        });
-        
-        const blob = new Blob([res.data], { type: 'image/png' });
+        const blob = await fetchPagePreview(file, { page, dpi, quality: 'low', signal: abortController.signal });
         currentUrl = URL.createObjectURL(blob);
         setUrl(currentUrl);
       } catch (err: unknown) {
-        if (axios.isCancel(err)) return;
+        if (isAbort(err)) return;
         console.error('Failed to load PDF preview', err);
       } finally {
         if (!abortController.signal.aborted) {
