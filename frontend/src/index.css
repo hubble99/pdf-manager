@@ -3533,6 +3533,14 @@ select.input {
   display: none;
 }
 
+.thumb:focus-visible {
+  outline: none;
+}
+
+.thumb:focus-visible .thumb-page {
+  border-color: var(--primary);
+}
+
 .thumb:hover .thumb-page {
   border-color: var(--bd2);
 }

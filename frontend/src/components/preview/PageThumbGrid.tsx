@@ -90,7 +90,12 @@ function PageThumb({ file, page, selected, interactive, dpi, onPick }: PageThumb
       aria-label={selected ? t('Page {n}, selected', { n: page }) : t('Page {n}', { n: page })}
       disabled={!interactive}
       onMouseDown={(event) => { if (event.shiftKey) event.preventDefault(); }}
-      onClick={(event: MouseEvent) => onPick(page, event.shiftKey)}
+      onClick={(event: MouseEvent<HTMLButtonElement>) => {
+        onPick(page, event.shiftKey);
+        // A mouse click leaves no focus ring behind: pressing Shift for a
+        // range would otherwise turn it into a thick keyboard focus outline.
+        if (event.detail > 0) event.currentTarget.blur();
+      }}
     >
       <span className={`thumb-page${url ? ' has-image' : ''}`}>
         {url && <img src={url} alt="" draggable={false} />}
