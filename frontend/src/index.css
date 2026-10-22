@@ -2456,9 +2456,16 @@ select.input {
 }
 
 .merge-tree {
-  max-height: 440px;
+  max-height: max(320px, 55vh);
   overflow: auto;
   padding: 6px 0;
+}
+
+/* A long queue scrolls inside the card, so the output name, Merge and Clear
+   stay in view. */
+.merge-queue-list {
+  max-height: max(260px, 42vh);
+  overflow-y: auto;
 }
 
 .merge-tree-row {
