@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**Brand**
+
+- **New logo:** Dokuwu has a new logo, a friendly document mascot with a folded corner and a checked shield. It replaces the old icon everywhere: the app and installer icon, the taskbar and Start Menu tiles, the Microsoft Store package assets, the sidebar, Home, and the website. Small sizes use a simplified version (document and face only) so the icon stays clear at 16 to 48 px. The artwork is vector (`docs/brand`), and `scripts/brand/generate_brand_assets.py` rebuilds every icon from it.
+- **Loading screen:** the logo pops in, floats gently and waves while the app starts. The animation uses transforms only, so it adds almost no CPU or memory use, and it is switched off when Windows is set to reduce motion.
+
 **Canvas PDF**
 
 - **Images:** add PNG, JPG or WEBP images to a page with the new Insert image button, or drop image files on the page where they should go. An image can be moved, resized (corners keep the proportions, side handles or Shift stretch it), rotated to any angle, layered, copied, faded with an opacity slider, and deleted, with undo and redo. Saving embeds the original image in the PDF at the same place and angle; JPG and PNG files are embedded unchanged, and a photo's camera orientation is respected.

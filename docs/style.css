@@ -143,6 +143,11 @@ a:hover {
     box-shadow: 0 4px 24px rgba(0,0,0,0.4);
 }
 
+.hero-logo {
+    display: block;
+    margin: 0 0 1rem;
+}
+
 .hero h1 {
     font-size: clamp(2.5rem, 5vw, 3.5rem);
     font-weight: 800;
@@ -334,6 +339,10 @@ footer {
     .hero-image-wrapper {
         justify-content: center;
         margin-top: 2rem;
+    }
+
+    .hero-logo {
+        margin-inline: auto;
     }
 
     .hero-badges, .cta-group {

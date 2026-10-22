@@ -1,5 +1,6 @@
 import { Heart } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { BrandLogo } from '../components/BrandLogo';
 import { PageHeader } from '../components/ui';
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from '../config/app';
 import { BETA_TOOLTIP, featuresByGroup } from '../config/features';
@@ -18,8 +19,13 @@ export function HomePage() {
       <div className="page-body home-page">
         <section className="home-hero" aria-label={t('About this application')}>
           <div className="home-hero-copy">
-            <h2 className="home-hero-name">{APP_NAME}</h2>
-            <p className="home-hero-tagline">{APP_TAGLINE}</p>
+            <div className="home-hero-brand">
+              <BrandLogo size={88} />
+              <div className="home-hero-brand-text">
+                <h2 className="home-hero-name">{APP_NAME}</h2>
+                <p className="home-hero-tagline">{APP_TAGLINE}</p>
+              </div>
+            </div>
             <p className="home-hero-description">{APP_DESCRIPTION}</p>
           </div>
 
