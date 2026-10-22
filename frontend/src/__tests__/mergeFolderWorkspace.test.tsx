@@ -1,68 +1,54 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CORE_FINISHED_EVENT, CORE_PROGRESS_EVENT } from '../api/nativeCore';
 import { FileProvider } from '../context/FileContext';
 import { ToastProvider } from '../context/ToastContext';
 import { ToastContainer } from '../components/ToastContainer';
 import { MergePage } from '../pages/MergePage';
 
-const { registerMock, listMock, inspectMock, describeMock, mergeMock, releaseMock, downloadMock, tauriState } = vi.hoisted(() => ({
-  registerMock: vi.fn(),
-  listMock: vi.fn(),
-  inspectMock: vi.fn(),
-  describeMock: vi.fn(),
-  mergeMock: vi.fn(),
-  releaseMock: vi.fn(),
-  downloadMock: vi.fn(),
-  tauriState: { available: true, chosen: 'C:/Docs/Reports' as string | null },
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => undefined }),
 }));
 
-vi.mock('../features/merge/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../features/merge/api')>();
-  return {
-    ...actual,
-    registerFolder: registerMock,
-    listFolder: listMock,
-    inspectFiles: inspectMock,
-    describeFiles: describeMock,
-    mergeFolderFiles: mergeMock,
-    releaseFolder: releaseMock,
-  };
-});
+const tauriState = vi.hoisted(() => ({ available: true, chosen: 'C:\\Docs\\Reports' as string | null }));
+vi.mock('../utils/tauriDialog', () => ({
+  isTauri: () => tauriState.available,
+  chooseFolderDialog: vi.fn(async () => tauriState.chosen),
+  openFilePicker: vi.fn(async () => null),
+  openOutputFolder: vi.fn(async () => true),
+}));
 
-vi.mock('../utils/tauriDialog', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/tauriDialog')>();
-  return {
-    ...actual,
-    isTauri: () => tauriState.available,
-    chooseFolderDialog: vi.fn(async () => tauriState.chosen),
-    openOutputFolder: vi.fn(async () => true),
-  };
-});
+vi.mock('../components/PdfThumbnail', () => ({
+  PdfThumbnail: () => <span data-testid="thumb" />,
+}));
 
-vi.mock('../utils/downloadHelper', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/downloadHelper')>();
-  return { ...actual, triggerBlobDownload: downloadMock };
-});
+type Handler = (event: { payload: unknown }) => void;
+const invokeMock = vi.mocked(invoke);
+const listenMock = vi.mocked(listen);
+let handlers: Record<string, Handler[]>;
+const emit = (event: string, payload: unknown) => act(() => { handlers[event]?.forEach((h) => h({ payload })); });
+
+const folder = (name: string, relativePath: string, pdfCount: number, files: string[], folders: unknown[] = []) =>
+  ({ name, relativePath, pdfCount, folders, files });
 
 const listing = {
-  root: {
-    name: 'Reports',
-    relative_path: '',
-    pdf_count: 4,
-    folders: [
-      {
-        name: 'Q1', relative_path: 'Q1', pdf_count: 3,
-        folders: [], files: ['report-jan.pdf', 'report-feb.pdf', 'report10.pdf'],
-      },
-    ],
-    files: ['summary.pdf'],
-  },
-  pdf_count: 4,
+  root: folder('Reports', '', 4, ['summary.pdf'], [
+    folder('Q1', 'Q1', 3, ['report-jan.pdf', 'report-feb.pdf', 'report10.pdf']),
+  ]),
+  pdfCount: 4,
   skipped: 0,
-  depth_capped: false,
-  entry_capped: false,
+  depthCapped: false,
+  entryCapped: false,
 };
+
+let scanResult: unknown;
+let inspection: { usable: number; problems: Array<{ index: number; reason: string }> };
+let describeFiles: (paths: string[]) => Array<{ sizeBytes: number; pages: number | null }>;
 
 function renderPage() {
   return render(
@@ -85,7 +71,10 @@ async function openFolderMode() {
 }
 
 const queueItems = () => [...document.querySelectorAll('.merge-queue-name')].map((n) => n.textContent);
-/** Ensure a folder is open. Top-level folders arrive already expanded. */
+const calls = (cmd: string) => invokeMock.mock.calls.filter(([c]) => c === cmd);
+const mergeArgs = () => calls('core_pdf_merge_start')[0][1] as Record<string, unknown>;
+
+/** Top-level folders arrive already expanded. */
 const openFolderRow = async (name: string, file: string) => {
   const expand = screen.queryByRole('button', { name: new RegExp(`^Expand ${name}$`) });
   if (expand) fireEvent.click(expand);
@@ -93,22 +82,51 @@ const openFolderRow = async (name: string, file: string) => {
     expect(screen.getByRole('button', { name: new RegExp(`Add ${file}`, 'i') })).toBeTruthy());
 };
 
+const mergeReport = (overrides: Record<string, unknown> = {}) => ({
+  outputPath: 'C:\\Users\\a\\Downloads\\merged_output.pdf',
+  outputSizeBytes: 3_000_000,
+  totalPages: 4,
+  mergedFiles: 4,
+  skipped: [],
+  durationMs: 900,
+  ...overrides,
+});
+
+const finishMerge = (result: unknown) =>
+  emit(CORE_FINISHED_EVENT, { jobId: 11, kind: 'pdf_merge', status: 'succeeded', result });
+
 describe('merge folder mode', () => {
   beforeEach(() => {
-    registerMock.mockReset(); listMock.mockReset(); inspectMock.mockReset();
-    mergeMock.mockReset(); releaseMock.mockReset(); downloadMock.mockReset();
-    describeMock.mockReset(); describeMock.mockResolvedValue([]);
+    handlers = {};
     tauriState.available = true;
-    tauriState.chosen = 'C:/Docs/Reports';
-
-    registerMock.mockResolvedValue({ rootId: 'root-1', path: 'C:/Docs/Reports', name: 'Reports' });
-    listMock.mockResolvedValue(listing);
-    inspectMock.mockResolvedValue([]);
-    mergeMock.mockResolvedValue({
-      blob: new Blob(['pdf'], { type: 'application/pdf' }),
-      filename: 'merged_output.pdf', totalPages: 4, merged: 4, skipped: 0,
+    tauriState.chosen = 'C:\\Docs\\Reports';
+    scanResult = listing;
+    inspection = { usable: 3, problems: [] };
+    describeFiles = (paths) => paths.map(() => ({ sizeBytes: 1024, pages: 2 }));
+    invokeMock.mockReset();
+    listenMock.mockReset();
+    listenMock.mockImplementation(async (event, handler) => {
+      (handlers[event] ??= []).push(handler as unknown as Handler);
+      return () => undefined;
     });
-    releaseMock.mockResolvedValue(undefined);
+    invokeMock.mockImplementation(async (cmd, args) => {
+      switch (cmd) {
+        case 'core_folder_scan':
+          if (scanResult instanceof Error) throw scanResult;
+          return scanResult;
+        case 'core_pdf_inspect':
+          return inspection;
+        case 'core_pdf_describe':
+          return describeFiles((args as { paths: string[] }).paths);
+        case 'core_pdf_merge_start':
+          return 11;
+        case 'core_job_cancel':
+        case 'core_reveal_path':
+          return undefined;
+        default:
+          throw new Error(`unexpected ${cmd}`);
+      }
+    });
   });
 
   it('disables folder mode without the desktop shell', () => {
@@ -146,8 +164,8 @@ describe('merge folder mode', () => {
 
   it('lists the chosen folder without filling the queue', async () => {
     await openFolderMode();
-    expect(registerMock).toHaveBeenCalledWith('C:/Docs/Reports');
-    expect(screen.getByText('C:/Docs/Reports')).toBeInTheDocument();
+    expect(calls('core_folder_scan')[0][1]).toEqual({ root: 'C:\\Docs\\Reports' });
+    expect(screen.getByText('C:\\Docs\\Reports')).toBeInTheDocument();
     expect(queueItems()).toEqual([]);
     expect(screen.getByText('Add files from the folder on the left.')).toBeInTheDocument();
   });
@@ -217,12 +235,9 @@ describe('merge folder mode', () => {
   });
 
   it('shows page count and size on queued files, like quick mode', async () => {
-    describeMock.mockImplementation(async (_root: string, files: string[]) =>
-      files.map((path) => (
-        path === 'summary.pdf'
-          ? { path, size_bytes: 2048, pages: 1 }
-          : { path, size_bytes: 1536000, pages: 12 }
-      )));
+    describeFiles = (paths) => paths.map((path) => (
+      path === 'summary.pdf' ? { sizeBytes: 2048, pages: 1 } : { sizeBytes: 1_536_000, pages: 12 }
+    ));
     await openFolderMode();
     await openFolderRow('Q1', 'report-jan.pdf');
     fireEvent.click(screen.getByRole('button', { name: /Add report-jan\.pdf/i }));
@@ -232,38 +247,73 @@ describe('merge folder mode', () => {
       const meta = [...document.querySelectorAll('.merge-queue-meta')].map((n) => n.textContent);
       expect(meta).toEqual(['12 pages · 1.46 MB', '1 page · 2.0 KB']);
     });
+    // The names are sent relative to the chosen folder.
+    expect(calls('core_pdf_describe').at(-1)![1]).toMatchObject({ root: 'C:\\Docs\\Reports' });
   });
 
-  it('merges directly when nothing is wrong', async () => {
+  it('merges directly when nothing is wrong, with progress and a result', async () => {
     await openFolderMode();
     await openFolderRow('Q1', 'report-jan.pdf');
     fireEvent.click(screen.getByRole('button', { name: /Add all 3 PDFs under Q1/ }));
     fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
 
-    await waitFor(() => expect(mergeMock).toHaveBeenCalled());
-    expect(inspectMock).toHaveBeenCalled();
-    expect(mergeMock.mock.calls[0][3]).toBe(false);
-    expect(downloadMock).toHaveBeenCalled();
+    await waitFor(() => expect(calls('core_pdf_merge_start')).toHaveLength(1));
+    expect(calls('core_pdf_inspect')).toHaveLength(1);
+    expect(mergeArgs()).toEqual({
+      paths: ['Q1/report-jan.pdf', 'Q1/report-feb.pdf', 'Q1/report10.pdf'],
+      root: 'C:\\Docs\\Reports',
+      skipInvalid: false,
+      outputName: 'merged_output.pdf',
+    });
+
+    emit(CORE_PROGRESS_EVENT, { jobId: 11, kind: 'pdf_merge', stage: 'files', done: 1, total: 3 });
+    expect(await screen.findByText('Merging file 2 of 3…')).toBeInTheDocument();
+    emit(CORE_PROGRESS_EVENT, { jobId: 11, kind: 'pdf_merge', stage: 'saving', done: 0, total: null });
+    expect(await screen.findByText('Saving the merged PDF…')).toBeInTheDocument();
+
+    finishMerge(mergeReport());
     expect(await screen.findByText(/Merged 4 files/)).toBeInTheDocument();
-    expect(document.getElementById('merge-folder-open-folder-btn')).not.toBeNull();
+    expect(screen.queryByText('Saving the merged PDF…')).not.toBeInTheDocument();
+    fireEvent.click(document.getElementById('merge-folder-open-folder-btn') as HTMLButtonElement);
+    await waitFor(() => expect(calls('core_reveal_path')[0][1]).toEqual({ path: 'C:\\Users\\a\\Downloads\\merged_output.pdf' }));
+  });
+
+  it('cancels a running merge', async () => {
+    await openFolderMode();
+    await openFolderRow('Q1', 'report-jan.pdf');
+    fireEvent.click(screen.getByRole('button', { name: /Add all 3 PDFs under Q1/ }));
+    fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
+    await waitFor(() => expect(calls('core_pdf_merge_start')).toHaveLength(1));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(calls('core_job_cancel')[0][1]).toEqual({ jobId: 11 }));
+    emit(CORE_FINISHED_EVENT, { jobId: 11, kind: 'pdf_merge', status: 'cancelled' });
+    await waitFor(() => expect(document.getElementById('merge-folder-run')).toBeEnabled());
+    // Cancelling is not a failure.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Merged/)).not.toBeInTheDocument();
   });
 
   it('reports problems and merges only the files the user keeps', async () => {
     await openFolderMode();
     await openFolderRow('Q1', 'report-jan.pdf');
     fireEvent.click(screen.getByRole('button', { name: /Add all 3 PDFs under Q1/ }));
-    inspectMock.mockResolvedValue([{ path: 'Q1/report-feb.pdf', reason: 'encrypted' }]);
+    inspection = { usable: 2, problems: [{ index: 1, reason: 'encrypted' }] };
 
     fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText('1 file cannot be merged')).toBeInTheDocument();
-    expect(within(dialog).getByText('(encrypted)')).toBeInTheDocument();
-    expect(mergeMock).not.toHaveBeenCalled();
+    expect(within(dialog).getByText('Q1/report-feb.pdf')).toBeInTheDocument();
+    expect(within(dialog).getByText('(password protected)')).toBeInTheDocument();
+    expect(calls('core_pdf_merge_start')).toHaveLength(0);
 
     fireEvent.click(document.getElementById('merge-skip-and-merge') as HTMLButtonElement);
-    await waitFor(() => expect(mergeMock).toHaveBeenCalled());
-    expect(mergeMock.mock.calls[0][1]).toEqual(['Q1/report-jan.pdf', 'Q1/report10.pdf']);
-    expect(mergeMock.mock.calls[0][3]).toBe(true);
+    await waitFor(() => expect(calls('core_pdf_merge_start')).toHaveLength(1));
+    expect(mergeArgs().paths).toEqual(['Q1/report-jan.pdf', 'Q1/report10.pdf']);
+    expect(mergeArgs().skipInvalid).toBe(true);
+
+    finishMerge(mergeReport({ mergedFiles: 2, totalPages: 2 }));
+    expect(await screen.findByText(/Merged 2 files/)).toBeInTheDocument();
   });
 
   it('blocks the merge when skipping would leave too few files', async () => {
@@ -271,43 +321,65 @@ describe('merge folder mode', () => {
     await openFolderRow('Q1', 'report-jan.pdf');
     fireEvent.click(screen.getByRole('button', { name: /Add report-jan\.pdf/i }));
     fireEvent.click(screen.getByRole('button', { name: /Add report-feb\.pdf/i }));
-    inspectMock.mockResolvedValue([{ path: 'Q1/report-feb.pdf', reason: 'encrypted' }]);
+    inspection = { usable: 1, problems: [{ index: 1, reason: 'encrypted' }] };
 
     fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
     await screen.findByRole('alertdialog');
     fireEvent.click(document.getElementById('merge-skip-and-merge') as HTMLButtonElement);
 
     expect(await screen.findByText(/Fewer than 2 files can be merged/)).toBeInTheDocument();
-    expect(mergeMock).not.toHaveBeenCalled();
+    expect(calls('core_pdf_merge_start')).toHaveLength(0);
   });
 
   it('cancels the preflight without merging', async () => {
     await openFolderMode();
     await openFolderRow('Q1', 'report-jan.pdf');
     fireEvent.click(screen.getByRole('button', { name: /Add all 3 PDFs under Q1/ }));
-    inspectMock.mockResolvedValue([{ path: 'a', reason: 'encrypted' }]);
+    inspection = { usable: 2, problems: [{ index: 0, reason: 'damaged or unreadable' }] };
 
     fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
     const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('(damaged or unreadable)')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByText('Cancel'));
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(mergeMock).not.toHaveBeenCalled();
+    expect(calls('core_pdf_merge_start')).toHaveLength(0);
     expect(queueItems()).toHaveLength(3);
   });
 
-  it('explains a lapsed registration instead of showing a raw error', async () => {
+  it('explains why a merge failed in plain words', async () => {
     await openFolderMode();
-    listMock.mockRejectedValue(new Error('Choose folder again.'));
+    await openFolderRow('Q1', 'report-jan.pdf');
+    fireEvent.click(screen.getByRole('button', { name: /Add all 3 PDFs under Q1/ }));
+    fireEvent.click(document.getElementById('merge-folder-run') as HTMLButtonElement);
+    await waitFor(() => expect(calls('core_pdf_merge_start')).toHaveLength(1));
 
-    fireEvent.click(document.getElementById('merge-refresh-folder') as HTMLButtonElement);
-    expect(await screen.findByText('Choose folder again.')).toBeInTheDocument();
-    // The root is forgotten so the user is back at a clean folder state.
+    emit(CORE_FINISHED_EVENT, {
+      jobId: 11,
+      kind: 'pdf_merge',
+      status: 'failed',
+      error: { code: 'invalid_input', message: "invalid input: Cannot open 'report-feb.pdf': broken" },
+    });
+    expect(await screen.findByText('report-feb.pdf could not be opened. It may be damaged.')).toBeInTheDocument();
+  });
+
+  it('shows why a folder could not be read and goes back to the clean state', async () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'Folder' }));
+    scanResult = Object.assign(new Error('x'), { code: 'invalid_input', message: 'invalid input: That folder does not exist or is not a folder.' });
+    fireEvent.click(document.getElementById('merge-choose-folder') as HTMLButtonElement);
+    expect(await screen.findByText('That folder could not be read.')).toBeInTheDocument();
     expect(screen.getByText('Choose a folder')).toBeInTheDocument();
   });
 
+  it('refreshes the listing', async () => {
+    await openFolderMode();
+    fireEvent.click(document.getElementById('merge-refresh-folder') as HTMLButtonElement);
+    await waitFor(() => expect(calls('core_folder_scan')).toHaveLength(2));
+  });
+
   it('reports how many items could not be read', async () => {
-    listMock.mockResolvedValue({ ...listing, skipped: 2 });
+    scanResult = { ...listing, skipped: 2 };
     await openFolderMode();
     expect(screen.getByText('2 items could not be read')).toBeInTheDocument();
   });

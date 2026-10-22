@@ -1,110 +1,122 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckCircle,
   FileText,
   FolderOpen,
+  Info,
   Loader2,
   Merge,
   Trash2,
   Upload,
 } from 'lucide-react';
-import apiClient from '../api/client';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useNativePaths } from '../hooks/useNativePaths';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
 import { FolderWorkspace } from '../features/merge/FolderWorkspace';
-import { isTauri } from '../utils/tauriDialog';
-import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
-import { openOutputFolder } from '../utils/tauriDialog';
+import { mergeErrorMessage } from '../features/merge/messages';
+import { formatBytes } from '../features/converter/options';
+import { isCoreCancelled, revealPath, type CoreProgress } from '../api/nativeCore';
+import { describePdfs, mergePdfs, type FileDescription } from '../api/pdfMerge';
+import { baseName } from '../utils/paths';
 import { t, tn } from '../i18n';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface PdfInfo {
-  filename: string;
-  total_pages: number;
-  file_size_bytes: number;
-}
-
 interface FileEntry {
   id: string;
-  file: File;
-  pages?: number;
+  /** Where the PDF is on disk. */
+  path: string;
 }
 
-
 interface MergeResult {
+  outputPath: string;
   filename: string;
   totalPages: number;
   sizeBytes: number;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
 
 function generateId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** Paths that spell the same file on Windows: the separator and letter case do not count. */
+const pathKey = (path: string) => path.replace(/\//g, '\\').toLowerCase();
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function MergePage() {
   const { showToast } = useToast();
   const { fileData: _files, setFileData: setFiles } = useFeatureFile<FileEntry[]>('merge');
-  const files = _files || [];
+  const files = useMemo(() => _files || [], [_files]);
   const [outputName, setOutputName] = useState('merged_output.pdf');
-  const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState<CoreProgress | null>(null);
   const [result, setResult] = useState<MergeResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  /** Size and page count by entry id, filled in as the core reads each file. */
+  const [info, setInfo] = useState<Record<string, FileDescription>>({});
   // Quick and Folder keep their own state; toggling never clears either side.
   const [mode, setMode] = useState<'quick' | 'folder'>('quick');
-  const folderModeAvailable = isTauri();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const requestedRef = useRef<Set<string>>(new Set());
+  const mountedRef = useRef(true);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // ── File handling ───────────────────────────────────────────────────────────
-  const addFiles = useCallback(
-    async (incoming: File[]) => {
-      const pdfs = incoming.filter((f) => f.name.toLowerCase().endsWith('.pdf'));
-      if (pdfs.length !== incoming.length) {
-        showToast({ type: 'error', title: t('Invalid files'), message: t('Only PDF files are accepted.') });
-      }
-      if (pdfs.length === 0) return;
-      
-      const newEntries: FileEntry[] = pdfs.map((f) => ({ id: generateId(), file: f, pages: undefined }));
-      setFiles((prev) => [
-        ...(prev || []),
-        ...newEntries,
-      ]);
-      setResult(null);
+  const addPaths = useCallback((accepted: string[], rejected: number) => {
+    if (rejected > 0) {
+      showToast({ type: 'error', title: t('Invalid files'), message: t('Only PDF files are accepted.') });
+    }
+    if (accepted.length === 0) return;
+    setFiles((prev) => [
+      ...(prev || []),
+      ...accepted.map((path) => ({ id: generateId(), path })),
+    ]);
+    setResult(null);
+    setError(null);
+  }, [setFiles, showToast]);
 
-      // Fetch page counts
-      for (const entry of newEntries) {
-        try {
-          const form = new FormData();
-          form.append('file', entry.file);
-          const resp = await apiClient.post<{ status: string; data: PdfInfo }>('/api/v1/pdf-info/', form);
-          setFiles((prev) => {
-            if (!prev) return prev;
-            return prev.map((p) => p.id === entry.id ? { ...p, pages: resp.data.data.total_pages } : p);
-          });
-        } catch {
-          // fail silently for individual files
-        }
-      }
-    },
-    [setFiles, showToast]
-  );
+  const { desktop, isDragOver, pick } = useNativePaths({
+    filter: PDF_FILTER,
+    multiple: true,
+    pickerTitle: t('Choose PDF files'),
+    disabled: isLoading || mode !== 'quick',
+    onPaths: addPaths,
+  });
+
+  // Sizes and page counts of newly added files.
+  useEffect(() => {
+    const missing = files.filter((entry) => !requestedRef.current.has(entry.id));
+    if (missing.length === 0) return;
+    missing.forEach((entry) => requestedRef.current.add(entry.id));
+    describePdfs(missing.map((entry) => entry.path))
+      .then((described) => {
+        if (!mountedRef.current) return;
+        setInfo((previous) => {
+          const next = { ...previous };
+          missing.forEach((entry, index) => { if (described[index]) next[entry.id] = described[index]; });
+          return next;
+        });
+      })
+      .catch(() => {
+        // Sizes are a convenience; a later change retries them.
+        missing.forEach((entry) => requestedRef.current.delete(entry.id));
+      });
+  }, [files]);
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev ? prev.filter((f) => f.id !== id) : []);
@@ -123,81 +135,86 @@ export function MergePage() {
     });
   }, [setFiles]);
 
-  /** Files that repeat an earlier file's name and size are marked, not blocked. */
+  /** A file added twice is marked, not blocked. */
   const duplicateOf = new Map<string, number>();
   {
     const firstSeen = new Map<string, number>();
     files.forEach((entry, idx) => {
-      const key = `${entry.file.name.toLowerCase()}|${entry.file.size}`;
+      const key = pathKey(entry.path);
       const first = firstSeen.get(key);
       if (first === undefined) firstSeen.set(key, idx);
       else duplicateOf.set(entry.id, first);
     });
   }
 
-  // ── Drag & drop ─────────────────────────────────────────────────────────────
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-  const handleDragLeave = () => setIsDragOver(false);
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    addFiles(Array.from(e.dataTransfer.files));
-  };
-  const handleClick = () => fileInputRef.current?.click();
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) addFiles(Array.from(e.target.files));
-    e.target.value = '';
-  };
-
-  // ── Submit — single-step: process & download immediately ───────────────────
+  // ── Merge ───────────────────────────────────────────────────────────────────
   const handleMerge = async () => {
     if (files.length < 2) {
       showToast({ type: 'error', title: t('Not enough files'), message: t('Add at least 2 PDF files to merge.') });
       return;
     }
     setIsLoading(true);
+    setProgress(null);
     setResult(null);
-
-    const formData = new FormData();
-    files.forEach((entry) => formData.append('files', entry.file));
-    formData.append('output_filename', outputName || 'merged_output.pdf');
+    setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const response = await apiClient.post('/api/v1/merge/', formData, {
-        responseType: 'blob',
+      const report = await mergePdfs(
+        files.map((entry) => entry.path),
+        { skipInvalid: false, outputName },
+        { signal: controller.signal, onProgress: (p) => { if (mountedRef.current) setProgress(p); } },
+      );
+      if (!mountedRef.current) return;
+      const filename = baseName(report.outputPath);
+      setResult({
+        outputPath: report.outputPath,
+        filename,
+        totalPages: report.totalPages,
+        sizeBytes: report.outputSizeBytes,
       });
-
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const totalPages = parseInt(response.headers['x-total-pages'] || '0', 10);
-      const sizeBytes = parseInt(response.headers['x-file-size'] || String(blob.size), 10);
-      const filename = getFilenameFromHeaders(response.headers, outputName || 'merged_output.pdf');
-
-      // Auto-download immediately
-      triggerBlobDownload(blob, filename);
-
-      setResult({ filename, totalPages, sizeBytes });
-      addHistoryEntry({ filename, action: 'Merged PDF', size: sizeBytes });
+      addHistoryEntry({ filename, action: 'Merged PDF', size: report.outputSizeBytes });
       showToast({
         type: 'success',
         title: t('Merge complete!'),
-        message: `${filename} — ${tn(totalPages, '{n} page', '{n} pages')}, ${formatBytes(sizeBytes)}`,
-        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
+        message: `${filename} — ${tn(report.totalPages, '{n} page', '{n} pages')}, ${formatBytes(report.outputSizeBytes)}`,
+        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
         duration: 8000,
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('Unknown error');
-      showToast({ type: 'error', title: t('Merge failed'), message: msg });
+      if (!mountedRef.current || isCoreCancelled(err)) return;
+      setError(mergeErrorMessage(err));
     } finally {
-      setIsLoading(false);
+      abortRef.current = null;
+      if (mountedRef.current) {
+        setIsLoading(false);
+        setProgress(null);
+      }
     }
   };
 
   const clearAll = () => {
     setFiles([]);
     setResult(null);
+    setError(null);
+    setInfo({});
+    requestedRef.current = new Set();
+  };
+
+  const percent = progress?.total ? Math.round((progress.done / progress.total) * 100) : null;
+  const progressTitle = progress?.stage === 'saving'
+    ? t('Saving the merged PDF…')
+    : progress?.total
+      ? t('Merging file {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
+      : t('Preparing the files…');
+
+  const dropZoneProps = {
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => { void pick(); },
+    onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') void pick(); },
+    'aria-label': t('Drop PDF files here or click to browse'),
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -219,12 +236,12 @@ export function MergePage() {
             value: 'folder',
             id: 'merge-mode-folder',
             label: t('Folder'),
-            disabled: !folderModeAvailable,
-            title: folderModeAvailable ? undefined : t('Folder mode requires the desktop app'),
+            disabled: !desktop,
+            title: desktop ? undefined : t('Folder mode requires the desktop app'),
           },
         ]}
       >
-        {!folderModeAvailable && (
+        {!desktop && (
           <span className="organize-help">{t('Folder mode requires the desktop app')}</span>
         )}
       </Tabs>
@@ -233,29 +250,22 @@ export function MergePage() {
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="page-body" hidden={mode === 'folder'}>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf"
-          multiple
-          hidden
-          onChange={handleFileInput}
-          id="merge-file-input"
-        />
+        {!desktop && (
+          <div className="card status-card" role="note">
+            <Info size={20} aria-hidden="true" />
+            <div className="status-card-copy">
+              <b>{t('Merge PDF runs in the Dokuwu desktop app')}</b>
+              <small>{t('It works on the files directly on your computer, which the browser preview cannot do.')}</small>
+            </div>
+          </div>
+        )}
 
-        {files.length === 0 ? (
+        {desktop && files.length === 0 && (
           <div className="form-col form-col--center">
             <div
               id="merge-drop-zone"
               className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={handleClick}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-              aria-label={t('Drop PDF files here or click to browse')}
+              {...dropZoneProps}
             >
               <Upload className="drop-zone-icon" />
               <p className="drop-zone-title">{t('Drop PDF files here')}</p>
@@ -266,7 +276,9 @@ export function MergePage() {
               </div>
             </div>
           </div>
-        ) : (
+        )}
+
+        {desktop && files.length > 0 && (
           <div className="merge-quick-split">
             {/* Left: previews in merge order */}
             <div className="card merge-quick-files">
@@ -291,24 +303,31 @@ export function MergePage() {
                 onRemove={removeFile}
                 cards={files.map((entry) => {
                   const first = duplicateOf.get(entry.id);
+                  const details = info[entry.id];
+                  const warnings = [
+                    first === undefined
+                      ? null
+                      : t('This is the same file as #{n}. It is still included in the merge.', { n: first + 1 }),
+                    details && details.pages === null
+                      ? t('This file cannot be read. It may be damaged or password protected.')
+                      : null,
+                  ].filter(Boolean);
                   return {
                     id: entry.id,
-                    title: entry.file.name,
+                    title: baseName(entry.path),
                     thumbnail: (
                       <PdfThumbnail
-                        file={entry.file}
+                        file={entry.path}
                         className="sort-card-thumb"
                       />
                     ),
                     meta: (
                       <>
-                        <span>{formatBytes(entry.file.size)}</span>
-                        {entry.pages !== undefined && <span>{tn(entry.pages, '{n} page', '{n} pages')}</span>}
+                        {details && <span>{formatBytes(details.sizeBytes)}</span>}
+                        {details && details.pages !== null && <span>{tn(details.pages, '{n} page', '{n} pages')}</span>}
                       </>
                     ),
-                    warning: first === undefined
-                      ? undefined
-                      : t('Same name and size as #{n}. It is still included in the merge.', { n: first + 1 }),
+                    warning: warnings.length ? warnings.join(' ') : undefined,
                   };
                 })}
               />
@@ -319,14 +338,7 @@ export function MergePage() {
               <div
                 id="merge-drop-zone"
                 className={`drop-zone drop-zone--compact${isDragOver ? ' drag-over' : ''}`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={handleClick}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleClick()}
-                aria-label={t('Drop PDF files here or click to browse')}
+                {...dropZoneProps}
               >
                 <Upload className="drop-zone-icon" />
                 <p className="drop-zone-title">{t('Add more PDFs')}</p>
@@ -342,11 +354,41 @@ export function MergePage() {
                   value={outputName}
                   onChange={(e) => setOutputName(e.target.value)}
                   placeholder="merged_output.pdf"
+                  disabled={isLoading}
                 />
                 <p className="text-muted text-body-sm hint-gap-sm">
                   {t('The .pdf extension will be added automatically if omitted.')}
                 </p>
               </div>
+
+              {error && (
+                <div className="converter-message converter-message--error" role="alert">
+                  <span>{error}</span>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setError(null)}>
+                    {t('Dismiss')}
+                  </button>
+                </div>
+              )}
+
+              {isLoading && (
+                <div className="card status-card" role="status" aria-live="polite" id="merge-progress">
+                  <Loader2 size={20} className="spin" aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <b>{progressTitle}</b>
+                    <div className={`size-bar size-bar--spaced${percent === null || progress?.done === 0 ? ' size-bar--busy' : ''}`}>
+                      <i style={{ width: `${percent ?? 0}%` }} />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    id="merge-cancel-btn"
+                    onClick={() => abortRef.current?.abort()}
+                  >
+                    {t('Cancel')}
+                  </button>
+                </div>
+              )}
 
               {result && (
                 <div className="card result-card" role="status">
@@ -362,11 +404,11 @@ export function MergePage() {
                   <button
                     className="btn btn-ghost btn-sm"
                     id="merge-open-folder-btn"
-                    onClick={() => openOutputFolder()}
-                    title={t('Open folder')}
+                    onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
+                    title={t('Show in folder')}
                   >
                     <FolderOpen size={14} />
-                    {t('Open Folder')}
+                    {t('Show in folder')}
                   </button>
                 </div>
               )}

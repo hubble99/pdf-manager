@@ -7,6 +7,7 @@ mod core_bridge;
 mod core_convert;
 mod core_pdf_compress;
 mod core_qr_barcode;
+mod core_merge;
 mod core_pdf_render;
 
 struct DesktopLifecycleToken(String);
@@ -32,6 +33,11 @@ pub fn run() {
       core_convert::core_pdf_to_image_start,
       core_convert::core_image_to_pdf_start,
       core_convert::core_image_thumbnail,
+      core_merge::core_pdf_merge_start,
+      core_merge::core_pdf_inspect,
+      core_merge::core_pdf_describe,
+      core_merge::core_folder_scan,
+      core_merge::core_pdf_extract_start,
       core_pdf_compress::core_pdf_probe,
       core_pdf_compress::core_pdf_compress_start,
       core_qr_barcode::core_qr_generate,

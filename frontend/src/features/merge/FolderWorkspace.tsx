@@ -6,9 +6,10 @@ import type { KeyboardEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { SortableArea } from '../../components/sortable/SortableArea';
-import { openOutputFolder } from '../../utils/tauriDialog';
+import { revealPath } from '../../api/nativeCore';
+import type { FileDescription, FolderNode } from '../../api/pdfMerge';
 import { useFolderMerge } from './useFolderMerge';
-import type { FileInfo, FolderFileNode } from './api';
+import { reasonLabel } from './messages';
 import { t, tn } from '../../i18n';
 
 function formatBytes(bytes: number): string {
@@ -17,35 +18,35 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function describeInfo(info: FileInfo | undefined): string {
+function describeInfo(info: FileDescription | undefined): string {
   if (!info) return '\u00a0';
-  const size = formatBytes(info.size_bytes);
+  const size = formatBytes(info.sizeBytes);
   return info.pages === null ? size : `${tn(info.pages, '{n} page', '{n} pages')} · ${size}`;
 }
 
 /** Every folder path in a listing, so one control can open or close the whole tree. */
-function folderPaths(node: FolderFileNode): string[] {
-  return node.folders.flatMap((child) => [child.relative_path, ...folderPaths(child)]);
+function folderPaths(node: FolderNode): string[] {
+  return node.folders.flatMap((child) => [child.relativePath, ...folderPaths(child)]);
 }
 
 function FolderRow({
   node, depth, expanded, onToggle, onAddAll, queued,
 }: {
-  node: FolderFileNode;
+  node: FolderNode;
   depth: number;
   expanded: Set<string>;
   onToggle: (path: string) => void;
-  onAddAll: (node: FolderFileNode) => void;
+  onAddAll: (node: FolderNode) => void;
   queued: (path: string) => boolean;
 }) {
-  const isOpen = expanded.has(node.relative_path);
+  const isOpen = expanded.has(node.relativePath);
   return (
     <li className="merge-tree-folder">
       <div className="merge-tree-row" style={{ paddingLeft: depth * 18 + 10 }}>
         <button
           type="button"
           className="merge-tree-toggle"
-          onClick={() => onToggle(node.relative_path)}
+          onClick={() => onToggle(node.relativePath)}
           aria-expanded={isOpen}
           aria-label={`${isOpen ? t('Collapse') : t('Expand')} ${node.name}`}
         >
@@ -54,13 +55,13 @@ function FolderRow({
             ? <FolderOpen size={16} className="merge-tree-folder-icon" aria-hidden="true" />
             : <Folder size={16} className="merge-tree-folder-icon" aria-hidden="true" />}
           <span className="merge-tree-name">{node.name}</span>
-          <span className="chip merge-tree-count">{node.pdf_count}</span>
+          <span className="chip merge-tree-count">{node.pdfCount}</span>
         </button>
         <button
           type="button"
           className="link-btn merge-tree-addall"
           onClick={() => onAddAll(node)}
-          aria-label={t('Add all {count} PDFs under {name}', { count: node.pdf_count, name: node.name })}
+          aria-label={t('Add all {count} PDFs under {name}', { count: node.pdfCount, name: node.name })}
         >
           {t('Add all')}
         </button>
@@ -70,7 +71,7 @@ function FolderRow({
         <ul className="merge-tree-children">
           {node.folders.map((child) => (
             <FolderRow
-              key={child.relative_path}
+              key={child.relativePath}
               node={child}
               depth={depth + 1}
               expanded={expanded}
@@ -80,7 +81,7 @@ function FolderRow({
             />
           ))}
           {node.files.map((name) => {
-            const relative = node.relative_path ? `${node.relative_path}/${name}` : name;
+            const relative = node.relativePath ? `${node.relativePath}/${name}` : name;
             const already = queued(relative);
             return (
               <li key={relative}>
@@ -119,7 +120,7 @@ function QueueRow({
   relative, info, index, onRemove, onStep, disabled, onKeyDown,
 }: {
   relative: string;
-  info: FileInfo | undefined;
+  info: FileDescription | undefined;
   index: number;
   onRemove: (index: number) => void;
   onStep: (index: number, direction: -1 | 1) => void;
@@ -199,6 +200,14 @@ export function FolderWorkspace() {
     if (relative.startsWith('file:')) workspace.addFile(relative.slice(5));
   };
 
+  const { progress } = workspace;
+  const percent = progress?.total ? Math.round((progress.done / progress.total) * 100) : null;
+  const progressTitle = progress?.stage === 'saving'
+    ? t('Saving the merged PDF…')
+    : progress?.total
+      ? t('Merging file {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
+      : t('Preparing the files…');
+
   const folders = workspace.listing ? folderPaths(workspace.listing.root) : [];
   const allOpen = folders.length > 0 && folders.every((path) => workspace.expanded.has(path));
   const rootFiles = workspace.listing?.root.files ?? [];
@@ -270,15 +279,15 @@ export function FolderWorkspace() {
 
           {workspace.notice && <p className="merge-notice" role="status">{workspace.notice}</p>}
 
-          {workspace.root && workspace.listing && workspace.listing.pdf_count === 0 && (
+          {workspace.root && workspace.listing && workspace.listing.pdfCount === 0 && (
             <p className="empty-hint">{t('No PDFs in this folder')}</p>
           )}
 
-          {workspace.root && workspace.listing && workspace.listing.pdf_count > 0 && (
+          {workspace.root && workspace.listing && workspace.listing.pdfCount > 0 && (
             <ul className="merge-tree">
               {workspace.listing.root.folders.map((child) => (
                 <FolderRow
-                  key={child.relative_path}
+                  key={child.relativePath}
                   node={child}
                   depth={0}
                   expanded={workspace.expanded}
@@ -309,9 +318,9 @@ export function FolderWorkspace() {
             </ul>
           )}
 
-          {workspace.root && workspace.listing && workspace.listing.pdf_count > 0 && (
+          {workspace.root && workspace.listing && workspace.listing.pdfCount > 0 && (
             <div className="merge-sources-foot">
-              <span>{tn(workspace.listing.pdf_count, '{n} PDF found', '{n} PDFs found')}</span>
+              <span>{tn(workspace.listing.pdfCount, '{n} PDF found', '{n} PDFs found')}</span>
               <span>{workspace.queue.length} {t('added')}</span>
             </div>
           )}
@@ -359,7 +368,7 @@ export function FolderWorkspace() {
                   <li key={problem.path}>
                     <span className="merge-tree-name">{problem.path.split(/[\\/]/).pop()}</span>
                     <span className="merge-queue-folder">{problem.path}</span>
-                    <span className="merge-problem-reason">({problem.reason})</span>
+                    <span className="merge-problem-reason">({reasonLabel(problem.reason)})</span>
                   </li>
                 ))}
               </ul>
@@ -369,6 +378,21 @@ export function FolderWorkspace() {
                   {t('Skip these and merge')}
                 </button>
               </div>
+            </div>
+          )}
+
+          {workspace.isMerging && (
+            <div className="card status-card" role="status" aria-live="polite" id="merge-folder-progress">
+              <Loader2 size={20} className="spin" aria-hidden="true" />
+              <div className="status-card-copy">
+                <b>{progressTitle}</b>
+                <div className={`size-bar size-bar--spaced${percent === null || workspace.progress?.done === 0 ? ' size-bar--busy' : ''}`}>
+                  <i style={{ width: `${percent ?? 0}%` }} />
+                </div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" id="merge-folder-cancel" onClick={workspace.cancelMerge}>
+                {t('Cancel')}
+              </button>
             </div>
           )}
 
@@ -391,10 +415,10 @@ export function FolderWorkspace() {
                 type="button"
                 className="btn btn-ghost btn-sm"
                 id="merge-folder-open-folder-btn"
-                onClick={() => openOutputFolder()}
-                title={t('Open folder')}
+                onClick={() => { void revealPath(workspace.result!.outputPath).catch(() => undefined); }}
+                title={t('Show in folder')}
               >
-                <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
+                <FolderOpen size={14} aria-hidden="true" /> {t('Show in folder')}
               </button>
             </div>
           )}
