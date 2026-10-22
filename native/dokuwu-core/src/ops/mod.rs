@@ -21,5 +21,6 @@ pub(crate) mod pdf_writer;
 pub(crate) mod pdf_graft;
 pub mod pdf_extract;
 pub mod pdf_merge;
+pub mod pdf_protect;
 pub mod pdf_render;
 pub mod pdf_to_image;
