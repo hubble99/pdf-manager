@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from config import settings
 from features.edit_content.commit_store import UnknownOutcome
 from features.edit_content.coordinator import ContentCoordinatorError
+from features.edit_content.open_unlock import unlock_permission_only
 from features.edit_content.open_diagnosis import OPEN_FAILURE_MESSAGES
 from features.edit_content.session_service import (
     ContentSessionRegistry,
@@ -184,12 +185,13 @@ async def open_session(
         raise HTTPException(status_code=422, detail="Invalid request identity.")
     source = await _save_bounded_upload(file)
     try:
+        permissions_removed = unlock_permission_only(source)
         coordinator, inspected = get_content_registry().open(source)
         state = coordinator.state()
         discovery = inspected.get("result", {}).get("discovery", {})
         return accepted_read_reply(
             request_id, state["sessionId"], state["acceptedRevision"],
-            {"state": state, "discovery": discovery},
+            {"state": state, "discovery": discovery, "permissionsRemoved": permissions_removed},
         )
     except ContentCoordinatorError as exc:
         # A document the engine rejected is the file's problem (422), not an

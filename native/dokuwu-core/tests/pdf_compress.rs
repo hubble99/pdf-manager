@@ -347,6 +347,15 @@ fn a_password_protected_pdf_is_refused() {
 }
 
 #[test]
+fn a_permission_only_pdf_opens_and_compresses() {
+    // Owner password only: no password is needed to open it.
+    assert!(!probe_pdf(&fixture("owner-only.pdf")).unwrap().encrypted);
+    let (_dir, out, report) = run("owner-only.pdf", 50);
+    assert!(report.size_after < report.size_before);
+    assert_eq!(pages(&out), 1);
+}
+
+#[test]
 fn bad_input_gets_clear_errors() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("o.pdf");

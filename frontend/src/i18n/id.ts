@@ -716,6 +716,7 @@ export const ID: Record<string, string> = {
   'This page has colliding font resources and cannot be regenerated safely.': 'Halaman ini memiliki sumber daya font yang bertabrakan dan tidak dapat dibuat ulang dengan aman.',
   'This page has font resources that cannot be regenerated without risking other text.': 'Halaman ini memiliki sumber daya font yang tidak dapat dibuat ulang tanpa berisiko memengaruhi teks lain.',
   'This PDF is password protected. Remove the password with Protect PDF, then try again.': 'PDF ini dilindungi kata sandi. Hapus kata sandinya dengan Lindungi PDF, lalu coba lagi.',
+  'This PDF restricts editing. The edited copy will not carry that restriction.': 'PDF ini membatasi pengeditan. Salinan hasil edit tidak akan membawa pembatasan itu.',
   'This selection is no longer current. Select the text again.': 'Pilihan ini sudah tidak terbaru. Pilih teks lagi.',
   'This selection is out of date. Select the text again.': 'Pilihan ini sudah kedaluwarsa. Pilih teks lagi.',
   'This tab takes images. To export PDF pages as images, use the PDF to Images tab.': 'Tab ini menerima gambar. Untuk mengekspor halaman PDF menjadi gambar, gunakan tab PDF ke Gambar.',

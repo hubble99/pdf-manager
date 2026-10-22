@@ -211,6 +211,17 @@ describe('Edit Content page', () => {
     expect(screen.getByPlaceholderText('Find text on this page (1)')).toBeInTheDocument();
   });
 
+  it('tells the user when the opened PDF restricted editing and the copy will not', async () => {
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
+      state, discovery, permissionsRemoved: true,
+    }) as never);
+    const { container } = renderPage();
+    fireEvent.change(container.querySelector('input[type="file"]')!, {
+      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
+    });
+    expect(await screen.findByText(/restricts editing/i)).toBeInTheDocument();
+  });
+
   it('offers Open Folder once the verified PDF has been saved', async () => {
     URL.createObjectURL = vi.fn(() => 'blob:saved');
     URL.revokeObjectURL = vi.fn();

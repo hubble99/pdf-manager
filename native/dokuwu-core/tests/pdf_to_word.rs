@@ -167,6 +167,24 @@ fn images_are_embedded_in_place_as_png_or_jpeg() {
 }
 
 #[test]
+fn soft_masked_letterhead_is_not_black() {
+    // The picture's colour data is black; only its soft mask shapes the logo.
+    let (report, files, _dir) = convert("letterhead.pdf");
+    assert_eq!(report.images, 1);
+    let name = files.keys().find(|k| k.starts_with("word/media/")).unwrap();
+    let decoder = png::Decoder::new(std::io::Cursor::new(&files[name]));
+    let mut reader = decoder.read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut buf).unwrap();
+    assert_eq!(info.color_type, png::ColorType::Rgba, "transparency must survive");
+    let px: Vec<&[u8]> = buf[..info.buffer_size()].chunks_exact(4).collect();
+    let clear = px.iter().filter(|p| p[3] == 0).count();
+    let blue = px.iter().filter(|p| p[3] == 255 && p[2] > 100 && p[0] < 60).count();
+    assert!(clear * 3 > px.len(), "background stays transparent, not black");
+    assert!(blue > 100, "the logo keeps its colour");
+}
+
+#[test]
 fn mixed_page_keeps_everything() {
     let (report, files, _dir) = convert("mixed.pdf");
     assert_eq!((report.pages, report.tables, report.images), (2, 1, 1));
