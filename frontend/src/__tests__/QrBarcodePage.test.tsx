@@ -133,34 +133,43 @@ describe('QrBarcodePage', () => {
     expect(screen.getByAltText('Preview')).toHaveAttribute('src', 'blob:preview-1');
   }, 20000);
 
-  it('tells how big the saved PNG is, since the preview is only scaled to fit', async () => {
+  it('makes the preview at a fixed size and only tells how big the saved PNG will be', async () => {
     generateQr.mockImplementation(async ({ size }: { size: number }) => png(29 * size, 29 * size));
     renderPage();
     fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
 
     expect(await screen.findByText('Saved image: 290 × 290 px', {}, { timeout: 3000 })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '20' } });
-    expect(await screen.findByText('Saved image: 580 × 580 px', {}, { timeout: 3000 })).toBeInTheDocument();
-  }, 20000);
-
-  it('keeps the old preview on screen while a new size is made and asks once after the slider settles', async () => {
-    let finish: (bytes: Uint8Array<ArrayBuffer>) => void = () => {};
-    renderPage();
-    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
-    await waitFor(() => expect(screen.getByAltText('Preview')).toBeInTheDocument(), { timeout: 3000 });
-    generateQr.mockClear();
-    generateQr.mockImplementation(() => new Promise<Uint8Array<ArrayBuffer>>((resolve) => { finish = resolve; }));
+    expect(generateQr).toHaveBeenCalledTimes(1);
 
     const slider = screen.getByLabelText(/^Size/);
-    for (const value of ['11', '12', '13', '14']) fireEvent.change(slider, { target: { value } });
+    for (const value of ['11', '14', '17', '20']) fireEvent.change(slider, { target: { value } });
 
-    await waitFor(() => expect(generateQr).toHaveBeenCalledTimes(1), { timeout: 2000 });
-    expect(generateQr).toHaveBeenCalledWith(expect.objectContaining({ size: 14 }));
-    // The picture is still there, not replaced by a spinner.
-    expect(screen.getByAltText('Preview')).toBeInTheDocument();
-    expect(screen.queryByText('Generating...')).not.toBeInTheDocument();
-    finish(png());
+    // The label follows the slider at once; the preview is not redrawn at all.
+    expect(await screen.findByText('Saved image: 580 × 580 px')).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(generateQr).toHaveBeenCalledTimes(1);
+    expect(generateQr).toHaveBeenLastCalledWith(expect.objectContaining({ size: 10 }));
+  }, 20000);
+
+  it('saves the QR at the chosen size, remaking it only then', async () => {
+    generateQr.mockImplementation(async ({ size }: { size: number }) => png(29 * size, 29 * size));
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Content'), { target: { value: 'hello' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save PNG/i })).toBeEnabled(), { timeout: 3000 });
+
+    // At the preview's own size the picture on screen is what gets saved.
+    fireEvent.click(screen.getByRole('button', { name: /Save PNG/i }));
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(generateQr).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText(/^Size/), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save PNG/i }));
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(2));
+    expect(generateQr).toHaveBeenCalledTimes(2);
+    expect(generateQr).toHaveBeenLastCalledWith(
+      expect.objectContaining({ content: 'hello', size: 20, errorCorrection: 'M', format: 'png' })
+    );
   }, 20000);
 
   it('cannot save a PNG preview as SVG, and the size slider is off for SVG', async () => {
