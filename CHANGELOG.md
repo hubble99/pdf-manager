@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+**Internal**
+
+- **Settings and start-up:** clearing temporary files, opening the Downloads folder and the start-up readiness check now run on the Rust core instead of the Python backend. Clearing is refused while a job is running, and leftovers of a crashed run are swept at start-up and exit.
+
 ## 1.10.1 — 2026-10-22 · Temporary files fix
 
 **Fixed**

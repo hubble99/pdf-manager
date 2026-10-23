@@ -21,6 +21,7 @@ export type CoreErrorCode =
   | 'unsupported'
   | 'password_required'
   | 'insufficient_memory'
+  | 'busy'
   | 'internal';
 
 export class NativeCoreError extends Error {
@@ -82,7 +83,7 @@ export interface CoreJobOptions {
   signal?: AbortSignal;
 }
 
-const toCoreError = (err: unknown): NativeCoreError => {
+export const toCoreError = (err: unknown): NativeCoreError => {
   if (err instanceof NativeCoreError) return err;
   if (err && typeof err === 'object' && 'code' in err && 'message' in err) {
     const { code, message } = err as { code: CoreErrorCode; message: string };

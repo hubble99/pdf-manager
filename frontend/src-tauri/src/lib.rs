@@ -5,6 +5,7 @@ mod desktop_lifecycle;
 
 mod core_bridge;
 mod core_convert;
+mod core_housekeeping;
 mod core_pdf_compress;
 mod core_qr_barcode;
 mod core_merge;
@@ -31,6 +32,9 @@ pub fn run() {
       core_bridge::core_reveal_path,
       core_bridge::core_file_sizes,
       core_bridge::core_job_cancel,
+      core_housekeeping::core_health,
+      core_housekeeping::core_clear_temp,
+      core_housekeeping::core_open_downloads,
       core_convert::core_pdf_to_image_start,
       core_convert::core_image_to_pdf_start,
       core_convert::core_image_thumbnail,
@@ -79,6 +83,7 @@ pub fn run() {
       }
     })
     .setup(|app| {
+      core_housekeeping::sweep_stale_scratch();
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()
@@ -125,6 +130,8 @@ pub fn run() {
       if let Some(thumbs) = app_handle.try_state::<core_convert::ThumbState>() {
         thumbs.service.shutdown();
       }
+
+      core_housekeeping::clear_on_exit();
 
       // ── Graceful shutdown sequence ──────────────────────────────────────────
       // 1. Drain Content requests, then request the existing temp cleanup.
