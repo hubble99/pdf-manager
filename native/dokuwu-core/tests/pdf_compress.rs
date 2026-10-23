@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use dokuwu_core::job::{CancelToken, JobContext, ProgressSink};
 use dokuwu_core::ops::pdf_compress::{
@@ -12,6 +12,18 @@ use dokuwu_core::ops::pdf_compress::{
 use dokuwu_core::resources::{MemoryProbe, MIB};
 use mupdf::pdf::PdfDocument;
 use mupdf::{Colorspace, Document, Matrix};
+
+// The working folders are named after the process id, so a test that checks
+// none are left behind must not run while another test is compressing.
+static WORK_DIRS: RwLock<()> = RwLock::new(());
+
+fn shared() -> RwLockReadGuard<'static, ()> {
+    WORK_DIRS.read().unwrap_or_else(|e| e.into_inner())
+}
+
+fn exclusive() -> RwLockWriteGuard<'static, ()> {
+    WORK_DIRS.write().unwrap_or_else(|e| e.into_inner())
+}
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pdf-compress").join(name)
@@ -126,6 +138,7 @@ fn image_streams(path: &Path) -> Vec<Vec<u8>> {
 
 #[test]
 fn rgb_photo_becomes_a_small_jpeg_that_still_looks_the_same() {
+    let _guard = shared();
     let (_dir, out, report) = run("photo.pdf", 70);
     assert_eq!(report.images_found, 1);
     assert_eq!(report.images_recompressed, 1);
@@ -139,6 +152,7 @@ fn rgb_photo_becomes_a_small_jpeg_that_still_looks_the_same() {
 
 #[test]
 fn grey_photo_stays_grey() {
+    let _guard = shared();
     let (_dir, out, report) = run("gray.pdf", 60);
     assert_eq!(report.images_recompressed, 1);
     assert_eq!(image_objects(&out), vec![("DCTDecode".into(), "DeviceGray".into())]);
@@ -147,6 +161,7 @@ fn grey_photo_stays_grey() {
 
 #[test]
 fn a_high_quality_jpeg_is_re_encoded_smaller() {
+    let _guard = shared();
     let (_dir, _out, report) = run("jpeg-source.pdf", 50);
     assert_eq!(report.images_recompressed, 1);
     assert!(report.size_after < report.size_before / 2, "{report:?}");
@@ -154,6 +169,7 @@ fn a_high_quality_jpeg_is_re_encoded_smaller() {
 
 #[test]
 fn lower_quality_gives_a_smaller_file() {
+    let _guard = shared();
     let (_a, _, low) = run("photo.pdf", 20);
     let (_b, _, high) = run("photo.pdf", 90);
     assert!(low.size_after < high.size_after, "{low:?} vs {high:?}");
@@ -161,6 +177,7 @@ fn lower_quality_gives_a_smaller_file() {
 
 #[test]
 fn transparent_corners_stay_transparent() {
+    let _guard = shared();
     let (_dir, out, report) = run("transparent.pdf", 30);
     assert_eq!(report.images_found, 1, "the soft mask is not a picture of its own");
     assert_eq!(report.images_recompressed, 1);
@@ -176,6 +193,7 @@ fn transparent_corners_stay_transparent() {
 
 #[test]
 fn pictures_jpeg_cannot_carry_are_left_exactly_as_they_are() {
+    let _guard = shared();
     for name in ["stencil.pdf", "indexed.pdf", "cmyk.pdf"] {
         let (_dir, out, report) = run(name, 30);
         assert_eq!(report.images_found, 0, "{name}");
@@ -188,6 +206,7 @@ fn pictures_jpeg_cannot_carry_are_left_exactly_as_they_are() {
 
 #[test]
 fn an_icc_profile_survives() {
+    let _guard = shared();
     let (_dir, out, report) = run("icc.pdf", 50);
     assert_eq!(report.images_recompressed, 1);
     assert_eq!(image_objects(&out), vec![("DCTDecode".into(), "ICCBased".into())]);
@@ -195,6 +214,7 @@ fn an_icc_profile_survives() {
 
 #[test]
 fn a_picture_used_on_many_pages_is_one_object() {
+    let _guard = shared();
     let (_dir, out, report) = run("shared.pdf", 50);
     assert_eq!(report.images_found, 1);
     assert_eq!(report.pages, 3);
@@ -203,6 +223,7 @@ fn a_picture_used_on_many_pages_is_one_object() {
 
 #[test]
 fn worker_count_does_not_change_the_result() {
+    let _guard = shared();
     let mut one = CompressOptions::new(60);
     one.max_workers = Some(1);
     let mut four = CompressOptions::new(60);
@@ -222,6 +243,7 @@ fn worker_count_does_not_change_the_result() {
 /// flush after every picture must give the same pictures as a single save.
 #[test]
 fn flushing_in_batches_gives_the_same_result() {
+    let _guard = exclusive();
     let (_a, direct, rd) = run("many.pdf", 60);
     let mut tiny = CompressOptions::new(60);
     tiny.batch_bytes = Some(1);
@@ -247,6 +269,7 @@ fn leftover_work_dirs() -> Vec<PathBuf> {
 
 #[test]
 fn structure_cleanup_shrinks_a_pdf_without_pictures() {
+    let _guard = shared();
     let (_dir, out, report) = run("text-plain.pdf", 70);
     assert_eq!(report.images_found, 0);
     assert!(report.size_after * 4 < report.size_before, "{report:?}");
@@ -256,6 +279,7 @@ fn structure_cleanup_shrinks_a_pdf_without_pictures() {
 
 #[test]
 fn a_file_that_cannot_shrink_is_returned_unchanged() {
+    let _guard = shared();
     let (_dir, out, report) = run("tiny.pdf", 70);
     assert!(report.kept_original);
     assert_eq!(report.reduction_pct, 0.0);
@@ -265,6 +289,7 @@ fn a_file_that_cannot_shrink_is_returned_unchanged() {
 
 #[test]
 fn an_existing_output_is_replaced_only_by_a_complete_file() {
+    let _guard = shared();
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.pdf");
     fs::write(&out, b"old").unwrap();
@@ -278,6 +303,7 @@ type Step = (String, u64, Option<u64>);
 
 #[test]
 fn progress_reports_scanning_images_and_saving() {
+    let _guard = shared();
     let stages: Arc<std::sync::Mutex<Vec<Step>>> = Default::default();
     let seen = stages.clone();
     let sink: ProgressSink = Arc::new(move |_, p| {
@@ -297,6 +323,7 @@ fn progress_reports_scanning_images_and_saving() {
 
 #[test]
 fn cancelling_leaves_no_output_and_no_partial_file() {
+    let _guard = shared();
     let token = CancelToken::new();
     let trigger = token.clone();
     let sink: ProgressSink = Arc::new(move |_, p| {
@@ -316,6 +343,7 @@ fn cancelling_leaves_no_output_and_no_partial_file() {
 
 #[test]
 fn cancelling_a_staged_run_removes_the_working_copy() {
+    let _guard = exclusive();
     let token = CancelToken::new();
     let trigger = token.clone();
     let sink: ProgressSink = Arc::new(move |_, p| {
@@ -334,6 +362,7 @@ fn cancelling_a_staged_run_removes_the_working_copy() {
 
 #[test]
 fn a_password_protected_pdf_is_refused() {
+    let _guard = shared();
     let dir = tempfile::tempdir().unwrap();
     let err = compress_pdf(
         &fixture("encrypted.pdf"),
@@ -348,6 +377,7 @@ fn a_password_protected_pdf_is_refused() {
 
 #[test]
 fn a_permission_only_pdf_opens_and_compresses() {
+    let _guard = shared();
     // Owner password only: no password is needed to open it.
     assert!(!probe_pdf(&fixture("owner-only.pdf")).unwrap().encrypted);
     let (_dir, out, report) = run("owner-only.pdf", 50);
@@ -357,6 +387,7 @@ fn a_permission_only_pdf_opens_and_compresses() {
 
 #[test]
 fn bad_input_gets_clear_errors() {
+    let _guard = shared();
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("o.pdf");
     let options = CompressOptions::new(50);
@@ -382,6 +413,7 @@ impl MemoryProbe for FixedMemory {
 /// decoded, and the file is still produced.
 #[test]
 fn pictures_too_big_for_free_memory_are_skipped() {
+    let _guard = shared();
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("o.pdf");
     // Just above the brake's floor of 256 MiB: nothing is left to decode into.
@@ -401,6 +433,7 @@ fn pictures_too_big_for_free_memory_are_skipped() {
 
 #[test]
 fn probe_reports_size_pages_and_protection() {
+    let _guard = shared();
     let p = probe_pdf(&fixture("shared.pdf")).unwrap();
     assert_eq!(p.pages, 3);
     assert!(!p.encrypted);
