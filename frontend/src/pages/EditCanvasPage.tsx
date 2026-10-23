@@ -33,14 +33,12 @@ import {
   Pipette,
   ImagePlus,
 } from 'lucide-react';
-import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { useNativePaths } from '../hooks/useNativePaths';
-import { NativeCoreError, fileSizes } from '../api/nativeCore';
+import { NativeCoreError, fileSizes, revealPath } from '../api/nativeCore';
 import { baseName, stemOf } from '../utils/paths';
-import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
-import { isTauri, openOutputFolder } from '../utils/tauriDialog';
+import { isTauri } from '../utils/tauriDialog';
 import { isEmptyTextState } from '../utils/textPlaceholder';
 import { Filename } from '../components/Filename';
 import * as fabric from 'fabric';
@@ -83,7 +81,7 @@ import {
   toggleBoldWeight,
 } from '../features/edit-canvas/fontLibrary';
 import type { ApplicationFontEntry } from '../features/edit-canvas/fontLibrary';
-import { BLANK_PAGE_IMAGE, fetchPagesMeta, readPdfFile, renderPage } from '../features/edit-canvas/pagesApi';
+import { BLANK_PAGE_IMAGE, fetchPagesMeta, renderPage, saveCanvas } from '../features/edit-canvas/pagesApi';
 import type { RenderedPage } from '../features/edit-canvas/pagesApi';
 import {
   HISTORY_DEBOUNCE_MS,
@@ -228,6 +226,7 @@ export function EditCanvasPage() {
   const prevZoomRef = useRef(zoomLevel);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null);
   const [outputFilename, setOutputFilename] = useState('');
   const [applicationFontEntries, setApplicationFontEntries] = useState<ApplicationFontEntry[]>([]);
   const previewRequestTokenRef = useRef<Record<number, number>>({});
@@ -1349,24 +1348,11 @@ export function EditCanvasPage() {
         }
       }
 
-      // The save route still takes an upload until the core takes over saving.
-      const pdfFile = await readPdfFile(file, baseName(file));
-      const formData = new FormData();
-      formData.append('file', pdfFile);
-      formData.append(
-        'annotations',
-        new Blob([JSON.stringify(exportedPages)], { type: 'application/json' }),
-        'annotations.json',
-      );
-      formData.append('output_filename', outputFilename || 'edited_document');
-
-      const response = await apiClient.post('/api/v1/edit-canvas/save', formData, {
-        responseType: 'blob',
+      const report = await saveCanvas(file, exportedPages, outputFilename || 'edited_document', {
+        onProgress: (progress) => {
+          if (progress.stage === 'pages' && progress.total) setSaveProgress({ done: progress.done, total: progress.total });
+        },
       });
-
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const finalFilename = getFilenameFromHeaders(response.headers, `${outputFilename || 'edited_document'}.pdf`);
-      triggerBlobDownload(blob, finalFilename);
 
       showToast({
         type: 'success',
@@ -1374,7 +1360,7 @@ export function EditCanvasPage() {
         message: t('Your edited PDF document is ready.'),
         action: {
           label: t('Open Folder'),
-          onClick: openOutputFolder,
+          onClick: () => { void revealPath(report.outputPath).catch(() => undefined); },
         },
         duration: 8000,
       });
@@ -1386,6 +1372,7 @@ export function EditCanvasPage() {
       });
     } finally {
       setSaving(false);
+      setSaveProgress(null);
     }
   };
 
@@ -1765,7 +1752,7 @@ export function EditCanvasPage() {
           {saving ? (
             <>
               <Loader2 className="animate-spin" size={14} />
-              <span>{t('Saving...')}</span>
+              <span>{saveProgress ? `${t('Saving...')} ${saveProgress.done}/${saveProgress.total}` : t('Saving...')}</span>
             </>
           ) : (
             <span>{t('Save as PDF')}</span>

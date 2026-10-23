@@ -11,6 +11,7 @@ name = "dokuwu_core"
 
 [dependencies]
 ab_glyph = "0.2"
+base64 = "0.22"
 crc32fast = "1"
 flate2 = "1"
 image = { version = "0.25", default-features = false, features = ["webp", "png", "jpeg", "bmp", "tiff"] }
@@ -24,11 +25,13 @@ regex = "1"
 # QR matrix only: the crate's own image and SVG writers are not used.
 qrcode = { version = "0.14", default-features = false }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 sha2 = "0.10"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 thiserror = "2"
 ttf-parser = "0.25"
+unicode-normalization = "0.1"
+unicode-properties = "0.1"
 webp = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
