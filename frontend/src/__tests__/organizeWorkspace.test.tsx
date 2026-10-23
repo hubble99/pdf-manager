@@ -3,41 +3,41 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../context/ToastContext';
 import { ToastContainer } from '../components/ToastContainer';
+import { NativeCoreError } from '../api/nativeCore';
 import { OrganizePage } from '../pages/OrganizePage';
 
-const { uploadMock, thumbsMock, assembleMock, releaseMock, downloadMock } = vi.hoisted(() => ({
+const { uploadMock, thumbsMock, assembleMock, releaseMock, pickerMock } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   thumbsMock: vi.fn(),
   assembleMock: vi.fn(),
   releaseMock: vi.fn(),
-  downloadMock: vi.fn(),
+  pickerMock: vi.fn(),
 }));
 
 vi.mock('../features/organize/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/organize/api')>();
   return {
     ...actual,
-    uploadDocument: uploadMock,
+    openDocument: uploadMock,
     fetchThumbnails: thumbsMock,
     assembleDocument: assembleMock,
     releaseDocument: releaseMock,
   };
 });
 
-vi.mock('../utils/downloadHelper', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/downloadHelper')>();
-  return { ...actual, triggerBlobDownload: downloadMock };
-});
-
 vi.mock('../utils/tauriDialog', () => ({
-  isTauri: () => false,
-  openFilePicker: vi.fn(async () => null),
+  isTauri: () => true,
+  openFilePicker: pickerMock,
   openOutputFolder: vi.fn(async () => true),
 }));
 
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => undefined }),
+}));
+
 const PAGE_WIDTH = 150;
-const BLANK_PNG =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+const BLANK_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const DOCS = 'C:\\Docs\\';
 
 function uploaded(documentId: string, name: string, pageCount: number, kind: 'pdf' | 'image' = 'pdf') {
   return { documentId, name, kind, pageCount };
@@ -45,12 +45,13 @@ function uploaded(documentId: string, name: string, pageCount: number, kind: 'pd
 
 /** Serve the uploaded documents the workspace asks for. */
 function stubUploads(mainPageCount: number) {
-  uploadMock.mockImplementation(async (file: File) => {
-    if (file.name === 'doc.pdf') return uploaded('doc-main', 'doc.pdf', mainPageCount);
-    if (file.name === 'other.pdf') return uploaded('doc-2', 'other.pdf', 12);
-    if (file.name === 'single.pdf') return uploaded('doc-4', 'single.pdf', 1);
-    if (file.name === 'photo.png') return uploaded('doc-3', 'photo.png', 1, 'image');
-    return uploaded(`doc-${file.name}`, file.name, 1);
+  uploadMock.mockImplementation(async (path: string) => {
+    const name = path.split('\\').pop() as string;
+    if (name === 'doc.pdf') return uploaded('doc-main', 'doc.pdf', mainPageCount);
+    if (name === 'other.pdf') return uploaded('doc-2', 'other.pdf', 12);
+    if (name === 'single.pdf') return uploaded('doc-4', 'single.pdf', 1);
+    if (name === 'photo.png') return uploaded('doc-3', 'photo.png', 1, 'image');
+    return uploaded(`doc-${name}`, name, 1);
   });
 }
 
@@ -66,8 +67,8 @@ async function openDocument(pageCount = 5) {
     </MemoryRouter>,
   );
 
-  const input = document.getElementById('organize-main-input') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [new File(['pdf'], 'doc.pdf', { type: 'application/pdf' })] } });
+  pickerMock.mockResolvedValueOnce([`${DOCS}doc.pdf`]);
+  fireEvent.click(document.getElementById('organize-drop-zone') as HTMLElement);
   await waitFor(() => expect(uploadMock).toHaveBeenCalled());
   await waitFor(() => expect(document.querySelectorAll('.organize-cell')).toHaveLength(pageCount));
 }
@@ -89,17 +90,10 @@ function selectCell(index: number, modifiers: Partial<MouseEventInit> = {}) {
   fireEvent.click(cellBody(cells()[index], index + 1), modifiers);
 }
 
-/** Click a header insert button and hand it the given file. */
-const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n%...');
-const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-
-/** Click a header insert button and hand it a file of the right content. */
+/** Click a header insert button; the system dialog answers with the named file. */
 async function insertFrom(fileName: string, buttonLabel: 'PDF' | 'Image') {
+  pickerMock.mockResolvedValueOnce([`${DOCS}${fileName}`]);
   fireEvent.click(screen.getByRole('button', { name: new RegExp(`Insert ${buttonLabel}$`, 'i') }));
-  const input = document.getElementById('organize-insert-input') as HTMLInputElement;
-  const bytes = buttonLabel === 'PDF' ? PDF_BYTES : PNG_BYTES;
-  const type = buttonLabel === 'PDF' ? 'application/pdf' : 'image/png';
-  fireEvent.change(input, { target: { files: [new File([bytes], fileName, { type })] } });
   await waitFor(() => expect(screen.getByLabelText('Insert pages')).toBeInTheDocument());
 }
 
@@ -114,19 +108,21 @@ describe('organize workspace', () => {
     thumbsMock.mockReset();
     assembleMock.mockReset();
     releaseMock.mockReset();
-    downloadMock.mockReset();
+    pickerMock.mockReset();
     releaseMock.mockResolvedValue(undefined);
 
     thumbsMock.mockImplementation(async (_id: string, start: number, count: number) => ({
+      start,
       total: 99,
       pages: Array.from({ length: count }, (_, index) => ({
-        page: start + index, data: BLANK_PNG, width: PAGE_WIDTH, height: 200,
+        page: start + index, png: BLANK_PNG, width: PAGE_WIDTH, height: 200,
       })),
     }));
     assembleMock.mockResolvedValue({
-      blob: new Blob(['pdf'], { type: 'application/pdf' }),
-      filename: 'organized.pdf',
-      totalPages: 2,
+      outputPath: 'C:\\Users\\Dhoni\\Downloads\\organized.pdf',
+      outputSizeBytes: 2048,
+      pages: 2,
+      durationMs: 5,
     });
   });
 
@@ -374,17 +370,27 @@ describe('organize workspace', () => {
     expect(document.getElementById('organize-insert-confirm')).toBeDisabled();
   });
 
-  it('refuses a file whose content does not match the chosen action', async () => {
+  it('shows why a file could not be added and keeps the workspace as it was', async () => {
     await openDocument(3);
-    const uploadsBefore = uploadMock.mock.calls.length;
+    uploadMock.mockRejectedValueOnce(new NativeCoreError('invalid_input', 'invalid input: Cannot open PDF: broken'));
+    pickerMock.mockResolvedValueOnce([`${DOCS}broken.pdf`]);
     fireEvent.click(screen.getByRole('button', { name: /Insert PDF$/i }));
-    const input = document.getElementById('organize-insert-input') as HTMLInputElement;
-    // An image handed to "Insert PDF" because the dialog was switched to All files.
-    fireEvent.change(input, { target: { files: [new File([PNG_BYTES], 'photo.png', { type: 'image/png' })] } });
 
-    expect(await screen.findByText(/is not a PDF file/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('does not look like a valid PDF');
     expect(screen.queryByLabelText('Insert pages')).not.toBeInTheDocument();
-    expect(uploadMock.mock.calls.length).toBe(uploadsBefore);
+    expect(positions()).toEqual(['1', '2', '3']);
+  });
+
+  it('does not add the same file twice, whatever the case of its path', async () => {
+    await openDocument(3);
+    await insertFrom('other.pdf', 'PDF');
+    fireEvent.click(document.getElementById('organize-insert-confirm') as HTMLButtonElement);
+    const opened = uploadMock.mock.calls.length;
+
+    pickerMock.mockResolvedValueOnce([`${DOCS.toLowerCase()}OTHER.pdf`]);
+    fireEvent.click(screen.getByRole('button', { name: /Insert PDF$/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('already in Sources');
+    expect(uploadMock.mock.calls.length).toBe(opened);
   });
 
   it('reports an invalid insert pick inline and disables Insert', async () => {
@@ -477,13 +483,12 @@ describe('organize workspace', () => {
     await waitFor(() => expect(assembleMock).toHaveBeenCalled());
 
     const [payload, filename] = assembleMock.mock.calls[0];
-    expect(filename).toBe('organized.pdf');
+    expect(filename).toBe('organized');
     expect(payload).toHaveLength(5);
     expect(payload[0]).toMatchObject({ page: 1, rotation: 0, flip: false });
     expect(payload[1]).toMatchObject({ page: 1, rotation: 0, flip: false }); // the duplicate
     expect(payload[2]).toMatchObject({ page: 2, rotation: 90, flip: false });
     expect(payload[3]).toMatchObject({ page: 3, rotation: 0, flip: true });
-    expect(downloadMock).toHaveBeenCalled();
     expect(await screen.findByText('Saved')).toBeInTheDocument();
   });
 
@@ -498,5 +503,25 @@ describe('organize workspace', () => {
       .toHaveTextContent('Assembly failed'));
     expect(positions()).toEqual(['1', '2', '3']);
     expect(document.getElementById('organize-save')).toBeEnabled();
+  });
+});
+
+describe('thumbnail batch message', () => {
+  it('is read back page by page', async () => {
+    const { decodeThumbnailBatch } = await import('../features/organize/api');
+    const frame: number[] = [];
+    const word = (value: number) => frame.push(value & 255, (value >> 8) & 255, (value >> 16) & 255, (value >> 24) & 255);
+    [3, 10, 2].forEach(word);
+    [3, 150, 200, 3].forEach(word);
+    frame.push(1, 2, 3);
+    [4, 150, 210, 1].forEach(word);
+    frame.push(9);
+    const batch = decodeThumbnailBatch(new Uint8Array(frame).buffer);
+    expect(batch.start).toBe(3);
+    expect(batch.total).toBe(10);
+    expect(batch.pages.map((p) => [p.page, p.width, p.height, [...p.png]])).toEqual([
+      [3, 150, 200, [1, 2, 3]],
+      [4, 150, 210, [9]],
+    ]);
   });
 });

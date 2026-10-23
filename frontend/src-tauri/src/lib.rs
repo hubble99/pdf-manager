@@ -9,6 +9,7 @@ mod core_housekeeping;
 mod core_pdf_compress;
 mod core_qr_barcode;
 mod core_merge;
+mod core_organize;
 mod core_protect;
 mod core_pdf_render;
 
@@ -23,6 +24,7 @@ pub fn run() {
     .manage(core_bridge::CoreState::default())
     .manage(core_pdf_render::RenderState::default())
     .manage(core_convert::ThumbState::default())
+    .manage(core_organize::OrganizeState::default())
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
@@ -49,6 +51,10 @@ pub fn run() {
       core_pdf_compress::core_pdf_compress_start,
       core_qr_barcode::core_qr_generate,
       core_qr_barcode::core_barcode_generate,
+      core_organize::core_organize_open,
+      core_organize::core_organize_thumbnails,
+      core_organize::core_organize_release,
+      core_organize::core_organize_assemble_start,
       core_pdf_render::core_pdf_info,
       core_pdf_render::core_pdf_render_page,
     ])

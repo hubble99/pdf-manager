@@ -5,6 +5,7 @@
 **Internal**
 
 - **Settings and start-up:** clearing temporary files, opening the Downloads folder and the start-up readiness check now run on the Rust core instead of the Python backend. Clearing is refused while a job is running, and leftovers of a crashed run are swept at start-up and exit.
+- **Organize PDF:** thumbnails and saving now run on the Rust core instead of the Python backend. Files are read from where they are (no upload copy), the result is saved to Downloads under a free name with a "Show in folder" button, and saving can be cancelled without leaving a partial file. Pages, rotation and mirroring match the old output pixel for pixel; memory stays near the size of the input (500 pages, 184 MB: about 190 MiB). One difference: the thumbnail of a transparent picture is now shown on white, like the saved page. You can also drop a PDF or image on the window to insert it.
 
 ## 1.10.1 — 2026-10-22 · Temporary files fix
 

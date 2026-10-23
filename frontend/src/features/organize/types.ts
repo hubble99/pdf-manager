@@ -19,9 +19,9 @@ export interface SourceHandle {
   name: string;
   kind: SourceKind;
   pageCount: number;
-  /** Ids from the backend document registry, one per uploaded file. */
+  /** Handle from the core's document registry, one per added file. */
   documentId: string;
-  /** Name and size of the file the user picked; used to refuse the same file twice. */
+  /** The file's path in comparable form; used to refuse the same file twice. */
   fingerprint?: string;
 }
 
@@ -32,7 +32,6 @@ export interface OrganizeSnapshot {
 
 export type InsertMode = 'all' | 'pick';
 export type InsertPosition = 'after' | 'before';
-/** Accepted image extensions, matching the backend's supported set. */
-export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff'] as const;
-export const IMAGE_ACCEPT = IMAGE_EXTENSIONS.join(',');
-export const PDF_ACCEPT = '.pdf';
+/** Extensions the core accepts, without the dot. */
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'tif', 'tiff'];
+export const PDF_EXTENSIONS = ['pdf'];

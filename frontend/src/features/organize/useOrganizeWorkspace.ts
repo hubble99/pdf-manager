@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addHistoryEntry } from '../../utils/historyStore';
-import { triggerBlobDownload } from '../../utils/downloadHelper';
 import { useToast } from '../../hooks/useToast';
+import { isCoreCancelled, revealPath } from '../../api/nativeCore';
+import { baseName, pathKey } from '../../utils/paths';
 import {
-  assembleDocument, fetchThumbnails, releaseDocument, thumbnailKey, thumbnailUrl, uploadDocument,
+  assembleDocument, fetchThumbnails, openDocument, releaseDocument, thumbnailKey, thumbnailUrl,
   type AssemblePagePayload,
 } from './api';
+import { organizeErrorMessage } from './messages';
 import { parsePageExpression } from './pageExpression';
 import {
   clampReference, createPageRef, defaultReferencePage, duplicatePage, flipPositions,
@@ -55,7 +57,7 @@ export interface OrganizeWorkspace {
   isBusy: boolean;
   error: string | null;
   dismissError: () => void;
-  result: { filename: string; detail: string } | null;
+  result: { filename: string; detail: string; outputPath: string } | null;
 
   insertDraft: {
     source: SourceHandle | null;
@@ -74,10 +76,10 @@ export interface OrganizeWorkspace {
   deleteInput: string;
   deletePreview: { positions: number[]; error: string | null };
 
-  openFile: (file: File) => Promise<void>;
+  openFile: (path: string) => Promise<void>;
   /** Closes the main PDF together with everything inserted into it. */
   closeDocument: () => void;
-  beginInsertFile: (file: File) => Promise<void>;
+  beginInsertFile: (path: string) => Promise<void>;
   beginInsertFromSource: (sourceId: string) => void;
   setInsertMode: (mode: InsertMode) => void;
   setInsertPagesInput: (value: string) => void;
@@ -109,15 +111,12 @@ export interface OrganizeWorkspace {
   save: (outputFilename: string) => Promise<void>;
 }
 
-function fileFingerprint(file: File): string {
-  return `${file.name.toLowerCase()}|${file.size}`;
-}
-
 /**
  * Owns the whole Organize workspace session: the page list, sources, selection,
  * bounded undo history, thumbnail loading, and saving. Editing happens entirely
- * in memory; the backend is contacted only to upload a document, to render
- * thumbnails, to release a document, and to assemble the final list on save.
+ * in memory; the native core is contacted only to add a file, to render
+ * thumbnails, to release a handle, and to assemble the final list on save.
+ * Files are named by their path on disk and never copied.
  */
 export function useOrganizeWorkspace(): OrganizeWorkspace {
   const { showToast } = useToast();
@@ -138,17 +137,21 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ filename: string; detail: string } | null>(null);
+  const [result, setResult] = useState<{ filename: string; detail: string; outputPath: string } | null>(null);
 
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
   const thumbnailUrlsRef = useRef<Map<string, string>>(new Map());
   const sourcesRef = useRef<SourceHandle[]>([]);
+  const saveAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      saveAbortRef.current?.abort();
+    };
   }, []);
 
   // Keep the latest sources for teardown without re-running teardown.
@@ -194,7 +197,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
           const additions: Record<string, string> = {};
           for (const entry of batch.pages) {
             const key = thumbnailKey(source.id, entry.page);
-            const url = thumbnailUrl(entry.data);
+            const url = thumbnailUrl(entry.png);
             thumbnailUrlsRef.current.set(key, url);
             additions[key] = url;
           }
@@ -252,23 +255,23 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   }, [state]);
 
   // ── opening and inserting files ───────────────────────────────────────────
-  const openFile = useCallback(async (file: File) => {
+  const openFile = useCallback(async (path: string) => {
     if (busyRef.current || state.pages.length > 0) return;
     setError(null);
     setIsBusy(true);
     busyRef.current = true;
     try {
-      const uploaded = await uploadDocument(file);
+      const opened = await openDocument(path);
       if (!mountedRef.current) return;
-      const source: SourceHandle = { id: uploaded.documentId, ...uploaded, fingerprint: fileFingerprint(file) };
-      const pages = Array.from({ length: uploaded.pageCount }, (_, index) =>
+      const source: SourceHandle = { id: opened.documentId, ...opened, fingerprint: pathKey(path) };
+      const pages = Array.from({ length: opened.pageCount }, (_, index) =>
         createPageRef(source.id, index + 1));
       setState({ pages, sources: [source], past: [], future: [] });
       setMainSourceId(source.id);
       setSelection(new Set());
     } catch (err) {
       if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : t('The file could not be added.');
+      const message = organizeErrorMessage(err, t('The file could not be added.'));
       setError(message);
       showToast({ type: 'error', title: t('File not added'), message });
     } finally {
@@ -277,17 +280,18 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     }
   }, [showToast, state.pages.length]);
 
-  const beginInsertFile = useCallback(async (file: File) => {
+  const beginInsertFile = useCallback(async (path: string) => {
     if (busyRef.current || state.pages.length === 0) return;
 
     // The same file is never added twice, so Sources never holds duplicates.
-    const fingerprint = fileFingerprint(file);
+    const fingerprint = pathKey(path);
+    const name = baseName(path);
     const existing = state.sources.find((entry) => entry.fingerprint === fingerprint);
     if (existing || insertPendingSource?.fingerprint === fingerprint) {
       const isMain = existing?.id === mainSourceId;
       const message = isMain
-        ? t('{name} is the PDF you opened. Use Duplicate on a page to repeat its pages.', { name: file.name })
-        : t('{name} is already in Sources. Use + next to it there to insert pages from it again.', { name: file.name });
+        ? t('{name} is the PDF you opened. Use Duplicate on a page to repeat its pages.', { name })
+        : t('{name} is already in Sources. Use + next to it there to insert pages from it again.', { name });
       setError(message);
       showToast({ type: 'error', title: t('File already added'), message });
       if (!isMain) setPanel('sources');
@@ -298,9 +302,9 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     setIsBusy(true);
     busyRef.current = true;
     try {
-      const uploaded = await uploadDocument(file);
+      const opened = await openDocument(path);
       if (!mountedRef.current) return;
-      const source: SourceHandle = { id: uploaded.documentId, ...uploaded, fingerprint };
+      const source: SourceHandle = { id: opened.documentId, ...opened, fingerprint };
       setInsertPendingSource(source);
       setInsertSource(source);
       setInsertMode('all');
@@ -310,7 +314,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
       setPanel('insert');
     } catch (err) {
       if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : t('The file could not be added.');
+      const message = organizeErrorMessage(err, t('The file could not be added.'));
       setError(message);
       showToast({ type: 'error', title: t('File not added'), message });
     } finally {
@@ -592,25 +596,35 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     setResult(null);
     setIsBusy(true);
     busyRef.current = true;
+    const controller = new AbortController();
+    saveAbortRef.current = controller;
     try {
       const payload: AssemblePagePayload[] = state.pages.map((entry) => ({
         source: entry.source, page: entry.page, rotation: entry.rotation, flip: entry.flip,
       }));
-      const assembled = await assembleDocument(payload, outputFilename || 'organized.pdf');
+      const report = await assembleDocument(payload, outputFilename || 'organized', { signal: controller.signal });
       if (!mountedRef.current) return;
-      triggerBlobDownload(assembled.blob, assembled.filename);
+      const filename = baseName(report.outputPath);
       setResult({
-        filename: assembled.filename,
-        detail: tn(assembled.totalPages, '{n} page', '{n} pages'),
+        filename,
+        outputPath: report.outputPath,
+        detail: tn(report.pages, '{n} page', '{n} pages'),
       });
-      addHistoryEntry({ filename: assembled.filename, action: 'Organize PDF', size: assembled.blob.size });
-      showToast({ type: 'success', title: t('Document saved'), message: tn(assembled.totalPages, '{n} page assembled', '{n} pages assembled') });
+      addHistoryEntry({ filename, action: 'Organize PDF', size: report.outputSizeBytes });
+      showToast({
+        type: 'success',
+        title: t('Document saved'),
+        message: tn(report.pages, '{n} page assembled', '{n} pages assembled'),
+        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
+        duration: 8000,
+      });
     } catch (err) {
-      if (!mountedRef.current) return;
-      const message = err instanceof Error ? err.message : t('The document could not be saved.');
+      if (!mountedRef.current || isCoreCancelled(err)) return;
+      const message = organizeErrorMessage(err, t('The document could not be saved.'));
       setError(message);
       showToast({ type: 'error', title: t('Save failed'), message });
     } finally {
+      saveAbortRef.current = null;
       busyRef.current = false;
       if (mountedRef.current) setIsBusy(false);
     }

@@ -282,6 +282,25 @@ impl RenderDocument {
         })
     }
 
+    /// Renders page `page` (1-based) so that it is `target_width` pixels wide
+    /// (the height follows the page's proportions). Used for thumbnails, which
+    /// are sized by width, not by dpi.
+    pub fn render_width(&self, page: u32, target_width: u32) -> CoreResult<RenderedPage> {
+        self.check_page(page)?;
+        let loaded = self.doc.load_page(page as i32 - 1).map_err(|e| mupdf_error("loading page", e))?;
+        let bounds = loaded.bounds().map_err(|e| mupdf_error("page bounds", e))?;
+        let (w_pt, h_pt) = ((bounds.x1 - bounds.x0) as f64, (bounds.y1 - bounds.y0) as f64);
+        let width = target_width.max(1) as f64;
+        let zoom = if w_pt > 0.0 { width / w_pt } else { 1.0 } as f32;
+        check_memory(w_pt * zoom as f64, h_pt * zoom as f64)?;
+        let pixmap = loaded
+            .to_pixmap(&Matrix::new_scale(zoom, zoom), &Colorspace::device_rgb(), false, true)
+            .map_err(|e| mupdf_error("rendering page", e))?;
+        let (width, height) = (pixmap.width(), pixmap.height());
+        let png = encode_png(width, height, pixmap.n() as usize, pixmap.stride(), pixmap.samples())?;
+        Ok(RenderedPage { width, height, dpi: (zoom * 72.0).round() as u32, png })
+    }
+
     /// Renders page `page` (1-based).
     pub fn render(&self, page: u32, dpi: u32, hint: QualityHint) -> CoreResult<RenderedPage> {
         if page < 1 || page > self.pages {
@@ -320,7 +339,7 @@ fn check_memory(width_px: f64, height_px: f64) -> CoreResult<()> {
     Ok(())
 }
 
-fn encode_png(width: u32, height: u32, n: usize, stride: isize, samples: &[u8]) -> CoreResult<Vec<u8>> {
+pub(crate) fn encode_png(width: u32, height: u32, n: usize, stride: isize, samples: &[u8]) -> CoreResult<Vec<u8>> {
     if n != 3 {
         return Err(CoreError::Internal(format!("unexpected pixmap with {n} components")));
     }
@@ -351,11 +370,17 @@ fn encode_png(width: u32, height: u32, n: usize, stride: isize, samples: &[u8]) 
     Ok(out)
 }
 
+/// What a render request asks for.
+#[derive(Clone, Copy)]
+enum Size {
+    Dpi { dpi: u32, hint: QualityHint },
+    Width(u32),
+}
+
 struct Request {
     path: PathBuf,
     page: u32,
-    dpi: u32,
-    hint: QualityHint,
+    size: Size,
     reply: Sender<CoreResult<RenderedPage>>,
 }
 
@@ -407,8 +432,18 @@ impl RenderService {
 
     /// Renders one page and waits for it. Call from a blocking thread.
     pub fn render(&self, path: &Path, page: u32, dpi: u32, hint: QualityHint) -> CoreResult<RenderedPage> {
+        self.submit(path, page, Size::Dpi { dpi, hint })
+    }
+
+    /// Renders one page `target_width` pixels wide and waits for it. Call from
+    /// a blocking thread.
+    pub fn render_width(&self, path: &Path, page: u32, target_width: u32) -> CoreResult<RenderedPage> {
+        self.submit(path, page, Size::Width(target_width))
+    }
+
+    fn submit(&self, path: &Path, page: u32, size: Size) -> CoreResult<RenderedPage> {
         let (reply, answer) = mpsc::channel();
-        let request = Request { path: path.to_path_buf(), page, dpi, hint, reply };
+        let request = Request { path: path.to_path_buf(), page, size, reply };
         {
             let jobs = self.jobs.lock().unwrap_or_else(|e| e.into_inner());
             let sender = jobs
@@ -481,7 +516,10 @@ fn render_cached(open: &mut Option<(FileStamp, RenderDocument)>, request: &Reque
         *open = Some((stamp, doc));
     }
     match open {
-        Some((_, doc)) => doc.render(request.page, request.dpi, request.hint),
+        Some((_, doc)) => match request.size {
+            Size::Dpi { dpi, hint } => doc.render(request.page, dpi, hint),
+            Size::Width(width) => doc.render_width(request.page, width),
+        },
         None => Err(CoreError::Internal("no document".into())),
     }
 }
