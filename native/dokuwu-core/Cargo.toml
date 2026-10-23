@@ -20,17 +20,19 @@ jpeg-encoder = "0.6"
 # keeps text set in the standard PDF fonts (Helvetica, Times, ...).
 mupdf = { version = "0.8", default-features = false, features = ["base14-fonts"] }
 png = "0.18"
+regex = "1"
 # QR matrix only: the crate's own image and SVG writers are not used.
 qrcode = { version = "0.14", default-features = false }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 thiserror = "2"
+ttf-parser = "0.25"
 webp = { version = "0.3.1", default-features = false }
 
 [dev-dependencies]
 # Reads generated QR codes and barcodes back, to prove they scan.
 rxing = { version = "0.9", default-features = false, features = ["decoders", "encoding_rs", "oned", "qrcode"] }
-serde_json = "1"
 tempfile = "3"
 zip = { version = "9.0.5", default-features = false }

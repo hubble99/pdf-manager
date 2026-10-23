@@ -144,6 +144,12 @@ pub fn pdf_info(path: &Path) -> CoreResult<PdfInfo> {
     Ok(PdfInfo { size_bytes, pages, encrypted, metadata })
 }
 
+/// Page sizes of the PDF at `path` for the editor's layout, as they come out
+/// when rendered at `dpi` (see [`editor_dpi`]). Nothing is rendered.
+pub fn pages_meta(path: &Path, dpi: u32) -> CoreResult<PagesMeta> {
+    RenderDocument::open(path)?.pages_meta(dpi)
+}
+
 /// The dpi to render a page of `width_pt` by `height_pt` points at, given the
 /// wish `dpi` and the hint. Mirrors the old route: scale down so the longest
 /// side fits, floor at [`MIN_DPI`], then keep under [`MAX_PIXELS`].
@@ -183,6 +189,40 @@ pub fn export_dpi(width_pt: f64, height_pt: f64, dpi: u32, max_side: Option<f64>
         }
     }
     ((wished * scale).floor().max(MIN_DPI as f64)) as u32
+}
+
+/// Lowest and highest dpi the editor asks for.
+pub const EDITOR_MIN_DPI: u32 = 72;
+pub const EDITOR_MAX_DPI: u32 = 500;
+
+/// The dpi the editor renders a page of `width_pt` by `height_pt` points at:
+/// the wish clamped to 72..=500, lowered until the page stays under
+/// [`MAX_PIXELS`]. Unlike [`effective_dpi`] there is no longest-side cap, since
+/// the editor wants the sharpness it asked for.
+pub fn editor_dpi(width_pt: f64, height_pt: f64, dpi: u32) -> u32 {
+    export_dpi(width_pt, height_pt, dpi.clamp(EDITOR_MIN_DPI, EDITOR_MAX_DPI), None)
+}
+
+/// Size of one page of a PDF for the editor's layout.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageMeta {
+    /// 0-based page index.
+    pub index: u32,
+    pub width_pt: f64,
+    pub height_pt: f64,
+    /// Pixel size of the page rendered at `dpi`.
+    pub width: u32,
+    pub height: u32,
+    pub dpi: u32,
+}
+
+/// All page sizes of a PDF, read without rendering anything.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PagesMeta {
+    pub total: u32,
+    pub pages: Vec<PageMeta>,
 }
 
 /// A rendered page as RGB samples borrowed from MuPDF (`stride` bytes per row,
@@ -240,6 +280,38 @@ impl RenderDocument {
         let loaded = self.doc.load_page(page as i32 - 1).map_err(|e| mupdf_error("loading page", e))?;
         let bounds = loaded.bounds().map_err(|e| mupdf_error("page bounds", e))?;
         Ok(((bounds.x1 - bounds.x0) as f64, (bounds.y1 - bounds.y0) as f64))
+    }
+
+    /// Sizes of all pages as the editor will see them at `dpi` (see [`editor_dpi`]).
+    pub fn pages_meta(&self, dpi: u32) -> CoreResult<PagesMeta> {
+        let mut pages = Vec::with_capacity(self.pages as usize);
+        for page in 1..=self.pages {
+            let (w_pt, h_pt) = self.page_size_pt(page)?;
+            let actual = editor_dpi(w_pt, h_pt, dpi);
+            // MuPDF rounds the scaled page box outwards with a small tolerance
+            // (`fz_round_rect`), in single precision.
+            let scale = actual as f32 / 72.0;
+            let pixels = |pt: f64| ((pt as f32 * scale) - 0.001).ceil().max(1.0) as u32;
+            pages.push(PageMeta {
+                index: page - 1,
+                width_pt: w_pt,
+                height_pt: h_pt,
+                width: pixels(w_pt),
+                height: pixels(h_pt),
+                dpi: actual,
+            });
+        }
+        Ok(PagesMeta { total: self.pages, pages })
+    }
+
+    /// Renders page `page` (1-based) for the editor at `dpi` (see [`editor_dpi`]).
+    pub fn render_editor(&self, page: u32, dpi: u32) -> CoreResult<RenderedPage> {
+        let (w_pt, h_pt) = self.page_size_pt(page)?;
+        let actual = editor_dpi(w_pt, h_pt, dpi);
+        self.render_rgb(page, actual, |view| {
+            let png = encode_png(view.width, view.height, 3, view.stride as isize, view.samples)?;
+            Ok(RenderedPage { width: view.width, height: view.height, dpi: actual, png })
+        })
     }
 
     fn check_page(&self, page: u32) -> CoreResult<()> {
@@ -375,6 +447,7 @@ pub(crate) fn encode_png(width: u32, height: u32, n: usize, stride: isize, sampl
 enum Size {
     Dpi { dpi: u32, hint: QualityHint },
     Width(u32),
+    Editor(u32),
 }
 
 struct Request {
@@ -439,6 +512,12 @@ impl RenderService {
     /// a blocking thread.
     pub fn render_width(&self, path: &Path, page: u32, target_width: u32) -> CoreResult<RenderedPage> {
         self.submit(path, page, Size::Width(target_width))
+    }
+
+    /// Renders one page for the editor at `dpi` (72..=500, lowered to stay
+    /// under 60 megapixels) and waits for it. Call from a blocking thread.
+    pub fn render_editor(&self, path: &Path, page: u32, dpi: u32) -> CoreResult<RenderedPage> {
+        self.submit(path, page, Size::Editor(dpi))
     }
 
     fn submit(&self, path: &Path, page: u32, size: Size) -> CoreResult<RenderedPage> {
@@ -519,6 +598,7 @@ fn render_cached(open: &mut Option<(FileStamp, RenderDocument)>, request: &Reque
         Some((_, doc)) => match request.size {
             Size::Dpi { dpi, hint } => doc.render(request.page, dpi, hint),
             Size::Width(width) => doc.render_width(request.page, width),
+            Size::Editor(dpi) => doc.render_editor(request.page, dpi),
         },
         None => Err(CoreError::Internal("no document".into())),
     }

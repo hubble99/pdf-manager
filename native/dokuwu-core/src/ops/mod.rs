@@ -4,6 +4,7 @@ pub(crate) mod batch;
 pub mod barcode;
 pub(crate) mod code_image;
 pub mod folder_scan;
+pub mod font_library;
 pub mod housekeeping;
 pub mod naming;
 pub mod natural_sort;

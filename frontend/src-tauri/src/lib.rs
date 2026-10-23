@@ -4,6 +4,7 @@ use tauri::Manager;
 mod desktop_lifecycle;
 
 mod core_bridge;
+mod core_canvas;
 mod core_convert;
 mod core_housekeeping;
 mod core_pdf_compress;
@@ -25,6 +26,7 @@ pub fn run() {
     .manage(core_pdf_render::RenderState::default())
     .manage(core_convert::ThumbState::default())
     .manage(core_organize::OrganizeState::default())
+    .manage(core_canvas::FontState::default())
     .invoke_handler(tauri::generate_handler![
       core_bridge::core_info,
       core_bridge::core_checksum_start,
@@ -55,6 +57,13 @@ pub fn run() {
       core_organize::core_organize_thumbnails,
       core_organize::core_organize_release,
       core_organize::core_organize_assemble_start,
+      core_canvas::core_canvas_pages_meta,
+      core_canvas::core_canvas_render_page,
+      core_canvas::core_canvas_read_pdf,
+      core_canvas::core_font_list,
+      core_canvas::core_font_add,
+      core_canvas::core_font_remove,
+      core_canvas::core_font_read,
       core_pdf_render::core_pdf_info,
       core_pdf_render::core_pdf_render_page,
     ])

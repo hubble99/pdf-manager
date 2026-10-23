@@ -36,8 +36,11 @@ import {
 import apiClient from '../api/client';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useNativePaths } from '../hooks/useNativePaths';
+import { NativeCoreError, fileSizes } from '../api/nativeCore';
+import { baseName, stemOf } from '../utils/paths';
 import { getFilenameFromHeaders, triggerBlobDownload } from '../utils/downloadHelper';
-import { openOutputFolder } from '../utils/tauriDialog';
+import { isTauri, openOutputFolder } from '../utils/tauriDialog';
 import { isEmptyTextState } from '../utils/textPlaceholder';
 import { Filename } from '../components/Filename';
 import * as fabric from 'fabric';
@@ -80,6 +83,8 @@ import {
   toggleBoldWeight,
 } from '../features/edit-canvas/fontLibrary';
 import type { ApplicationFontEntry } from '../features/edit-canvas/fontLibrary';
+import { BLANK_PAGE_IMAGE, fetchPagesMeta, readPdfFile, renderPage } from '../features/edit-canvas/pagesApi';
+import type { RenderedPage } from '../features/edit-canvas/pagesApi';
 import {
   HISTORY_DEBOUNCE_MS,
   HISTORY_LIMIT,
@@ -93,17 +98,25 @@ import {
   PREVIEW_MIN_DPI,
 } from '../features/edit-canvas/constants';
 
-interface PdfPageData {
-  index: number;
-  width: number;
-  height: number;
-  dpi: number;
-  data: string; // Base64 string
-}
+const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
 
-interface ConversionResponse {
-  pages: PdfPageData[];
-  total: number;
+/** Pages rendered at the same time while a document opens. */
+const OPEN_RENDER_LANES = 2;
+
+function openErrorMessage(err: unknown): string {
+  if (err instanceof NativeCoreError) {
+    switch (err.code) {
+      case 'password_required':
+        return t('This PDF is password protected. Remove the password with Protect PDF, then try again.');
+      case 'not_found':
+        return t('The PDF could not be found. It may have been moved or deleted.');
+      case 'invalid_input':
+        return t('This file could not be read as a PDF.');
+      default:
+        return err.message;
+    }
+  }
+  return err instanceof Error ? err.message : t('Could not extract PDF pages.');
 }
 
 type EditTool = EditorTool;
@@ -204,7 +217,8 @@ import { t, tn } from '../i18n';
 export function EditCanvasPage() {
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
-  const { fileData: file, setFileData: setFile } = useFeatureFile<File | null>('edit-canvas');
+  const { fileData: file, setFileData: setFile } = useFeatureFile<string | null>('edit-canvas');
+  const [fileSize, setFileSize] = useState<number | null>(null);
 
   const [pages, setPages] = useState<PageData[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
@@ -215,9 +229,14 @@ export function EditCanvasPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [outputFilename, setOutputFilename] = useState('');
-  const [isDragOver, setIsDragOver] = useState(false);
   const [applicationFontEntries, setApplicationFontEntries] = useState<ApplicationFontEntry[]>([]);
   const previewRequestTokenRef = useRef<Record<number, number>>({});
+  // Bumped whenever the open document changes, so late page images are dropped.
+  const openRunRef = useRef(0);
+  // Object URLs of the page images, so replaced and abandoned ones are freed.
+  const pageImagesRef = useRef(new Map<number, { url: string; dpi: number }>());
+  // The highest dpi asked for per page, so a capped render is not asked for again.
+  const requestedDpiRef = useRef<Record<number, number>>({});
 
   // Default properties untuk object BARU yang akan dibuat (saat tidak ada selection)
   const [defaultTextProps, setDefaultTextProps] = useState<{
@@ -233,7 +252,6 @@ export function EditCanvasPage() {
   });
 
   const fabricRefs = useRef<Record<number, fabric.Canvas>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   // Image bytes live here, outside page state, so history snapshots stay small.
   const [imageAssets] = useState(() => new Map<string, CanvasImageAsset>());
@@ -253,6 +271,8 @@ export function EditCanvasPage() {
   }, [showToast]);
 
   useEffect(() => {
+    // The font library lives in the desktop app; the browser preview has none.
+    if (!isTauri()) return undefined;
     let cancelled = false;
     loadApplicationFontLibrary()
       .then(({ entries }) => {
@@ -641,47 +661,97 @@ export function EditCanvasPage() {
     setActiveTool('select');
   }, [activeTool, selectedObject, updateSelectedObject]);
 
-  // API Call: pdf to pages conversion
-  const convertPdfToPages = async (pdfFile: File) => {
+  const releasePageUrls = useCallback(() => {
+    pageImagesRef.current.forEach(({ url }) => URL.revokeObjectURL(url));
+    pageImagesRef.current.clear();
+    requestedDpiRef.current = {};
+  }, []);
+
+  // Shows a rendered page image, unless a sharper one is already there.
+  const applyPageImage = useCallback((index: number, image: RenderedPage) => {
+    const current = pageImagesRef.current.get(index);
+    if (current && current.dpi > image.dpi) {
+      URL.revokeObjectURL(image.url);
+      return;
+    }
+    pageImagesRef.current.set(index, { url: image.url, dpi: image.dpi });
+    setPages(list => list.map(page => page.index === index ? {
+      ...page,
+      imageUrl: image.url,
+      previewDpi: image.dpi,
+    } : page));
+    if (current) URL.revokeObjectURL(current.url);
+  }, []);
+
+  // Opens the PDF: every page's size first so the document lays out at once,
+  // then the page images, a few at a time.
+  const openPdf = async (pdfPath: string) => {
+    const run = ++openRunRef.current;
+    releasePageUrls();
     setLoading(true);
-    const formData = new FormData();
-    formData.append('file', pdfFile, pdfFile.name || 'preview.pdf');
 
     try {
-      const res = await apiClient.post<ConversionResponse>('/api/v1/pdf-to-image/pages', formData);
+      const [meta, sizes] = await Promise.all([fetchPagesMeta(pdfPath, PREVIEW_BASE_DPI), fileSizes([pdfPath])]);
+      if (run !== openRunRef.current) return;
 
-      const formatted: PageData[] = res.data.pages.map((p) => ({
+      setFileSize(sizes[0] ?? null);
+      setPages(meta.pages.map((p) => ({
         index: p.index,
         width: p.width,
         height: p.height,
-        imageUrl: `data:image/png;base64,${p.data}`,
-        previewDpi: p.dpi || PREVIEW_BASE_DPI,
+        imageUrl: BLANK_PAGE_IMAGE,
+        previewDpi: 0,
         objects: [],
         history: [[]],
         historyIndex: 0
-      }));
-
-      setPages(formatted);
+      })));
       setActivePageIndex(0);
       setSelectedObjectId(null);
-
-      const stem = pdfFile.name.replace(/\.[^/.]+$/, '');
-      setOutputFilename(stem);
+      setOutputFilename(stemOf(pdfPath));
 
       showToast({
         type: 'success',
         title: t('PDF Loaded Successfully'),
-        message: tn(res.data.total, 'Loaded {n} page for editing.', 'Loaded {n} pages for editing.'),
+        message: tn(meta.total, 'Loaded {n} page for editing.', 'Loaded {n} pages for editing.'),
       });
-    } catch (err: any) {
+
+      let next = 0;
+      let failed = false;
+      const lane = async () => {
+        while (run === openRunRef.current && next < meta.pages.length) {
+          const pageNumber = next + 1;
+          next += 1;
+          try {
+            const image = await renderPage(pdfPath, pageNumber, PREVIEW_BASE_DPI);
+            if (run !== openRunRef.current) {
+              URL.revokeObjectURL(image.url);
+              return;
+            }
+            applyPageImage(pageNumber - 1, image);
+          } catch {
+            failed = true;
+          }
+          if (pageNumber === 1 && run === openRunRef.current) setLoading(false);
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(OPEN_RENDER_LANES, meta.pages.length) }, lane));
+      if (failed && run === openRunRef.current) {
+        showToast({
+          type: 'warning',
+          title: t('Some pages could not be shown'),
+          message: t('Pages that failed to render stay blank. Try opening the PDF again.'),
+        });
+      }
+    } catch (err: unknown) {
+      if (run !== openRunRef.current) return;
       showToast({
         type: 'error',
         title: t('Conversion Failed'),
-        message: err.message || t('Could not extract PDF pages.'),
+        message: openErrorMessage(err),
       });
       setFile(null);
     } finally {
-      setLoading(false);
+      if (run === openRunRef.current) setLoading(false);
     }
   };
 
@@ -689,7 +759,7 @@ export function EditCanvasPage() {
     if (file && pages.length === 0) {
       // Feature-file context persists the selected file across route remounts.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      convertPdfToPages(file);
+      void openPdf(file);
     }
   }, [file]);
 
@@ -700,68 +770,68 @@ export function EditCanvasPage() {
 
     const targetDpi = Math.max(PREVIEW_MIN_DPI, Math.min(PREVIEW_MAX_DPI, Math.ceil(PREVIEW_MIN_DPI * Math.max(1, zoomLevel))));
     if ((visiblePage.previewDpi || PREVIEW_BASE_DPI) >= targetDpi) return;
+    // A huge page comes back below the target; do not ask for it again.
+    if ((requestedDpiRef.current[visiblePage.index] || 0) >= targetDpi) return;
 
     const timeout = window.setTimeout(async () => {
       const token = (previewRequestTokenRef.current[visiblePage.index] || 0) + 1;
       previewRequestTokenRef.current[visiblePage.index] = token;
-      const formData = new FormData();
-      formData.append('file', file, file.name || 'preview.pdf');
-      formData.append('page_index', String(visiblePage.index));
-      formData.append('dpi', String(targetDpi));
+      const run = openRunRef.current;
+      requestedDpiRef.current[visiblePage.index] = targetDpi;
 
       try {
-        const response = await apiClient.post<PdfPageData>('/api/v1/pdf-to-image/page', formData);
-        if (previewRequestTokenRef.current[visiblePage.index] !== token) return;
-        setPages(current => current.map(page => page.index === visiblePage.index ? {
-          ...page,
-          imageUrl: `data:image/png;base64,${response.data.data}`,
-          previewDpi: response.data.dpi,
-        } : page));
+        const image = await renderPage(file, visiblePage.index + 1, targetDpi);
+        if (run !== openRunRef.current || previewRequestTokenRef.current[visiblePage.index] !== token) {
+          URL.revokeObjectURL(image.url);
+          return;
+        }
+        applyPageImage(visiblePage.index, image);
       } catch {
         // Keep the current preview if an optional high-DPI refresh fails.
+        if (run === openRunRef.current) requestedDpiRef.current[visiblePage.index] = 0;
       }
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [file, pages, activePageIndex, zoomLevel]);
+  }, [file, pages, activePageIndex, zoomLevel, applyPageImage]);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.type === 'application/pdf') {
-      setFile(droppedFile);
-    } else {
-      showToast({
-        type: 'error',
-        title: t('Invalid File'),
-        message: t('Please drop a valid PDF file.'),
-      });
-    }
-  };
-
-  const handleFileBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-    }
-  };
-
-  const handleRemoveFile = () => {
+  const clearDocument = useCallback(() => {
+    openRunRef.current += 1;
+    releasePageUrls();
     setFile(null);
+    setFileSize(null);
     setPages([]);
     setSelectedObjectId(null);
+    setLoading(false);
     imageAssets.clear();
-  };
+  }, [releasePageUrls, setFile, imageAssets]);
+
+  const { desktop, isDragOver, pick: pickFile } = useNativePaths({
+    filter: PDF_FILTER,
+    pickerTitle: t('Choose a PDF to edit'),
+    disabled: loading || saving,
+    onPaths: (accepted, rejected) => {
+      if (accepted[0]) {
+        if (pages.length > 0) {
+          showToast({
+            type: 'info',
+            title: t('A PDF is already open'),
+            message: t('Clear the current PDF first to open another one.'),
+          });
+          return;
+        }
+        setFile(accepted[0]);
+      } else if (rejected > 0) {
+        showToast({ type: 'error', title: t('Invalid File'), message: t('Please drop a valid PDF file.') });
+      }
+    },
+  });
+
+  // Frees the page images when the editor is left.
+  useEffect(() => () => {
+    openRunRef.current += 1;
+    releasePageUrls();
+  }, [releasePageUrls]);
 
   useEffect(() => () => imageAssets.clear(), [imageAssets]);
 
@@ -1279,8 +1349,10 @@ export function EditCanvasPage() {
         }
       }
 
+      // The save route still takes an upload until the core takes over saving.
+      const pdfFile = await readPdfFile(file, baseName(file));
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', pdfFile);
       formData.append(
         'annotations',
         new Blob([JSON.stringify(exportedPages)], { type: 'application/json' }),
@@ -1336,14 +1408,6 @@ export function EditCanvasPage() {
         background: 'var(--canvas-bg)',
       }}
     >
-      {/* Hidden File Input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileBrowse}
-        accept=".pdf"
-        className="hidden"
-      />
       <input
         type="file"
         ref={imageInputRef}
@@ -1400,11 +1464,11 @@ export function EditCanvasPage() {
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
-                <Filename name={file.name} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
-                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{formatBytes(file.size)}</span>
+                <Filename name={baseName(file)} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
+                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{fileSize !== null ? formatBytes(fileSize) : ''}</span>
               </div>
               <button
-                onClick={handleRemoveFile}
+                onClick={clearDocument}
                 className="text-[var(--canvas-text-muted)] hover:text-[var(--canvas-danger)] transition-colors p-1"
                 title={t('Clear PDF')}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
@@ -1415,10 +1479,7 @@ export function EditCanvasPage() {
           )}
           
           <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => void pickFile()}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -1449,7 +1510,7 @@ export function EditCanvasPage() {
         {file && loading && (
           <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
             <Loader2 className="animate-spin text-[var(--canvas-accent)]" size={14} />
-            <span>{t('Converting...')}</span>
+            <span>{t('Opening the PDF…')}</span>
           </div>
         )}
 
@@ -2229,7 +2290,7 @@ export function EditCanvasPage() {
       >
         {pages.length === 0 ? (
           <div 
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => void pickFile()}
             style={{ 
               margin: 'auto', 
               textAlign: 'center', 
@@ -2257,7 +2318,11 @@ export function EditCanvasPage() {
               <Upload size={28} className="text-[var(--canvas-accent)]" />
             </div>
             <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">{t('No Document Uploaded')}</p>
-            <p className="text-sm">{t('Click here or drag a file to begin editing.')}</p>
+            <p className="text-sm">
+              {desktop
+                ? t('Click here or drag a file to begin editing.')
+                : t('Canvas PDF runs in the Dokuwu desktop app. It reads the PDF straight from your computer, which the browser preview cannot do.')}
+            </p>
           </div>
         ) : (
           <div 

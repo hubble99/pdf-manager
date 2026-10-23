@@ -1,4 +1,5 @@
-import apiClient from '../../api/client';
+import { invoke } from '@tauri-apps/api/core';
+import { toCoreError } from '../../api/nativeCore';
 
 export interface ApplicationFontEntry {
   id: string;
@@ -9,8 +10,14 @@ export interface ApplicationFontEntry {
   italic: boolean;
 }
 
-interface FontListResponse {
-  fonts: Array<Partial<ApplicationFontEntry> & Pick<ApplicationFontEntry, 'id' | 'family' | 'filename'>>;
+type FontListItem = Partial<ApplicationFontEntry> & Pick<ApplicationFontEntry, 'id' | 'family' | 'filename'>;
+
+async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (err) {
+    throw toCoreError(err);
+  }
 }
 
 export interface ApplicationFontLoadResult {
@@ -51,7 +58,7 @@ function normalizeFamily(family: string): string {
   return family.trim().toLocaleLowerCase();
 }
 
-function normalizeEntry(entry: FontListResponse['fonts'][number]): ApplicationFontEntry {
+function normalizeEntry(entry: FontListItem): ApplicationFontEntry {
   const weight = Number.isFinite(Number(entry.weight))
     ? Math.max(1, Math.min(1000, Math.round(Number(entry.weight))))
     : entry.bold ? 700 : 400;
@@ -180,11 +187,8 @@ export async function ensureApplicationFontFace(
   let task = registrationTasks.get(entry.id);
   if (!task) {
     task = (async () => {
-      const response = await apiClient.get<ArrayBuffer>(
-        `/api/v1/fonts/${encodeURIComponent(entry.id)}/file`,
-        { responseType: 'arraybuffer' },
-      );
-      const face = new FontFace(entry.family, response.data, {
+      const data = await call<ArrayBuffer>('core_font_read', { id: entry.id });
+      const face = new FontFace(entry.family, data, {
         weight: String(entry.weight),
         style: entry.italic ? 'italic' : 'normal',
       });
@@ -204,8 +208,8 @@ export async function ensureApplicationFontFace(
 }
 
 export async function loadApplicationFontLibrary(): Promise<ApplicationFontLoadResult> {
-  const response = await apiClient.get<FontListResponse>('/api/v1/fonts');
-  const entries = (Array.isArray(response.data.fonts) ? response.data.fonts : []).map(normalizeEntry);
+  const fonts = await call<FontListItem[]>('core_font_list');
+  const entries = (Array.isArray(fonts) ? fonts : []).map(normalizeEntry);
   return {
     families: uniqueSortedFamilies(entries.map((entry) => entry.family)),
     entries,

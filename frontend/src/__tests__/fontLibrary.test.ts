@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
-vi.mock('../api/client', () => ({
-  default: { get },
-}));
+vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
 import {
   ensureApplicationFontFace,
@@ -37,7 +35,7 @@ describe('Edit Canvas application font library', () => {
   const add = vi.fn();
 
   beforeEach(() => {
-    get.mockReset();
+    invoke.mockReset();
     add.mockReset();
     vi.stubGlobal('FontFace', MockFontFace);
     Object.defineProperty(document, 'fonts', {
@@ -51,12 +49,13 @@ describe('Edit Canvas application font library', () => {
       { id: 'roboto-regular', family: 'Roboto', filename: 'Roboto-Regular.ttf', weight: 400, bold: false, italic: false },
       { id: 'roboto-medium', family: 'Roboto', filename: 'Roboto-Medium.ttf', weight: 500, bold: false, italic: false },
     ];
-    get.mockResolvedValueOnce({ data: { fonts } });
+    invoke.mockResolvedValueOnce(fonts);
 
     const result = await loadApplicationFontLibrary();
 
     expect(result).toEqual({ families: ['Roboto'], entries: fonts });
-    expect(get).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('core_font_list', undefined);
     expect(add).not.toHaveBeenCalled();
   });
 
@@ -65,11 +64,11 @@ describe('Edit Canvas application font library', () => {
       { id: 'poppins-medium', family: 'Poppins', filename: 'Poppins-Medium.ttf', weight: 500, bold: false, italic: false },
       { id: 'poppins-medium-italic', family: 'Poppins', filename: 'Poppins-MediumItalic.ttf', weight: 500, bold: false, italic: true },
     ];
-    get.mockResolvedValueOnce({ data: new ArrayBuffer(8) });
+    invoke.mockResolvedValueOnce(new ArrayBuffer(8));
 
     await expect(ensureApplicationFontFace(fonts, 'Poppins', 500, true)).resolves.toBe(true);
 
-    expect(get).toHaveBeenCalledWith('/api/v1/fonts/poppins-medium-italic/file', { responseType: 'arraybuffer' });
+    expect(invoke).toHaveBeenCalledWith('core_font_read', { id: 'poppins-medium-italic' });
     expect(add).toHaveBeenCalledTimes(1);
     expect(add.mock.calls[0][0]).toMatchObject({
       family: 'Poppins',

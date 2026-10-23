@@ -978,10 +978,13 @@ dependencies = [
  "mupdf",
  "png 0.18.1",
  "qrcode",
+ "regex",
  "serde",
+ "serde_json",
  "sha2",
  "sysinfo",
  "thiserror 2.0.18",
+ "ttf-parser",
  "webp",
 ]
 
