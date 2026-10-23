@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use dokuwu_core::ops::pdf_render::{pdf_info, QualityHint, RenderDocument, RenderService};
+use dokuwu_core::ops::pdf_render::{editor_dpi, pages_meta, pdf_info, QualityHint, RenderDocument, RenderService};
 use dokuwu_core::CoreError;
 
 fn fixture(name: &str) -> PathBuf {
@@ -273,4 +273,56 @@ fn a_stopped_service_answers_with_an_error() {
     let service = RenderService::with_workers(1);
     service.shutdown();
     assert_eq!(service.render(&fixture("photo.pdf"), 1, 72, QualityHint::Low).unwrap_err().code(), "internal");
+}
+
+
+#[test]
+fn editor_dpi_clamps_and_keeps_pages_under_the_pixel_ceiling() {
+    assert_eq!(editor_dpi(595.0, 842.0, 10), 72);
+    assert_eq!(editor_dpi(595.0, 842.0, 200), 200);
+    assert_eq!(editor_dpi(595.0, 842.0, 9999), 500);
+    // 14400 x 14400 pt at 500 dpi is far over 60 megapixels.
+    let dpi = editor_dpi(14400.0, 14400.0, 500);
+    let side = 14400.0 * dpi as f64 / 72.0;
+    assert!(dpi < 500 && side * side <= 60_000_000.0, "{dpi}");
+}
+
+#[test]
+fn pages_meta_gives_every_page_size_as_rendered() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut rotated = PageSpec::new(300.0, 500.0, "");
+    rotated.rotate = 90;
+    let mut cropped = PageSpec::new(612.0, 792.0, "");
+    cropped.crop = Some([10.0, 20.0, 310.0, 420.0]);
+    let path = write_pdf(&dir, "mixed.pdf", &[PageSpec::new(595.0, 842.0, ""), rotated, cropped], None);
+
+    let meta = pages_meta(&path, 200).unwrap();
+    assert_eq!(meta.total, 3);
+    assert_eq!((meta.pages[0].index, meta.pages[2].index), (0, 2));
+    assert_eq!((meta.pages[1].width_pt, meta.pages[1].height_pt), (500.0, 300.0));
+    assert_eq!((meta.pages[2].width_pt, meta.pages[2].height_pt), (300.0, 400.0));
+
+    // The announced pixel size is what a render at that dpi produces.
+    let doc = RenderDocument::open(&path).unwrap();
+    for page in &meta.pages {
+        let rendered = doc.render_editor(page.index + 1, 200).unwrap();
+        assert_eq!((rendered.width, rendered.height, rendered.dpi), (page.width, page.height, page.dpi));
+    }
+}
+
+#[test]
+fn editor_renders_go_through_the_shared_service() {
+    let service = RenderService::new();
+    let low = service.render_editor(&fixture("photo.pdf"), 1, 72).unwrap();
+    let high = service.render_editor(&fixture("photo.pdf"), 1, 200).unwrap();
+    assert_eq!((low.dpi, high.dpi), (72, 200));
+    assert!(high.width > low.width);
+    assert_eq!(&high.png[..8], b"\x89PNG\r\n\x1a\n");
+    assert!(matches!(service.render_editor(&fixture("photo.pdf"), 99, 200), Err(CoreError::InvalidInput(_))));
+    assert!(matches!(service.render_editor(&fixture("encrypted.pdf"), 1, 200), Err(CoreError::PasswordRequired)));
+}
+
+#[test]
+fn pages_meta_refuses_a_protected_pdf() {
+    assert!(matches!(pages_meta(&fixture("encrypted.pdf"), 200), Err(CoreError::PasswordRequired)));
 }
