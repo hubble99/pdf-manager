@@ -3,10 +3,11 @@
  *
  * The editor names a PDF by its path. `fetchPagesMeta` gives every page's size
  * at once (nothing is rendered); `renderPage` then gives one page as a PNG at
- * the dpi the zoom needs, as a raw binary reply.
+ * the dpi the zoom needs, as a raw binary reply. `saveCanvas` writes the edited
+ * PDF.
  */
 import { invoke } from '@tauri-apps/api/core';
-import { toCoreError } from '../../api/nativeCore';
+import { runCoreJob, toCoreError, type CoreJobOptions } from '../../api/nativeCore';
 
 export interface PageMeta {
   /** 0-based page index. */
@@ -68,11 +69,39 @@ export async function renderPage(path: string, page: number, dpi: number): Promi
   return decodeRenderedPage(buffer);
 }
 
+export interface SaveReport {
+  /** The saved PDF, in the Downloads folder. */
+  outputPath: string;
+  outputSizeBytes: number;
+  pages: number;
+  /** Pages that had annotations stamped onto them. */
+  stampedPages: number;
+  durationMs: number;
+}
+
 /**
- * The PDF as a `File`, for saving through the old backend, which still takes
- * an upload.
+ * Stamps the annotations (one entry per page, as the editor builds them) onto
+ * the PDF at `path` and writes the result to the Downloads folder.
+ *
+ * The annotations can hold a lot of picture data, so they go over as one raw
+ * message into a scratch file that the save job reads and deletes.
  */
-export async function readPdfFile(path: string, name: string): Promise<File> {
-  const buffer = await call<ArrayBuffer>('core_canvas_read_pdf', { path });
-  return new File([buffer], name, { type: 'application/pdf' });
+export async function saveCanvas(
+  path: string,
+  annotations: unknown[],
+  outputName: string,
+  jobOptions?: CoreJobOptions,
+): Promise<SaveReport> {
+  const bytes = new TextEncoder().encode(JSON.stringify(annotations));
+  let annotationsPath: string;
+  try {
+    annotationsPath = await invoke<string>('core_canvas_stash_annotations', bytes);
+  } catch (err) {
+    throw toCoreError(err);
+  }
+  return runCoreJob<SaveReport>(
+    'core_canvas_save_start',
+    { source: path, annotationsPath, outputName: outputName.trim() || null },
+    jobOptions,
+  );
 }

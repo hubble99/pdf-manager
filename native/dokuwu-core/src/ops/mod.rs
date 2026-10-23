@@ -12,6 +12,7 @@ pub mod organize;
 pub(crate) mod ordered;
 pub mod page_ranges;
 pub mod zip_stream;
+pub mod canvas_save;
 pub mod checksum;
 pub mod pdf_to_word;
 pub mod image_convert;
