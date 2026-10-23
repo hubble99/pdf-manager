@@ -37,6 +37,7 @@ struct Config {
     inspector_program: Option<PathBuf>,
     inspector_arguments: Vec<String>,
     inspector_endpoint: Option<String>,
+    native_inspector: bool,
     inspection_cache_dir: Option<PathBuf>,
     inspection_cache_id: String,
     test_mode: bool,
@@ -64,6 +65,7 @@ fn parse_config() -> Result<Config, String> {
     let mut inspector_program = None;
     let mut inspector_arguments = Vec::new();
     let mut inspector_endpoint = None;
+    let mut native_inspector = false;
     let mut inspection_cache_dir = None;
     let mut inspection_cache_id = String::new();
     let mut test_mode = false;
@@ -83,6 +85,7 @@ fn parse_config() -> Result<Config, String> {
                     .ok_or_else(|| "missing inspector argument value".to_string())?,
             ),
             "--inspector-endpoint" => inspector_endpoint = args.next(),
+            "--native-inspector" => native_inspector = true,
             "--inspection-cache-dir" => inspection_cache_dir = args.next().map(PathBuf::from),
             "--inspection-cache-id" => {
                 inspection_cache_id = args
@@ -122,6 +125,9 @@ fn parse_config() -> Result<Config, String> {
     if test_timeout.is_some() && !test_mode {
         return Err("test timeout requires test mode".into());
     }
+    if native_inspector && inspector_program.is_some() {
+        return Err("native inspector excludes an external inspector".into());
+    }
     Ok(Config {
         pdfium_library: pdfium_library
             .ok_or_else(|| "explicit PDFium library argument is required".to_string())?,
@@ -135,6 +141,7 @@ fn parse_config() -> Result<Config, String> {
         inspector_program,
         inspector_arguments,
         inspector_endpoint,
+        native_inspector,
         inspection_cache_dir,
         inspection_cache_id,
         test_mode,
@@ -857,6 +864,20 @@ fn run(config: Config) -> Result<(), String> {
                     ),
                 ),
                 _ => base,
+            }
+        }
+        None if config.native_inspector => {
+            let native: Box<dyn ResourceInspector> =
+                Box::new(edit_content_engine::native_inspector::NativeResourceInspector);
+            match config.inspection_cache_dir {
+                Some(directory) if !config.inspection_cache_id.is_empty() => Box::new(
+                    edit_content_engine::resource_inspector::DiskCachingInspector::new(
+                        native,
+                        directory,
+                        config.inspection_cache_id,
+                    ),
+                ),
+                _ => native,
             }
         }
         None if config.test_mode => Box::new(TestResourceInspector),

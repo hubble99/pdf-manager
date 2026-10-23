@@ -93,13 +93,8 @@ def default_worker_config() -> WorkerLaunchConfig:
         worker_command=worker_command,
         pdfium_library=Path(library_value),
         workspace_root=settings.APP_DATA_DIR / "edit-content-worker",
-        inspector_command=(
-            (sys.executable, "--edit-content-inspector")
-            if getattr(sys, "frozen", False)
-            else (sys.executable, "-m", "features.edit_content.resource_inspector_cli")
-        ),
+        native_inspector=True,
         parent_process_id=os.getpid() if resource_dir else None,
-        inspector_service=service.endpoint if (service := get_inspector_service()) else None,
         inspection_cache_id=f"{APP_VERSION}/{identity.library_sha256}",
     )
 

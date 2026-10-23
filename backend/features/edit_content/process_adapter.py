@@ -60,7 +60,7 @@ class WorkerLaunchConfig:
     worker_command: tuple[str, ...]
     pdfium_library: Path
     workspace_root: Path
-    inspector_command: tuple[str, ...]
+    inspector_command: tuple[str, ...] | None
     startup_timeout_seconds: float = 30.0
     inspect_timeout_seconds: float = 30.0
     close_timeout_seconds: float = 10.0
@@ -70,6 +70,8 @@ class WorkerLaunchConfig:
     inspector_service: Callable[[], tuple[str, str] | None] | None = None
     # Identifies the inspector build; cached inspections of another build are ignored.
     inspection_cache_id: str = ""
+    # The worker inspects documents itself (no external inspector process).
+    native_inspector: bool = False
 
     @classmethod
     def create(
@@ -78,21 +80,25 @@ class WorkerLaunchConfig:
         worker_command: Sequence[str],
         pdfium_library: Path,
         workspace_root: Path,
-        inspector_command: Sequence[str],
+        inspector_command: Sequence[str] | None = None,
         parent_process_id: int | None = None,
         inspector_service: Callable[[], tuple[str, str] | None] | None = None,
         inspection_cache_id: str = "",
+        native_inspector: bool = False,
     ) -> "WorkerLaunchConfig":
-        if not worker_command or not inspector_command:
-            raise ValueError("worker and inspector commands are required")
+        if not worker_command:
+            raise ValueError("worker command is required")
+        if native_inspector == bool(inspector_command):
+            raise ValueError("exactly one of a native or an external inspector is required")
         return cls(
             tuple(str(part) for part in worker_command),
             Path(pdfium_library),
             Path(workspace_root),
-            tuple(str(part) for part in inspector_command),
+            tuple(str(part) for part in inspector_command) if inspector_command else None,
             parent_process_id=parent_process_id,
             inspector_service=inspector_service,
             inspection_cache_id=inspection_cache_id,
+            native_inspector=native_inspector,
         )
 
 
@@ -135,7 +141,6 @@ class ContentWorkerAdapter:
             active_session = session_id or uuid.uuid4().hex
             if accepted_revision < 0:
                 raise ContentWorkerError("Content revision is invalid")
-            inspector_program, *inspector_args = self._config.inspector_command
             command = [
                 *self._config.worker_command,
                 "--pdfium-library",
@@ -148,11 +153,14 @@ class ContentWorkerAdapter:
                 str(source_path),
                 "--accepted-revision",
                 str(accepted_revision),
-                "--inspector-program",
-                inspector_program,
             ]
-            for argument in inspector_args:
-                command.extend(("--inspector-arg", argument))
+            if self._config.native_inspector:
+                command.append("--native-inspector")
+            else:
+                inspector_program, *inspector_args = self._config.inspector_command
+                command.extend(("--inspector-program", inspector_program))
+                for argument in inspector_args:
+                    command.extend(("--inspector-arg", argument))
             if self._config.parent_process_id is not None:
                 command.extend(("--parent-process-id", str(self._config.parent_process_id)))
             worker_env = None

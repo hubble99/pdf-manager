@@ -11,6 +11,7 @@ pub mod discovery;
 pub mod hit_test;
 pub mod identity;
 pub mod marked_content;
+pub mod native_inspector;
 pub mod preflight;
 pub mod replacement;
 pub mod resource_inspector;

@@ -83,13 +83,6 @@ async def lifespan(app: FastAPI):
     logger.info("PDF Manager starting up — cleaning leftover temp files from previous session...")
     _clean_directory(settings.TEMP_DIR, "temp")
     settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)  # ensure output dir exists
-    try:
-        # Pay the inspector's interpreter startup now, while the user is still choosing a file.
-        from features.edit_content.session_service import prewarm_inspector_service
-
-        prewarm_inspector_service()
-    except Exception:
-        logger.exception("Edit Content inspector pre-warm failed; one-shot inspection will be used")
     logger.info("Startup cleanup complete. Ready to serve requests.")
 
     yield  # ← app runs here
