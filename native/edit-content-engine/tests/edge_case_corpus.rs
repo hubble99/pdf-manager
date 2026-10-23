@@ -4,7 +4,9 @@
 //! Each case is a small synthetic PDF that reproduces one class of document
 //! seen in UAT (longer text, missing glyphs, multi-line input, hidden text
 //! layers, Type 3 fonts, signature stamps). The test pins the engine's verdict
-//! for each class so a later change cannot silently loosen or tighten it.
+//! for each class so a later change cannot silently loosen or tighten it. Every
+//! test runs twice: once with the Python inspector and once with the native one,
+//! and both must give the same pinned verdicts.
 //!
 //! Run with `EDIT_CONTENT_TEST_PDFIUM_PATH=<pinned libpdfium> cargo test --locked`.
 
@@ -150,7 +152,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn open(pdf: &[u8]) -> Self {
+    fn open(pdf: &[u8], native: bool) -> Self {
         let library = env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH")
             .map(PathBuf::from)
             .expect("EDIT_CONTENT_TEST_PDFIUM_PATH must identify the pinned phase-1 library");
@@ -163,14 +165,21 @@ impl Worker {
         std::fs::create_dir(&workspace_root).unwrap();
         std::fs::write(&source, pdf).unwrap();
         let script = backend_root().join("features/edit_content/resource_inspector_cli.py");
-        let mut child = Command::new(env!("CARGO_BIN_EXE_edit-content-engine"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_edit-content-engine"));
+        command
             .args(["--pdfium-library", library.to_str().unwrap()])
             .args(["--session-id", "session-corpus"])
             .args(["--workspace-root", workspace_root.to_str().unwrap()])
-            .args(["--source-file", source.to_str().unwrap()])
-            .args(["--inspector-program", test_python().to_str().unwrap()])
-            .args(["--inspector-arg", script.to_str().unwrap()])
-            .env("PYTHONPATH", backend_root())
+            .args(["--source-file", source.to_str().unwrap()]);
+        if native {
+            command.arg("--native-inspector");
+        } else {
+            command
+                .args(["--inspector-program", test_python().to_str().unwrap()])
+                .args(["--inspector-arg", script.to_str().unwrap()])
+                .env("PYTHONPATH", backend_root());
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -447,17 +456,26 @@ fn corpus() -> Vec<Case> {
     ]
 }
 
-fn open_case(pdf: &[u8], old: &str) -> (Worker, Value) {
-    let mut worker = Worker::open(pdf);
+fn open_case(pdf: &[u8], old: &str, native: bool) -> (Worker, Value) {
+    let mut worker = Worker::open(pdf, native);
     let object = worker.object(old);
     (worker, object)
 }
 
 #[test]
 fn edge_case_corpus_verdicts_are_pinned() {
+    edge_case_corpus_verdicts(false);
+}
+
+#[test]
+fn edge_case_corpus_verdicts_are_pinned_with_the_native_inspector() {
+    edge_case_corpus_verdicts(true);
+}
+
+fn edge_case_corpus_verdicts(native: bool) {
     let mut failures = Vec::new();
     for case in corpus() {
-        let (mut worker, object) = open_case(&case.pdf, case.old);
+        let (mut worker, object) = open_case(&case.pdf, case.old, native);
         let target = object["targetId"].as_str().unwrap().to_string();
         let edit = replace_start(object["text"].as_str().unwrap(), case.old, case.new);
         let preflight = worker.preflight(&target, &edit);
@@ -523,6 +541,15 @@ fn edge_case_corpus_verdicts_are_pinned() {
 /// snapshot, so the same target can be corrected and applied without reselecting.
 #[test]
 fn a_guard_rejection_keeps_the_target_usable_for_a_corrected_draft() {
+    guard_rejection_keeps_the_target(false);
+}
+
+#[test]
+fn a_guard_rejection_keeps_the_target_usable_with_the_native_inspector() {
+    guard_rejection_keeps_the_target(true);
+}
+
+fn guard_rejection_keeps_the_target(native: bool) {
     for (pdf, old, rejected_new, reason) in [
         (
             single_page("BT /F1 12 Tf 30 100 Td (word) Tj ET"),
@@ -537,7 +564,7 @@ fn a_guard_rejection_keeps_the_target_usable_for_a_corrected_draft() {
             "REJECTED_LAYOUT",
         ),
     ] {
-        let (mut worker, object) = open_case(&pdf, old);
+        let (mut worker, object) = open_case(&pdf, old, native);
         let target = object["targetId"].as_str().unwrap().to_string();
         let text = object["text"].as_str().unwrap().to_string();
         let rejected = worker.apply(&target, &replace_start(&text, old, rejected_new));

@@ -189,16 +189,38 @@ def test_adapter_without_service_or_cache_id_passes_neither(tmp_path, monkeypatc
     assert "--inspection-cache-dir" not in seen["command"]
 
 
-def test_default_config_wires_service_and_cache_identity(monkeypatch):
+def test_default_config_uses_the_native_inspector_and_cache_identity():
     from features.edit_content import session_service
 
-    monkeypatch.setattr(session_service, "_inspector_service", None)
     config = session_service.default_worker_config()
-    try:
-        assert callable(config.inspector_service)
-        assert config.inspection_cache_id.startswith(session_service.APP_VERSION)
-    finally:
-        session_service.stop_inspector_service()
+    assert config.native_inspector is True
+    assert config.inspector_command is None and config.inspector_service is None
+    assert config.inspection_cache_id.startswith(session_service.APP_VERSION)
+
+
+def test_native_launch_passes_the_flag_and_no_external_inspector(tmp_path, monkeypatch):
+    seen = {}
+
+    def fake_popen(command, **kwargs):
+        seen["command"] = command
+        raise OSError("stop")
+
+    monkeypatch.setattr("features.edit_content.process_adapter.subprocess.Popen", fake_popen)
+    config = WorkerLaunchConfig.create(
+        worker_command=("worker",), pdfium_library=tmp_path / "p", workspace_root=tmp_path / "ws",
+        native_inspector=True, inspection_cache_id="build-1",
+    )
+    with pytest.raises(Exception):
+        ContentWorkerAdapter(config).start(_pdf(tmp_path / "a.pdf"))
+    assert "--native-inspector" in seen["command"]
+    assert "--inspector-program" not in seen["command"]
+    with pytest.raises(ValueError):
+        WorkerLaunchConfig.create(worker_command=("w",), pdfium_library=tmp_path, workspace_root=tmp_path)
+    with pytest.raises(ValueError):
+        WorkerLaunchConfig.create(
+            worker_command=("w",), pdfium_library=tmp_path, workspace_root=tmp_path,
+            inspector_command=("x",), native_inspector=True,
+        )
 
 
 def test_service_can_be_switched_off(monkeypatch):
