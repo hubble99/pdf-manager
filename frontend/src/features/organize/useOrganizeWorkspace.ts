@@ -458,7 +458,16 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
   }, [commit, mainSourceId, state.pages, state.sources]);
 
   // ── selection ─────────────────────────────────────────────────────────────
+  // Read through a ref so the callback keeps one identity and the memoised
+  // page cells are not all redrawn when the anchor or panel changes.
+  const selectContext = useRef({ anchor, panel });
+  const pageCountRef = useRef(state.pages.length);
+  useEffect(() => {
+    selectContext.current = { anchor, panel };
+    pageCountRef.current = state.pages.length;
+  });
   const selectAt = useCallback((index: number, modifiers: { toggle: boolean; range: boolean }) => {
+    const { anchor, panel } = selectContext.current;
     // While the insert panel is open, the clicked page also becomes the
     // reference the insertion is measured from.
     if (panel === 'insert') setInsertReferenceState(index + 1);
@@ -473,7 +482,7 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
     }
     setSelection(selectOnly(index));
     setAnchor(index);
-  }, [anchor, panel]);
+  }, []);
 
   const clearSelection = useCallback(() => {
     setSelection(new Set());
@@ -523,8 +532,8 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
 
   const removeAt = useCallback((index: number) => {
     commit((snapshot) => ({ pages: removePositions(snapshot.pages, [index]), sources: snapshot.sources }));
-    setSelection((previous) => pruneSelection(previous, state.pages.length - 1));
-  }, [commit, state.pages.length]);
+    setSelection((previous) => pruneSelection(previous, pageCountRef.current - 1));
+  }, [commit]);
 
   const move = useCallback((from: number, to: number) => {
     commit((snapshot) => ({ pages: movePage(snapshot.pages, from, to), sources: snapshot.sources }));
