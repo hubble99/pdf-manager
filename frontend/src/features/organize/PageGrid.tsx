@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors,
   type DragEndEvent,
@@ -7,7 +7,7 @@ import {
   SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Copy, FlipHorizontal2, RotateCw, Trash2 } from 'lucide-react';
+import { Copy, FlipVertical2, RotateCw, Trash2 } from 'lucide-react';
 import { sourceLetter } from './pageList';
 import type { InsertPosition, PageRef, SourceHandle } from './types';
 import { t } from '../../i18n';
@@ -38,7 +38,7 @@ function sourceLabel(sources: SourceHandle[], sourceId: string): string | null {
   return sourceLetter(index);
 }
 
-function PageCell({
+const PageCell = memo(function PageCell({
   page, position, label, thumbnail, selected, highlighted, marker, disabled,
   onSelect, onRotate, onFlip, onDuplicate, onRemove,
 }: {
@@ -136,7 +136,7 @@ function PageCell({
           aria-label={t('Mirror page at position {position}', { position: position + 1 })}
           title={t('Mirror horizontally')}
         >
-          <FlipHorizontal2 size={13} aria-hidden="true" />
+          <FlipVertical2 size={13} aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -161,7 +161,7 @@ function PageCell({
       </div>
     </div>
   );
-}
+});
 
 export function PageGrid({
   pages, sources, thumbnails, selection, highlighted, markerIndex, markerSide, disabled,

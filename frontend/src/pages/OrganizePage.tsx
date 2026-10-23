@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Info, Layers, ListTree, Loader2,
-  RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipHorizontal2, Upload, X,
+  RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipVertical2, Upload, X,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 import { Filename } from '../components/Filename';
@@ -223,7 +223,7 @@ export function OrganizePage() {
                   <RotateCw size={13} aria-hidden="true" /> {t('Rotate')}
                 </button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={workspace.flipSelection} disabled={workspace.isBusy}>
-                  <FlipHorizontal2 size={13} aria-hidden="true" /> {t('Flip')}
+                  <FlipVertical2 size={13} aria-hidden="true" /> {t('Flip')}
                 </button>
                 <button type="button" className="btn btn-danger btn-sm" onClick={workspace.deleteSelection} disabled={workspace.isBusy}>
                   <Trash2 size={13} aria-hidden="true" /> {t('Delete')}
