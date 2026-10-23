@@ -7,6 +7,7 @@ pub mod folder_scan;
 pub mod housekeeping;
 pub mod naming;
 pub mod natural_sort;
+pub mod organize;
 pub(crate) mod ordered;
 pub mod page_ranges;
 pub mod zip_stream;

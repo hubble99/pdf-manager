@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import {
-  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Layers, ListTree, Loader2,
+  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Info, Layers, ListTree, Loader2,
   RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipHorizontal2, Upload, X,
 } from 'lucide-react';
 import { PageHeader } from '../components/ui';
@@ -8,36 +8,56 @@ import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
 import { DeletePagesPanel, InsertPanel, SourcesPanel } from '../features/organize/panels';
 import { useOrganizeWorkspace } from '../features/organize/useOrganizeWorkspace';
-import { checkFileKind } from '../features/organize/fileKind';
-import { IMAGE_ACCEPT, PDF_ACCEPT } from '../features/organize/types';
+import { IMAGE_EXTENSIONS, PDF_EXTENSIONS } from '../features/organize/types';
+import { useNativePaths } from '../hooks/useNativePaths';
 import { useToast } from '../hooks/useToast';
-import { openOutputFolder } from '../utils/tauriDialog';
+import { revealPath } from '../api/nativeCore';
+import { openFilePicker } from '../utils/tauriDialog';
 import { t, tn } from '../i18n';
+
+const PDF_FILTER = { name: 'PDF', extensions: PDF_EXTENSIONS };
+const IMAGE_FILTER = { name: 'Images', extensions: IMAGE_EXTENSIONS };
+const ANY_FILTER = { name: 'PDF and images', extensions: [...PDF_EXTENSIONS, ...IMAGE_EXTENSIONS] };
 
 export function OrganizePage() {
   const workspace = useOrganizeWorkspace();
   const { showToast } = useToast();
-  const mainInputRef = useRef<HTMLInputElement>(null);
-  const insertInputRef = useRef<HTMLInputElement>(null);
   const outputNameRef = useRef<HTMLInputElement>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
 
-  // The dialog is filtered per action, and the file is checked again afterwards
-  // because the picker can be switched to "All files".
-  const openInsertPicker = (accept: string) => {
-    const input = insertInputRef.current;
-    if (!input) return;
-    input.accept = accept;
-    input.click();
-  };
+  // Before a document is open only a PDF can start the workspace; afterwards a
+  // drop may also add an image to it.
+  const { desktop, isDragOver, pick } = useNativePaths({
+    filter: workspace.hasDocument ? ANY_FILTER : PDF_FILTER,
+    multiple: false,
+    pickerTitle: workspace.hasDocument ? t('Choose a PDF or an image') : t('Choose a PDF'),
+    disabled: workspace.isBusy,
+    onPaths: (accepted, rejected) => {
+      if (accepted.length === 0) {
+        if (rejected > 0) {
+          showToast({
+            type: 'error',
+            title: t('File not added'),
+            message: workspace.hasDocument
+              ? t('Use a PDF or a JPG, JPEG, PNG, WEBP, BMP, or TIFF image.')
+              : t('Only PDF files are accepted.'),
+          });
+        }
+        return;
+      }
+      if (workspace.hasDocument) void workspace.beginInsertFile(accepted[0]);
+      else void workspace.openFile(accepted[0]);
+    },
+  });
 
-  const insertFile = async (file: File, expected: 'pdf' | 'image') => {
-    const verdict = await checkFileKind(file, expected);
-    if (!verdict.ok) {
-      showToast({ type: 'error', title: t('File not added'), message: verdict.error ?? t('Unsupported file.') });
-      return;
-    }
-    await workspace.beginInsertFile(file);
+  // One dialog per action, filtered to what that action takes.
+  const openInsertPicker = async (filter: typeof PDF_FILTER, title: string) => {
+    const picked = await openFilePicker({
+      multiple: false,
+      filters: [{ name: filter.name, extensions: [...new Set(filter.extensions.flatMap((e) => [e, e.toUpperCase()]))] }],
+      title,
+    });
+    if (picked?.[0]) await workspace.beginInsertFile(picked[0]);
   };
 
   const mainSource = workspace.sources.find((source) => source.id === workspace.mainSourceId) ?? null;
@@ -55,50 +75,25 @@ export function OrganizePage() {
       />
 
       <div className="page-body page-body--workspace">
-        <input
-          ref={mainInputRef}
-          id="organize-main-input"
-          type="file"
-          accept=".pdf"
-          className="converter-file-input"
-          tabIndex={-1}
-          aria-hidden="true"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void workspace.openFile(file);
-          }}
-        />
-        <input
-          ref={insertInputRef}
-          id="organize-insert-input"
-          type="file"
-          className="converter-file-input"
-          tabIndex={-1}
-          aria-hidden="true"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            const accept = event.target.accept;
-            event.target.value = '';
-            if (file) void insertFile(file, accept === PDF_ACCEPT ? 'pdf' : 'image');
-          }}
-        />
+        {!desktop && (
+          <div className="card status-card" role="note">
+            <Info size={20} aria-hidden="true" />
+            <div className="status-card-copy">
+              <b>{t('Organize PDF runs in the Dokuwu desktop app')}</b>
+              <small>{t('It works on the files directly on your computer, which the browser preview cannot do.')}</small>
+            </div>
+          </div>
+        )}
 
-        {!workspace.hasDocument ? (
+        {desktop && !workspace.hasDocument && (
           <div className="form-col form-col--center">
             <div
               id="organize-drop-zone"
-              className="drop-zone"
+              className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
               role="button"
               tabIndex={0}
-              onClick={() => !workspace.isBusy && mainInputRef.current?.click()}
-              onKeyDown={(event) => event.key === 'Enter' && mainInputRef.current?.click()}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                const file = event.dataTransfer.files[0];
-                if (file) void workspace.openFile(file);
-              }}
+              onClick={() => !workspace.isBusy && void pick()}
+              onKeyDown={(event) => event.key === 'Enter' && !workspace.isBusy && void pick()}
               aria-label={t('Drop a PDF here or press Enter to browse')}
             >
               <Upload className="drop-zone-icon" aria-hidden="true" />
@@ -115,7 +110,9 @@ export function OrganizePage() {
               {t('Then insert pages from other PDFs or images, and arrange them in the grid.')}
             </p>
           </div>
-        ) : (
+        )}
+
+        {desktop && workspace.hasDocument && (
           <div className="organize-workspace">
             {mainSource && (
               <div className="organize-document-bar" aria-label={t('Main PDF')}>
@@ -159,10 +156,10 @@ export function OrganizePage() {
 
             <div className="organize-toolbar" role="toolbar" aria-label={t('Document actions')}>
               <div className="organize-toolbar-group">
-                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-pdf" onClick={() => openInsertPicker(PDF_ACCEPT)} disabled={workspace.isBusy}>
+                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-pdf" onClick={() => void openInsertPicker(PDF_FILTER, t('Choose a PDF to insert'))} disabled={workspace.isBusy}>
                   <FilePlus2 size={14} aria-hidden="true" /> {t('Insert PDF')}
                 </button>
-                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-image" onClick={() => openInsertPicker(IMAGE_ACCEPT)} disabled={workspace.isBusy}>
+                <button type="button" className="btn btn-secondary btn-sm" id="organize-insert-image" onClick={() => void openInsertPicker(IMAGE_FILTER, t('Choose an image to insert'))} disabled={workspace.isBusy}>
                   <FileImage size={14} aria-hidden="true" /> {t('Insert Image')}
                 </button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => workspace.openPanel('delete')} disabled={workspace.isBusy}>
@@ -197,7 +194,7 @@ export function OrganizePage() {
                   ref={outputNameRef}
                   className="input organize-output-name"
                   type="text"
-                  defaultValue="organized.pdf"
+                  defaultValue="organized"
                   aria-label={t('Output filename')}
                   disabled={workspace.isBusy}
                 />
@@ -205,7 +202,7 @@ export function OrganizePage() {
                   type="button"
                   className="btn btn-primary btn-sm"
                   id="organize-save"
-                  onClick={() => void workspace.save(outputNameRef.current?.value || 'organized.pdf')}
+                  onClick={() => void workspace.save(outputNameRef.current?.value || 'organized')}
                   disabled={workspace.isBusy || !workspace.hasDocument}
                 >
                   {workspace.isBusy ? (
@@ -303,10 +300,10 @@ export function OrganizePage() {
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  onClick={() => openOutputFolder()}
-                  title={t('Open folder')}
+                  onClick={() => { void revealPath(workspace.result?.outputPath ?? '').catch(() => undefined); }}
+                  title={t('Show in folder')}
                 >
-                  <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
+                  <FolderOpen size={14} aria-hidden="true" /> {t('Show in folder')}
                 </button>
               </div>
             )}

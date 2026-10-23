@@ -1,17 +1,33 @@
-import apiClient from '../../api/client';
-import { getFilenameFromHeaders } from '../../utils/downloadHelper';
+/**
+ * Organize through the native core (`ops::organize`).
+ *
+ * A file is named by its path on disk and added once; the core answers with a
+ * handle that later calls use. Thumbnails come in bounded batches as one raw
+ * binary message, and saving is a job that writes the new PDF to the Downloads
+ * folder under a free name.
+ */
+import { invoke } from '@tauri-apps/api/core';
+import { runCoreJob, toCoreError, type CoreJobOptions } from '../../api/nativeCore';
 import type { SourceKind } from './types';
 
-export interface UploadedDocument {
+export interface OpenedDocument {
   documentId: string;
   name: string;
   kind: SourceKind;
   pageCount: number;
 }
 
+export interface Thumbnail {
+  page: number;
+  width: number;
+  height: number;
+  png: Uint8Array;
+}
+
 export interface ThumbnailBatch {
+  start: number;
   total: number;
-  pages: { page: number; data: string; width: number; height: number }[];
+  pages: Thumbnail[];
 }
 
 export interface AssemblePagePayload {
@@ -21,72 +37,78 @@ export interface AssemblePagePayload {
   flip: boolean;
 }
 
-export interface AssembledDocument {
-  blob: Blob;
-  filename: string;
-  totalPages: number;
+export interface AssembleReport {
+  outputPath: string;
+  outputSizeBytes: number;
+  pages: number;
+  durationMs: number;
 }
 
-/** Upload one PDF or image once; later calls reference the returned handle. */
-export async function uploadDocument(file: File): Promise<UploadedDocument> {
-  const form = new FormData();
-  form.append('file', file);
-  const response = await apiClient.post<{ status: string; data: Record<string, unknown> }>(
-    '/api/v1/organize/documents/',
-    form,
-  );
-  const data = response.data.data;
-  return {
-    documentId: String(data.document_id),
-    name: String(data.name),
-    kind: data.kind === 'image' ? 'image' : 'pdf',
-    pageCount: Number(data.page_count),
-  };
+async function call<T>(command: string, args: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (err) {
+    throw toCoreError(err);
+  }
 }
 
-/** Fetch one bounded batch of thumbnails for an uploaded document. */
+/** Adds one PDF or image; later calls reference the returned handle. */
+export const openDocument = (path: string): Promise<OpenedDocument> => call('core_organize_open', { path });
+
+/**
+ * Reads the batch message of the core: little endian `start, total, count`,
+ * then per page `page, width, height, length` and that many PNG bytes.
+ */
+export function decodeThumbnailBatch(buffer: ArrayBuffer): ThumbnailBatch {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  const word = (offset: number) => view.getUint32(offset, true);
+  const count = word(8);
+  const pages: Thumbnail[] = [];
+  let offset = 12;
+  for (let index = 0; index < count; index += 1) {
+    const length = word(offset + 12);
+    pages.push({
+      page: word(offset),
+      width: word(offset + 4),
+      height: word(offset + 8),
+      png: bytes.slice(offset + 16, offset + 16 + length),
+    });
+    offset += 16 + length;
+  }
+  return { start: word(0), total: word(4), pages };
+}
+
+/** One bounded batch of thumbnails (page `start` onward) for a handle. */
 export async function fetchThumbnails(
   documentId: string,
   start: number,
   count: number,
-  targetWidth: number,
+  width: number,
 ): Promise<ThumbnailBatch> {
-  const response = await apiClient.post<{ status: string; data: ThumbnailBatch }>(
-    `/api/v1/organize/documents/${documentId}/thumbnails/`,
-    null,
-    { params: { start, count, target_width: targetWidth } },
-  );
-  return response.data.data;
+  const buffer = await call<ArrayBuffer>('core_organize_thumbnails', { documentId, start, count, width });
+  return decodeThumbnailBatch(buffer);
 }
 
-export async function releaseDocument(documentId: string): Promise<void> {
-  await apiClient.delete(`/api/v1/organize/documents/${documentId}`);
-}
+/** Forgets a file of the workspace; the file itself is left alone. */
+export const releaseDocument = (documentId: string): Promise<boolean> =>
+  call('core_organize_release', { documentId });
 
-/** Assemble the final page list into one PDF. */
-export async function assembleDocument(
+/** Builds one PDF from the page list in the Downloads folder. */
+export const assembleDocument = (
   pages: AssemblePagePayload[],
-  outputFilename: string,
-): Promise<AssembledDocument> {
-  const response = await apiClient.post(
-    '/api/v1/organize/assemble/',
-    { pages, output_filename: outputFilename },
-    { responseType: 'blob' },
+  outputName: string,
+  jobOptions?: CoreJobOptions,
+): Promise<AssembleReport> =>
+  runCoreJob<AssembleReport>(
+    'core_organize_assemble_start',
+    { pages, outputName: outputName.trim() || null },
+    jobOptions,
   );
-  const totalPages = parseInt(response.headers['x-total-pages'] || '0', 10);
-  return {
-    blob: new Blob([response.data], { type: 'application/pdf' }),
-    filename: getFilenameFromHeaders(response.headers, outputFilename || 'organized.pdf'),
-    totalPages,
-  };
-}
 
-/** Turn the base64 payload the API returns into an object URL. */
-export function thumbnailUrl(base64: string): string {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-  return URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+/** An object URL for a PNG; the caller revokes it. */
+export function thumbnailUrl(png: Uint8Array): string {
+  return URL.createObjectURL(new Blob([png as BlobPart], { type: 'image/png' }));
 }
 
 export function thumbnailKey(sourceId: string, page: number): string {

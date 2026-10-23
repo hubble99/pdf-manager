@@ -22,7 +22,7 @@ export function stemOf(path: string): string {
 }
 
 /** Path key for duplicate checks; Windows paths are case-insensitive. */
-const pathKey = (path: string) => path.replace(/\//g, '\\').toLowerCase();
+export const pathKey = (path: string) => path.replace(/\//g, '\\').toLowerCase();
 
 /** Appends `incoming` to `current`, skipping paths already in the list. */
 export function mergePaths(current: string[], incoming: string[]): { paths: string[]; skipped: number } {
