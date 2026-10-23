@@ -13,7 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import apiClient from '../api/client';
+import { clearTempFiles } from '../api/housekeeping';
+import { NativeCoreError } from '../api/nativeCore';
 import { getHistory, clearHistory, removeHistoryEntry } from '../utils/historyStore';
 import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
@@ -62,15 +63,16 @@ export function SettingsPage() {
   const handleClearTemp = async () => {
     setIsClearing(true);
     try {
-      const resp = await apiClient.post('/api/v1/settings/clear-temp');
-      const { files_deleted, bytes_freed } = resp.data.data;
+      const { filesDeleted, bytesFreed } = await clearTempFiles();
       showToast({
         type: 'success',
         title: t('Temp files cleared'),
-        message: tn(files_deleted, 'Deleted {n} file, freed {size}.', 'Deleted {n} files, freed {size}.', { size: formatBytes(bytes_freed) }),
+        message: tn(filesDeleted, 'Deleted {n} file, freed {size}.', 'Deleted {n} files, freed {size}.', { size: formatBytes(bytesFreed) }),
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('Unknown error');
+      const msg = err instanceof NativeCoreError && err.code === 'busy'
+        ? t('A job is still running. Wait for it to finish, then try again.')
+        : err instanceof Error ? err.message : t('Unknown error');
       showToast({ type: 'error', title: t('Clear failed'), message: msg });
     } finally {
       setIsClearing(false);

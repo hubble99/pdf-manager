@@ -44,6 +44,10 @@ pub enum CoreError {
         available_bytes: u64,
     },
 
+    /// A job is running and the request would pull files out from under it.
+    #[error("busy: {0}")]
+    Busy(String),
+
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -69,6 +73,7 @@ impl CoreError {
             CoreError::Unsupported(_) => "unsupported",
             CoreError::PasswordRequired => "password_required",
             CoreError::InsufficientMemory { .. } => "insufficient_memory",
+            CoreError::Busy(_) => "busy",
             CoreError::Internal(_) => "internal",
         }
     }

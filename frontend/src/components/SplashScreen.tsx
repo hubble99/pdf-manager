@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { t } from '../i18n';
+import { getCoreHealth } from '../api/housekeeping';
 import { APP_NAME } from '../config/app';
 
 interface SplashScreenProps {
@@ -11,8 +12,12 @@ interface SplashScreenProps {
 const MAX_WAIT_MS = 30_000; // 30 seconds timeout
 const POLL_INTERVAL_MS = 500; // poll every 500ms
 
+// Ready once the native core answers and, while a feature still uses the Python
+// sidecar, once the sidecar answers too (`sidecarRequired` comes from the core).
 async function pingHealth(): Promise<boolean> {
   try {
+    const health = await getCoreHealth();
+    if (!health.sidecarRequired) return true;
     const resp = await fetch('http://127.0.0.1:8000/health', {
       signal: AbortSignal.timeout(2000),
     });

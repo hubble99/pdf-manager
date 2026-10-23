@@ -540,7 +540,8 @@ static WORKDIR_SEQ: AtomicU64 = AtomicU64::new(0);
 impl WorkDir {
     fn create() -> CoreResult<Self> {
         let dir = std::env::temp_dir().join(format!(
-            "dokuwu-compress-{}-{}",
+            "{}compress-{}-{}",
+            crate::ops::housekeeping::SCRATCH_PREFIX,
             std::process::id(),
             WORKDIR_SEQ.fetch_add(1, Ordering::Relaxed)
         ));
@@ -615,6 +616,16 @@ mod tests {
         assert_eq!(sanitize_stem("a/b:c"), "a_b_c");
         assert_eq!(sanitize_stem("..."), "compressed");
         assert_eq!(sanitize_stem(""), "compressed");
+    }
+
+    #[test]
+    fn scratch_folder_name_is_recognised_by_housekeeping() {
+        use crate::ops::housekeeping::SCRATCH_PREFIX;
+        let work = WorkDir::create().unwrap();
+        let name = work.0.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.starts_with(SCRATCH_PREFIX));
+        // The exit sweep selects folders by the process id in the name.
+        assert_eq!(name.split('-').nth(2), Some(std::process::id().to_string().as_str()));
     }
 
     #[test]

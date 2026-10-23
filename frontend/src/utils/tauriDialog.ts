@@ -1,3 +1,5 @@
+import { openDownloadsFolder } from '../api/housekeeping';
+
 /**
  * Tauri v2 native dialog helpers with graceful fallback.
  * When running in a browser (dev mode without Tauri shell), these helpers
@@ -59,16 +61,15 @@ export const chooseFolderDialog = async (options?: { title?: string }): Promise<
   }
 };
 
-import apiClient from '../api/client';
-
 /**
- * Open the system Downloads folder.
- * Uses backend subprocess to reliably open folder on Windows.
+ * Open the system Downloads folder in the file manager.
+ * Resolves false outside the desktop shell or when the folder cannot be opened.
  */
 export const openOutputFolder = async (): Promise<boolean> => {
+  if (!isTauri()) return false;
   try {
-    const response = await apiClient.post('/api/v1/settings/open-downloads');
-    return response.data?.data?.opened === true;
+    await openDownloadsFolder();
+    return true;
   } catch (err) {
     console.warn('[tauriDialog] openOutputFolder failed:', err);
     return false;

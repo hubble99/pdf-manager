@@ -116,6 +116,7 @@ export const ID: Record<string, string> = {
   'Clear All': 'Hapus Semua',
   'Clear PDF': 'Hapus PDF',
   'Clear failed': 'Gagal membersihkan',
+  'A job is still running. Wait for it to finish, then try again.': 'Masih ada proses yang berjalan. Tunggu sampai selesai, lalu coba lagi.',
   'Clear list': 'Kosongkan daftar',
   'Clear selection': 'Hapus pilihan',
   'Clear temp files': 'Bersihkan file sementara',
