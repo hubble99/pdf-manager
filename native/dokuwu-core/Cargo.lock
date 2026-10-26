@@ -256,6 +256,8 @@ dependencies = [
  "flate2",
  "image",
  "jpeg-encoder",
+ "libc",
+ "log",
  "mupdf",
  "png",
  "qrcode",
@@ -270,7 +272,9 @@ dependencies = [
  "ttf-parser",
  "unicode-normalization",
  "unicode-properties",
+ "uuid",
  "webp",
+ "windows-sys",
  "zip",
 ]
 
@@ -1151,6 +1155,17 @@ name = "unicode-segmentation"
 version = "1.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+
+[[package]]
+name = "uuid"
+version = "1.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d258b83ceec21034727ecee8c382cfa6c3e133699b0742c64571814fb420c9f7"
+dependencies = [
+ "getrandom",
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "version_check"

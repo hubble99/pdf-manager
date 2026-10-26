@@ -6,6 +6,7 @@ mod desktop_lifecycle;
 mod core_bridge;
 mod core_canvas;
 mod core_convert;
+mod core_edit_content;
 mod core_housekeeping;
 mod core_pdf_compress;
 mod core_qr_barcode;
@@ -65,6 +66,10 @@ pub fn run() {
       core_canvas::core_font_add,
       core_canvas::core_font_remove,
       core_canvas::core_font_read,
+      core_edit_content::core_edit_content_open,
+      core_edit_content::core_edit_content_command,
+      core_edit_content::core_edit_content_cancel,
+      core_edit_content::core_edit_content_export,
       core_pdf_render::core_pdf_info,
       core_pdf_render::core_pdf_render_page,
     ])
@@ -99,6 +104,7 @@ pub fn run() {
       }
     })
     .setup(|app| {
+      app.manage(core_edit_content::EditContentState::for_app(app.handle()));
       core_housekeeping::sweep_stale_scratch();
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -145,6 +151,10 @@ pub fn run() {
       }
       if let Some(thumbs) = app_handle.try_state::<core_convert::ThumbState>() {
         thumbs.service.shutdown();
+      }
+      // Drain Edit Content requests and stop every worker before anything else is torn down.
+      if let Some(edit) = app_handle.try_state::<core_edit_content::EditContentState>() {
+        edit.shutdown();
       }
 
       core_housekeeping::clear_on_exit();
