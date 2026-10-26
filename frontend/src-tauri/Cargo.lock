@@ -976,6 +976,8 @@ dependencies = [
  "flate2",
  "image",
  "jpeg-encoder",
+ "libc",
+ "log",
  "mupdf",
  "png 0.18.1",
  "qrcode",
@@ -988,7 +990,9 @@ dependencies = [
  "ttf-parser",
  "unicode-normalization",
  "unicode-properties",
+ "uuid",
  "webp",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -25,15 +25,15 @@ import { Filename } from '../components/Filename';
 import { PageHeader, StateView } from '../components/ui';
 import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
-import { triggerBlobDownload } from '../utils/downloadHelper';
-import { buildOutputFilename } from '../utils/filenamePolicy';
+import { useNativePaths } from '../hooks/useNativePaths';
+import { baseName } from '../utils/paths';
 import { openOutputFolder } from '../utils/tauriDialog';
 import {
   applyContentDraft,
   cancelContentRequest,
   closeContentSession,
   contentRequestId,
-  downloadContentOutput,
+  exportContentOutput,
   hitTestContentObject,
   inspectContentObjects,
   moveContentHistory,
@@ -69,9 +69,6 @@ type PendingAction =
   | { kind: 'leave'; path?: string };
 
 
-// Same limit as the backend (MAX_SOURCE_BYTES); checked here so a large file is not uploaded first.
-const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
-
 /** Shortcuts typed into a text field belong to that field (its own undo, for example). */
 function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
@@ -94,14 +91,14 @@ function EditContentLimits({ collapsed = false }: { collapsed?: boolean }) {
 export function EditContentPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const pickerTriggerRef = useRef<HTMLButtonElement>(null);
   const renderSequence = useRef(0);
   const inspectSequence = useRef(0);
 
-  const [file, setFile] = useState<File | null>(null);
+  // The document being edited: the path it was opened from, and its name.
+  const [file, setFile] = useState<{ path: string; name: string } | null>(null);
   const [session, setSession] = useState<ContentSessionState | null>(null);
   const [discovery, setDiscovery] = useState<NativeDiscovery | null>(null);
   const [render, setRender] = useState<NativeRender | null>(null);
@@ -127,7 +124,6 @@ export function EditContentPage() {
   const [outputName, setOutputName] = useState('');
   const [ambiguous, setAmbiguous] = useState<NativeTextObjectDescriptor[]>([]);
   const [pending, setPending] = useState<PendingAction | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
   // Dry run of the engine's guards for the current draft (read-only, no PDF change).
@@ -277,25 +273,17 @@ export function EditContentPage() {
     };
   }, [unsaved]);
 
-  const openFile = useCallback(async (nextFile: File) => {
-    if (!nextFile.name.toLowerCase().endsWith('.pdf')) {
-      setError(t('Edit Content accepts PDF files only.'));
-      return;
-    }
-    if (nextFile.size > MAX_SOURCE_BYTES) {
-      setError(t('This PDF is larger than the 16 MiB Edit Content limit.'));
-      return;
-    }
+  const openFile = useCallback(async (path: string) => {
     setPhase('opening');
     setError(null);
     setNotice(null);
     try {
-      const reply = await openContentSession(nextFile);
+      const reply = await openContentSession(path);
       if (reply.status !== 'accepted') {
         setError(replyError(reply));
         return;
       }
-      setFile(nextFile);
+      setFile({ path, name: baseName(path) });
       setSession(reply.result.state);
       setDiscovery(reply.result.discovery);
       setPageIndex(0);
@@ -311,6 +299,17 @@ export function EditContentPage() {
       setPhase('idle');
     }
   }, [selectTarget]);
+
+  const { desktop, isDragOver, pick } = useNativePaths({
+    filter: { name: 'PDF', extensions: ['pdf'] },
+    multiple: false,
+    pickerTitle: t('Choose a PDF'),
+    disabled: phase !== 'idle' || session !== null,
+    onPaths: (accepted, rejected) => {
+      if (accepted.length > 0) void openFile(accepted[0]);
+      else if (rejected > 0) setError(t('Edit Content accepts PDF files only.'));
+    },
+  });
 
   const executePending = useCallback(async (action: PendingAction, currentSession = session) => {
     setPending(null);
@@ -465,9 +464,10 @@ export function EditContentPage() {
       if (edit) await refreshAcceptedCheckpoint(reply.result.state);
       setNotice(t('Verified output published.'));
       try {
-        const blob = await downloadContentOutput(session.sessionId, reply.result.outputId);
-        const finalName = buildOutputFilename(outputName.trim() || `${defaultStem}-edited`, 'pdf');
-        triggerBlobDownload(blob, finalName);
+        const exported = await exportContentOutput(
+          session.sessionId, reply.result.outputId, outputName.trim() || `${defaultStem}-edited`,
+        );
+        const finalName = exported.fileName;
         setSavedName(finalName);
         showToast({
           type: 'success',
@@ -636,38 +636,29 @@ export function EditContentPage() {
       <div className="page-body page-body--workspace">
         {!file || !session || !discovery ? (
           <div className="edit-content-onboarding">
+            {!desktop ? (
+              <div className="card status-card" role="note">
+                <AlertTriangle size={20} aria-hidden="true" />
+                <div className="status-card-copy">
+                  <b>{t('Edit Content runs in the Dokuwu desktop app')}</b>
+                  <small>{t('It works on the files directly on your computer, which the browser preview cannot do.')}</small>
+                </div>
+              </div>
+            ) : (
             <div
               className={`drop-zone${isDragOver ? ' drag-over' : ''}`}
               role="button"
               tabIndex={0}
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && fileInputRef.current?.click()}
-              onDragOver={(event) => { event.preventDefault(); setIsDragOver(true); }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setIsDragOver(false);
-                const next = event.dataTransfer.files[0];
-                if (next) void openFile(next);
-              }}
+              onClick={() => void pick()}
+              onKeyDown={(event) => (event.key === 'Enter' || event.key === ' ') && void pick()}
               aria-label={t('Open a PDF in Edit Content')}
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/pdf,.pdf"
-                hidden
-                onChange={(event) => {
-                  const next = event.target.files?.[0];
-                  event.target.value = '';
-                  if (next) void openFile(next);
-                }}
-              />
               {phase === 'opening' ? <Loader2 className="drop-zone-icon spin" aria-hidden="true" /> : <Upload className="drop-zone-icon" aria-hidden="true" />}
               <p className="drop-zone-title">{t('Open one PDF')}</p>
               <p className="drop-zone-sub">{t('Native text stays local. The original file is never overwritten.')}</p>
               <span className="badge badge-neutral">{t('PDF · up to 16 MiB')}</span>
             </div>
+            )}
             <div className="edit-content-safety-note">
               <Check size={18} aria-hidden="true" />
               <div>

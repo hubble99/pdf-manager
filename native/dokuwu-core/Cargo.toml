@@ -31,8 +31,17 @@ sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 thiserror = "2"
 ttf-parser = "0.25"
 unicode-normalization = "0.1"
+log = "0.4"
 unicode-properties = "0.1"
+uuid = { version = "1", features = ["v4"] }
 webp = { version = "0.3.1", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+# Atomic replace with write-through, and the session store lock.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 # Reads generated QR codes and barcodes back, to prove they scan.

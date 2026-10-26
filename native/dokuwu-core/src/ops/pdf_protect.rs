@@ -240,7 +240,7 @@ fn open_input(input: &Path) -> CoreResult<PdfDocument> {
 
 /// True for any PDF with an encryption dictionary, also one that opens without
 /// a password because only an owner password is set.
-fn is_encrypted(doc: &PdfDocument) -> CoreResult<bool> {
+pub(crate) fn is_encrypted(doc: &PdfDocument) -> CoreResult<bool> {
     if doc.needs_password().map_err(|e| internal("password check", e))? {
         return Ok(true);
     }

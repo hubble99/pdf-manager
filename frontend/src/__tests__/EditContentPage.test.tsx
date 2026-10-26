@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +6,22 @@ import { ToastProvider } from '../context/ToastContext';
 import { EditContentPage } from '../pages/EditContentPage';
 import type { ContentSessionState, NativeDiscovery } from '../features/edit-content/types';
 import * as contentApi from '../features/edit-content/api';
+
+type DragHandler = (event: { payload: { type: string; paths?: string[] } }) => void;
+const drag = vi.hoisted(() => ({ handlers: [] as DragHandler[] }));
+vi.mock('@tauri-apps/api/webview', () => ({
+  getCurrentWebview: () => ({
+    onDragDropEvent: async (handler: DragHandler) => {
+      drag.handlers.push(handler);
+      return () => { drag.handlers = drag.handlers.filter((h) => h !== handler); };
+    },
+  }),
+}));
+vi.mock('../utils/tauriDialog', () => ({
+  isTauri: () => true,
+  openFilePicker: vi.fn(async () => null),
+  openOutputFolder: vi.fn(async () => true),
+}));
 
 
 vi.mock('../features/edit-content/api', () => ({
@@ -20,7 +36,7 @@ vi.mock('../features/edit-content/api', () => ({
   moveContentHistory: vi.fn(),
   closeContentSession: vi.fn(),
   cancelContentRequest: vi.fn(),
-  downloadContentOutput: vi.fn(),
+  exportContentOutput: vi.fn(),
 }));
 
 
@@ -88,6 +104,12 @@ function renderPage() {
   );
 }
 
+/** Drops a PDF on the window, which is how the desktop shell hands the page a path. */
+async function dropPdf(path = 'C:\\Docs\\source.pdf') {
+  await waitFor(() => expect(drag.handlers.length).toBeGreaterThanOrEqual(1));
+  act(() => drag.handlers.forEach((handler) => handler({ payload: { type: 'drop', paths: [path] } })));
+}
+
 async function chooseNativeText(targetId: string) {
   fireEvent.click(await screen.findByRole('button', { name: 'Native text object' }));
   fireEvent.change(screen.getByRole('listbox', { name: 'Native text options' }), {
@@ -98,6 +120,7 @@ async function chooseNativeText(targetId: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  drag.handlers = [];
   vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery }));
   vi.mocked(contentApi.renderContentPage).mockResolvedValue(accepted('render-request', {
     pageIndex: 0,
@@ -128,10 +151,8 @@ describe('Edit Content page', () => {
         unsupportedCodePoints: [0x71],
       },
     }));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press q to continue' } });
     const message = await screen.findByText(/has no glyph for "q"/);
@@ -155,10 +176,8 @@ describe('Edit Content page', () => {
 
   it('does not block Apply when the advisory check itself fails', async () => {
     vi.mocked(contentApi.preflightContentEdit).mockRejectedValue(new Error('network'));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     await waitFor(() => expect(contentApi.preflightContentEdit).toHaveBeenCalled());
@@ -175,10 +194,8 @@ describe('Edit Content page', () => {
     vi.mocked(contentApi.applyContentDraft).mockResolvedValue(accepted(
       'apply-request', { state: { ...state, acceptedRevision: 1, dirty: true, canUndo: true }, clearDraft: true }, 1,
     ));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'bayam' } });
     await screen.findByText(/passes the engine checks/);
@@ -200,10 +217,8 @@ describe('Edit Content page', () => {
       ],
     };
     vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', { state, discovery: blankDiscovery }));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await screen.findByRole('heading', { name: 'Select text on the page' });
     fireEvent.click(screen.getByRole('button', { name: 'Native text object' }));
     const options = screen.getAllByRole('option').map((option) => option.textContent);
@@ -215,27 +230,21 @@ describe('Edit Content page', () => {
     vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
       state, discovery, permissionsRemoved: true,
     }) as never);
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     expect(await screen.findByText(/restricts editing/i)).toBeInTheDocument();
   });
 
   it('offers Open Folder once the verified PDF has been saved', async () => {
-    URL.createObjectURL = vi.fn(() => 'blob:saved');
-    URL.revokeObjectURL = vi.fn();
     vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
       state: { ...state, dirty: true, canUndo: true, acceptedRevision: 1 }, discovery,
     }));
     vi.mocked(contentApi.saveContentSession).mockResolvedValue(accepted('save-request', {
       state: { ...state, dirty: false, acceptedRevision: 1 }, outputId: 'output-1', clearDraft: true,
     }, 1) as never);
-    vi.mocked(contentApi.downloadContentOutput).mockResolvedValue(new Blob(['%PDF'], { type: 'application/pdf' }));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    vi.mocked(contentApi.exportContentOutput).mockResolvedValue({ path: 'C:\\Users\\me\\Downloads\\source-edited.pdf', fileName: 'source-edited.pdf' });
+    renderPage();
+    await dropPdf();
     fireEvent.click(await screen.findByRole('button', { name: /Save PDF/i }));
     expect(await screen.findByText(/source-edited\.pdf/)).toBeInTheDocument();
     expect(document.getElementById('edit-content-open-folder-btn')).not.toBeNull();
@@ -253,10 +262,8 @@ describe('Edit Content page', () => {
     vi.mocked(contentApi.hitTestContentObject).mockResolvedValue(accepted('hit-request', {
       hitTest: { outcome: 'ambiguous' as const, candidateTargetIds: ['target-0', 'target-blank'], mutationCommandCreated: false as const },
     }) as never);
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     fireEvent.click(await screen.findByTestId('edit-content-page'));
     // The one real object is selected outright; no "Choose the exact object" list appears.
     expect(await screen.findByLabelText('Replacement text')).toHaveValue('Press A to continue');
@@ -276,20 +283,16 @@ describe('Edit Content page', () => {
     vi.mocked(contentApi.hitTestContentObject).mockResolvedValue(accepted('hit-request', {
       hitTest: { outcome: 'ambiguous' as const, candidateTargetIds: ['target-hidden', 'target-blank'], mutationCommandCreated: false as const },
     }) as never);
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     fireEvent.click(await screen.findByTestId('edit-content-page'));
     expect(await screen.findByText(/invisible \(a hidden layer over an image\)/)).toBeInTheDocument();
   });
 
   it('opens text choices below the picker and shows V1 limits before editing', async () => {
-    const { container } = renderPage();
+    renderPage();
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    await dropPdf();
     await screen.findByRole('heading', { name: 'Select text on the page' });
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
     const trigger = screen.getByRole('button', { name: 'Native text object' });
@@ -322,10 +325,8 @@ describe('Edit Content page', () => {
     vi.mocked(contentApi.applyContentDraft).mockResolvedValue(accepted(
       'apply-request', { state: nextState, clearDraft: true }, 1,
     ));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Nomoo' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
@@ -342,10 +343,8 @@ describe('Edit Content page', () => {
     let finish!: (reply: Awaited<ReturnType<typeof contentApi.applyContentDraft>>) => void;
     vi.mocked(contentApi.applyContentDraft).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
     vi.mocked(contentApi.cancelContentRequest).mockResolvedValue(undefined);
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     const editor = await screen.findByLabelText('Replacement text');
     for (const value of ['P', 'Press', 'Press B to continue']) {
@@ -378,10 +377,8 @@ describe('Edit Content page', () => {
         result: { state, clearDraft: false },
       })
       .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF-1.4'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     fireEvent.click(await screen.findByTestId('edit-content-page', {}, { timeout: 3000 }), { clientX: 10, clientY: 10 });
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
@@ -425,10 +422,8 @@ describe('Edit Content page', () => {
         error: 'The selected text is no longer current. Select it again.',
         result: { state, clearDraft: false },
       });
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press A to continue now' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
@@ -452,10 +447,8 @@ describe('Edit Content page', () => {
       status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_COLLATERAL_INTEGRITY',
       result: { state, clearDraft: false },
     });
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(screen.getByRole('button', { name: 'Deselect' }));
@@ -489,10 +482,8 @@ describe('Edit Content page', () => {
       })
       .mockResolvedValueOnce(accepted('apply-request', { state: nextState, clearDraft: true }, 1));
 
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     const picker = await screen.findByRole('button', { name: 'Native text object' });
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
@@ -531,10 +522,8 @@ describe('Edit Content page', () => {
       error: 'The regenerated PDF did not preserve untouched content exactly enough.',
       result: { state, clearDraft: false },
     });
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(await screen.findByTestId('edit-content-page'));
@@ -549,9 +538,8 @@ describe('Edit Content page', () => {
   });
 
   it('offers apply, discard, and cancel before page deselection', async () => {
-    const { container } = renderPage();
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] } });
+    renderPage();
+    await dropPdf();
     fireEvent.click(await screen.findByTestId('edit-content-page'));
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(screen.getByRole('button', { name: 'Deselect' }));
@@ -568,9 +556,8 @@ describe('Edit Content page', () => {
       { state: nextState, clearDraft: true },
       1,
     ));
-    const { container } = renderPage();
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] } });
+    renderPage();
+    await dropPdf();
     const viewport = await screen.findByTestId('edit-content-page');
     fireEvent.click(viewport);
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
@@ -583,9 +570,8 @@ describe('Edit Content page', () => {
   });
 
   it('opens the editor after choosing an exact text object', async () => {
-    const { container } = renderPage();
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] } });
+    renderPage();
+    await dropPdf();
 
     await chooseNativeText('target-0');
 
@@ -594,10 +580,8 @@ describe('Edit Content page', () => {
   it('does not start Save or Undo from the keyboard while Apply is running', async () => {
     let finish!: (reply: Awaited<ReturnType<typeof contentApi.applyContentDraft>>) => void;
     vi.mocked(contentApi.applyContentDraft).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
@@ -614,10 +598,8 @@ describe('Edit Content page', () => {
   });
 
   it('leaves Ctrl+Z in the text box to the text box', async () => {
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     const editor = await screen.findByLabelText('Replacement text');
     fireEvent.change(editor, { target: { value: 'Press B to continue' } });
@@ -631,10 +613,8 @@ describe('Edit Content page', () => {
   });
 
   it('closes only the text picker when Escape is pressed in its search', async () => {
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     await chooseNativeText('target-0');
     await screen.findByLabelText('Replacement text');
     fireEvent.click(screen.getByRole('button', { name: 'Native text object' }));
@@ -650,10 +630,8 @@ describe('Edit Content page', () => {
         status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_UNSUPPORTED_STRUCTURE',
         result: {} as never,
       });
-    const { container } = renderPage();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [new File(['%PDF'], 'source.pdf', { type: 'application/pdf' })] },
-    });
+    renderPage();
+    await dropPdf();
     expect(await screen.findByText('This page could not be shown')).toBeInTheDocument();
     expect(screen.queryByText('Rendering verified PDF…')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Try again/ }));
@@ -661,13 +639,31 @@ describe('Edit Content page', () => {
     expect(contentApi.renderContentPage).toHaveBeenCalledTimes(2);
   });
 
-  it('refuses a PDF over the 16 MiB limit before uploading it', async () => {
-    const { container } = renderPage();
-    const large = new File(['%PDF'], 'large.pdf', { type: 'application/pdf' });
-    Object.defineProperty(large, 'size', { value: 16 * 1024 * 1024 + 1 });
-    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [large] } });
+  it('opens the PDF by its path and names the exported file after the output name', async () => {
+    vi.mocked(contentApi.saveContentSession).mockResolvedValue(accepted('save-request', {
+      state: { ...state, dirty: false, acceptedRevision: 1 }, outputId: 'output-1', clearDraft: true,
+    }, 1) as never);
+    vi.mocked(contentApi.exportContentOutput).mockResolvedValue({ path: 'C:\\Users\\me\\Downloads\\source-edited.pdf', fileName: 'source-edited.pdf' });
+    renderPage();
+    await dropPdf('C:\\Docs\\source.pdf');
+    await screen.findByTestId('edit-content-page');
+    expect(contentApi.openContentSession).toHaveBeenCalledWith('C:\\Docs\\source.pdf');
+    fireEvent.click(await screen.findByRole('button', { name: /Save PDF/i }));
+    await screen.findByText(/source-edited\.pdf/);
+    expect(contentApi.exportContentOutput).toHaveBeenCalledWith('session-1', 'output-1', 'source-edited');
+  });
+
+  it('says why a PDF could not be opened', async () => {
+    vi.mocked(contentApi.openContentSession).mockRejectedValue(new Error('This PDF is larger than the 16 MiB Edit Content limit.'));
+    renderPage();
+    await dropPdf('C:\\Docs\\large.pdf');
     expect(await screen.findByText('This PDF is larger than the 16 MiB Edit Content limit.')).toBeInTheDocument();
+  });
+
+  it('turns away a dropped file that is not a PDF', async () => {
+    renderPage();
+    await dropPdf('C:\\Docs\\notes.txt');
+    expect(await screen.findByText('Edit Content accepts PDF files only.')).toBeInTheDocument();
     expect(contentApi.openContentSession).not.toHaveBeenCalled();
   });
 });
-
