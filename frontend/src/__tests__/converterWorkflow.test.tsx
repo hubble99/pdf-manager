@@ -176,7 +176,7 @@ describe('unified converter workspace', () => {
     desktop.on = false;
     renderConverter();
     expect(screen.getByText('PDF & Image runs in the Dokuwu desktop app')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Drop a PDF here, or press Enter to browse')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Drop your PDF here, or press Enter to pick one')).not.toBeInTheDocument();
   });
 
   it('derives PDF direction and keeps the page field disabled in All pages mode', async () => {
@@ -329,7 +329,7 @@ describe('unified converter workspace', () => {
     });
     await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
-    await screen.findByText('Saved to your Downloads folder');
+    await screen.findByText('Your file is in Downloads!');
 
     invokeMock.mockClear();
     fireEvent.click(pageMode('Selected pages'));
@@ -372,7 +372,7 @@ describe('unified converter workspace', () => {
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'cancelled' });
 
     await waitFor(() => expect(convertButton()).toBeEnabled());
-    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your file is in Downloads!')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
@@ -391,7 +391,7 @@ describe('unified converter workspace', () => {
 
     await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
-    await screen.findByText('Saved to your Downloads folder');
+    await screen.findByText('Your file is in Downloads!');
     expect(screen.getByText('document_images.zip')).toBeInTheDocument();
     expect(screen.getByText(/3 pages · PNG · 150 DPI \(ZIP archive\) · 1\.43 MB/)).toBeInTheDocument();
     expect(startCalls('core_pdf_to_image_start')).toHaveLength(1);
@@ -418,7 +418,7 @@ describe('unified converter workspace', () => {
     await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
     await waitFor(() => expect(startCalls('core_pdf_to_image_start')).toHaveLength(1));
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
-    await screen.findByText('Saved to your Downloads folder');
+    await screen.findByText('Your file is in Downloads!');
 
     fireEvent.click(document.getElementById('converter-open-folder') as HTMLButtonElement);
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_reveal_path', { path: 'C:\\Users\\a\\Downloads\\document_images.zip' }));
@@ -491,7 +491,7 @@ describe('unified converter workspace', () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_job_cancel', { jobId: 7 }));
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your file is in Downloads!')).not.toBeInTheDocument();
   });
 
   it('keeps the batch and a retry path after a failed conversion', async () => {
@@ -509,7 +509,7 @@ describe('unified converter workspace', () => {
     expect(await screen.findByText(/could not be saved/)).toBeInTheDocument();
     expect(screen.getAllByText('document.pdf').length).toBeGreaterThan(0);
     expect(convertButton()).toBeEnabled();
-    expect(screen.queryByText('Saved to your Downloads folder')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your file is in Downloads!')).not.toBeInTheDocument();
   });
 
   it('aligns image requests with the displayed order and per-image transforms', async () => {
@@ -567,7 +567,7 @@ describe('unified converter workspace', () => {
       }),
     });
 
-    await screen.findByText('Saved to your Downloads folder');
+    await screen.findByText('Your file is in Downloads!');
     expect(screen.getByText(/Skipped because they could not be read: broken\.jpg/)).toBeInTheDocument();
     expect(screen.getByText(/1 page · A4 · 878\.9 KB/)).toBeInTheDocument();
   });

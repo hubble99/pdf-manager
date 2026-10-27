@@ -62,7 +62,7 @@ describe('Compress PDF helpers', () => {
 
   it('explains core errors in plain words', () => {
     expect(compressErrorMessage(new NativeCoreError('password_required', 'x'))).toMatch(/protected/);
-    expect(compressErrorMessage(new NativeCoreError('not_found', 'x'))).toMatch(/could not be found/);
+    expect(compressErrorMessage(new NativeCoreError('not_found', 'x'))).toMatch(/could not find the PDF/);
     expect(compressErrorMessage(new NativeCoreError('insufficient_memory', 'x'))).toMatch(/low on memory/);
     expect(compressErrorMessage(new NativeCoreError('internal', 'boom'))).toBe('boom');
   });
@@ -98,7 +98,7 @@ describe('Compress PDF page', () => {
     });
     render(<CompressPage />);
 
-    fireEvent.click(screen.getByRole('button', { name: /drop a pdf file here/i }));
+    fireEvent.click(screen.getByRole('button', { name: /drop your pdf here/i }));
     await screen.findByText('Annual Report.pdf');
     expect(screen.getAllByText('4.77 MB').length).toBeGreaterThan(0);
     expect((screen.getByLabelText('Output Filename') as HTMLInputElement).value).toBe('compressed_Annual Report');
@@ -115,7 +115,7 @@ describe('Compress PDF page', () => {
     expect(await screen.findByText('Compressing picture 2 of 4…')).toBeTruthy();
 
     act(() => emit(CORE_FINISHED_EVENT, { jobId: 11, kind: 'pdf_compress', status: 'succeeded', result: report }));
-    expect(await screen.findByText('Saved to your Downloads folder')).toBeTruthy();
+    expect(await screen.findByText('Your file is in Downloads!')).toBeTruthy();
     expect(screen.getByText('−80%')).toBeTruthy();
     expect(showToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
   });
@@ -124,7 +124,7 @@ describe('Compress PDF page', () => {
     desktop.on = true;
     invokeMock.mockResolvedValue({ sizeBytes: 100, pages: 0, encrypted: true });
     render(<CompressPage />);
-    fireEvent.click(screen.getByRole('button', { name: /drop a pdf file here/i }));
+    fireEvent.click(screen.getByRole('button', { name: /drop your pdf here/i }));
     await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     expect(screen.queryByText('Annual Report.pdf')).toBeNull();
   });
@@ -133,7 +133,7 @@ describe('Compress PDF page', () => {
     desktop.on = true;
     invokeMock.mockImplementation(async (cmd) => (cmd === 'core_pdf_probe' ? { sizeBytes: 900, pages: 1, encrypted: false } : 5));
     render(<CompressPage />);
-    fireEvent.click(screen.getByRole('button', { name: /drop a pdf file here/i }));
+    fireEvent.click(screen.getByRole('button', { name: /drop your pdf here/i }));
     await screen.findByText('Annual Report.pdf');
     fireEvent.click(screen.getByRole('button', { name: /^compress pdf$/i }));
     await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));

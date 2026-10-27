@@ -13,6 +13,7 @@
 - **Support:** the Support / Donation entry (sidebar, Home card and page header) has a matching icon, and the Home page header shows the Dokuwu mark instead of a heart.
 - **Dusty Rose logo:** in the Dusty Rose theme the logo (sidebar, Home, splash) is recoloured from blue-teal to rose, so it matches the rose surfaces and icons. The other themes keep the blue logo.
 - **Collapsed sidebar:** the icons now have the same spacing as the open sidebar, the logo is centred, and a short rule separates the groups where the open sidebar shows their names.
+- **Friendlier wording:** the Indonesian text now speaks to you as "kamu" in short, direct sentences ("Geser PDF kamu ke sini atau klik untuk memilih", "Berhasil digabungkan. File kamu ada di Downloads!"). Failures start with a polite "Maaf" and stay clear. The result buttons now say "Buka Downloads". English got the same treatment for drop zones, success and error messages ("Drop your PDF here, or click to pick", "Your file is in Downloads!").
 - **Compress PDF:** the page now has two containers like Compress Photos: the file, its output name, the size comparison and the result on the left; the quality settings and the Compress button on the right.
 - **Canvas PDF:** the top bar is tidied into two rows. The first names the page (with its icon) and holds the PDF, the output name and Save as PDF at the right edge; the second holds the tools, zoom and undo/redo. Nothing wraps into a stray line any more. The browser-preview notice is wrapped into a narrow centred block instead of one long line.
 

@@ -14,8 +14,8 @@ describe('protect messages', () => {
     expect(protectErrorMessage(err('invalid_input', 'invalid input: The user password is too long (at most 127 bytes).')))
       .toBe('The password is too long. Use at most 127 bytes (about 127 letters).');
     expect(protectErrorMessage(err('invalid_input', 'invalid input: Cannot open PDF: broken')))
-      .toBe('This file does not look like a valid PDF.');
-    expect(protectErrorMessage(err('not_found', 'x'))).toBe('The file could not be found. It may have been moved or renamed.');
+      .toBe('Sorry, this does not look like a valid PDF.');
+    expect(protectErrorMessage(err('not_found', 'x'))).toBe('Sorry, we could not find the file. It may have been moved or renamed.');
     expect(protectErrorMessage(err('internal', 'boom'))).toBe('boom');
     expect(protectErrorMessage(new Error('plain'))).toBe('plain');
   });

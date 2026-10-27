@@ -350,7 +350,7 @@ export function ImageFormatPage() {
                     </small>
                   </div>
                   <button type="button" className="btn btn-ghost btn-sm" id="image-format-open-folder-btn" onClick={openResultFolder}>
-                    <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
+                    <FolderOpen size={14} aria-hidden="true" /> {t('Open output folder')}
                   </button>
                 </div>
               )}

@@ -2,12 +2,14 @@
  * Minimal in-app translation.
  *
  * The English text is the key: `t('Merge PDF')` returns the English text as written, or the
- * Indonesian entry from `id.ts` when that language is active. A missing entry falls back to the
- * English text, so a string can never disappear. `{name}` placeholders are filled from `vars`.
+ * Indonesian entry from `id.ts` when that language is active; `en.ts` holds friendlier English
+ * wording for the strings that need it. A missing entry falls back to the English text, so a
+ * string can never disappear. `{name}` placeholders are filled from `vars`.
  *
  * `t` reads the active language when it is called, including from module-level constants, so
  * changing the language saves it and reloads the app (see `LanguageProvider`).
  */
+import { EN } from './en';
 import { ID } from './id';
 
 export type Language = 'en' | 'id';
@@ -61,7 +63,7 @@ function fill(text: string, vars?: TranslateVars): string {
 
 /** Translate `text` (the English source) into the active language. */
 export function t(text: string, vars?: TranslateVars): string {
-  const translated = current === 'id' ? ID[text] : undefined;
+  const translated = current === 'id' ? ID[text] : EN[text];
   return fill(translated ?? text, vars);
 }
 
