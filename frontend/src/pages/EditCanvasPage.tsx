@@ -41,6 +41,7 @@ import { baseName, stemOf } from '../utils/paths';
 import { isTauri } from '../utils/tauriDialog';
 import { isEmptyTextState } from '../utils/textPlaceholder';
 import { Filename } from '../components/Filename';
+import { PageHeader } from '../components/ui';
 import { FEATURE_ICONS } from '../components/icons';
 import * as fabric from 'fabric';
 import type {
@@ -119,6 +120,7 @@ function openErrorMessage(err: unknown): string {
 }
 
 type EditTool = EditorTool;
+type SampleTarget = 'text' | 'stroke' | 'fill';
 
 
 // ── Windows Font Options ──────────────────────────────────────────────────────
@@ -145,6 +147,29 @@ function formatBytes(bytes: number): string {
 }
 
 // ── Lazy Loading Container ────────────────────────────────────────────────────
+/** Starts the eyedropper for one colour field; click the page to fill it, Esc cancels. */
+function EyedropperButton({ active, onClick }: { active: boolean; onClick: () => void }) {
+  const label = t('Pick a color from the page');
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={label}
+      aria-label={label}
+      style={{
+        width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: '4px', cursor: 'pointer', padding: 0,
+        border: '1px solid var(--canvas-input-border)',
+        background: active ? 'var(--primary-container)' : 'var(--canvas-input-bg)',
+        color: active ? 'var(--canvas-on-active)' : 'var(--canvas-text-muted)',
+      }}
+    >
+      <Pipette size={14} />
+    </button>
+  );
+}
+
 function LazyPageContainer({
   children,
   width,
@@ -597,8 +622,11 @@ export function EditCanvasPage() {
   // Global hotkeys for delete, undo, redo
   // (Moved keydown listeners below zoom functions)
 
+  const [sampleTarget, setSampleTarget] = useState<SampleTarget | null>(null);
+
   const handleToolSelect = useCallback((tool: EditTool) => {
     setActiveTool(tool);
+    setSampleTarget(null);
     setSelectedObjectId(null);
 
     if (tool === 'pen') {
@@ -654,15 +682,32 @@ export function EditCanvasPage() {
     return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
   }, []);
 
+  // The eyedropper lives beside each colour field: it fills the field it was started from, either
+  // on the selected object or in the defaults for the next one.
   const handleSampledColor = useCallback((color: string) => {
-    if (selectedObject?.type === 'text') updateSelectedObject({ color });
-    else if (selectedObject?.type === 'rect' || selectedObject?.type === 'circle') updateSelectedObject({ fillColor: color });
-    else if (selectedObject && ['line', 'pen', 'highlighter'].includes(selectedObject.type)) updateSelectedObject({ strokeColor: color });
-    else if (activeTool === 'text') setDefaultTextProps(current => ({ ...current, color }));
-    else if (activeTool === 'rect' || activeTool === 'circle') setDefaultShapeProps(current => ({ ...current, fillColor: color }));
-    else setDefaultStrokeProps(current => ({ ...current, strokeColor: color }));
-    setActiveTool('select');
-  }, [activeTool, selectedObject, updateSelectedObject]);
+    if (!sampleTarget) return;
+    if (sampleTarget === 'text') {
+      if (selectedObject) updateSelectedObject({ color });
+      else setDefaultTextProps(current => ({ ...current, color }));
+    } else if (sampleTarget === 'fill') {
+      if (selectedObject) updateSelectedObject({ fillColor: color });
+      else setDefaultShapeProps(current => ({ ...current, fillColor: color }));
+    } else if (selectedObject) {
+      updateSelectedObject({ strokeColor: color });
+    } else if (activeTool === 'rect' || activeTool === 'circle') {
+      setDefaultShapeProps(current => ({ ...current, strokeColor: color }));
+    } else {
+      setDefaultStrokeProps(current => ({ ...current, strokeColor: color }));
+    }
+    setSampleTarget(null);
+  }, [sampleTarget, activeTool, selectedObject, updateSelectedObject]);
+
+  useEffect(() => {
+    if (!sampleTarget) return;
+    const cancel = (e: KeyboardEvent) => { if (e.key === 'Escape') setSampleTarget(null); };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, [sampleTarget]);
 
   const releasePageUrls = useCallback(() => {
     pageImagesRef.current.forEach(({ url }) => URL.revokeObjectURL(url));
@@ -1409,7 +1454,13 @@ export function EditCanvasPage() {
         data-testid="canvas-image-input"
       />
 
-      {/* ── Top bar: row 1 names the page and holds the file and Save; row 2 is the toolbar ── */}
+      <PageHeader
+        icon={CanvasIcon}
+        title={t('Canvas PDF')}
+        description={t('Add text, shapes, images, drawings, and highlights onto a page.')}
+      />
+
+      {/* ── Toolbar: tools and zoom on the left; file, output name and Save on the right ── */}
       <div
         className="canvas-top-bar"
         style={{
@@ -1420,163 +1471,6 @@ export function EditCanvasPage() {
         }}
       >
         <div
-          className="canvas-top-bar-head"
-          style={{
-            minHeight: '52px',
-            padding: '6px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            rowGap: '6px',
-            columnGap: '12px',
-          }}
-        >
-        {/* Brand / Title Icon */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span
-            className="font-bold flex items-center gap-2"
-            style={{ whiteSpace: 'nowrap', fontSize: '16px', color: 'var(--canvas-text-primary)', letterSpacing: '-0.01em' }}
-          >
-            <CanvasIcon size={28} />
-            <span>{t('Canvas PDF')}</span>
-          </span>
-        </div>
-
-        {/* Compact File Info & Upload Trigger */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-          {file && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'var(--canvas-card-bg)',
-                border: '1px solid var(--canvas-input-border)',
-                borderRadius: '6px',
-                padding: '2px 10px',
-                height: '32px',
-                maxWidth: '220px',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <Filename name={baseName(file)} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
-                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{fileSize !== null ? formatBytes(fileSize) : ''}</span>
-              </div>
-              <button
-                onClick={clearDocument}
-                className="text-[var(--canvas-text-muted)] hover:text-[var(--canvas-danger)] transition-colors p-1"
-                title={t('Clear PDF')}
-                style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          )}
-          
-          <div
-            onClick={() => void pickFile()}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: isDragOver ? 'var(--accent-dim)' : 'transparent',
-              border: 'none',
-              borderRadius: '6px',
-              width: '32px',
-              height: '32px',
-              padding: 0,
-              cursor: 'pointer',
-              color: 'var(--canvas-text-primary)',
-              flexShrink: 0,
-              transition: 'background var(--transition-fast)'
-            }}
-            onMouseEnter={(e) => {
-              if (!isDragOver) e.currentTarget.style.background = 'var(--accent-dim)';
-            }}
-            onMouseLeave={(e) => {
-              if (!isDragOver) e.currentTarget.style.background = 'transparent';
-            }}
-            title={t('Upload PDF')}
-          >
-            <Upload size={16} />
-          </div>
-        </div>
-
-        {file && loading && (
-          <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
-            <Loader2 className="animate-spin text-[var(--canvas-accent)]" size={14} />
-            <span>{t('Opening the PDF…')}</span>
-          </div>
-        )}
-
-        {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
-        <div
-          className="canvas-save-group"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
-        >
-        {/* Output Filename Input */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
-          <input
-            id="edit-output-name"
-            type="text"
-            aria-label={t('Output filename')}
-            value={outputFilename}
-            onChange={(e) => setOutputFilename(e.target.value)}
-            placeholder="edited_document"
-            disabled={!file || loading}
-            title={t('Output Filename')}
-            style={{
-              width: '100%',
-              height: '32px',
-              background: 'var(--canvas-input-bg)',
-              border: '1px solid var(--canvas-input-border)',
-              color: 'var(--canvas-text-primary)',
-              padding: '0 10px',
-              borderRadius: '6px',
-              outline: 'none',
-              fontSize: '13px',
-              minWidth: 0,
-            }}
-          />
-        </div>
-
-        {/* Save as PDF Button */}
-        <button
-          onClick={handleSave}
-          disabled={!file || loading || saving || pages.length === 0}
-          style={{
-            height: '32px',
-            padding: '0 14px',
-            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary)',
-            color: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-text-muted)' : 'var(--canvas-on-accent)',
-            borderRadius: '6px',
-            fontWeight: 600,
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
-            transition: 'background 0.2s ease'
-          }}
-        >
-          {saving ? (
-            <>
-              <Loader2 className="animate-spin" size={14} />
-              <span>{saveProgress ? `${t('Saving...')} ${saveProgress.done}/${saveProgress.total}` : t('Saving...')}</span>
-            </>
-          ) : (
-            <span>{t('Save as PDF')}</span>
-          )}
-        </button>
-        </div>
-        </div>
-
-        <div
           className="canvas-top-bar-tools"
           style={{
             minHeight: '44px',
@@ -1586,7 +1480,6 @@ export function EditCanvasPage() {
             flexWrap: 'wrap',
             rowGap: '6px',
             columnGap: '10px',
-            borderTop: '1px solid var(--canvas-topbar-border)',
           }}
         >
         {/* Canvas Tool Buttons (Icon Only) */}
@@ -1600,7 +1493,6 @@ export function EditCanvasPage() {
             { id: 'circle', label: t('Circle (C)'), icon: CircleIcon },
             { id: 'line', label: t('Line (L)'), icon: Minus },
             { id: 'eraser', label: t('Eraser (E)'), icon: Eraser },
-            { id: 'eyedropper', label: t('Smart Eyedropper — sample nearby foreground color'), icon: Pipette },
           ].map((tool) => {
             const Icon = tool.icon;
             const isActive = activeTool === tool.id;
@@ -1778,6 +1670,141 @@ export function EditCanvasPage() {
           >
             <Redo2 size={16} />
           </button>
+        </div>
+        {/* File, output name and Save stay on the right, also when the bar wraps. */}
+        <div className="canvas-file-group" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '8px 10px', marginLeft: 'auto', minWidth: 0 }}>
+        {/* Compact File Info & Upload Trigger */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          {file && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'var(--canvas-card-bg)',
+                border: '1px solid var(--canvas-input-border)',
+                borderRadius: '6px',
+                padding: '2px 10px',
+                height: '32px',
+                maxWidth: '220px',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <Filename name={baseName(file)} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
+                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{fileSize !== null ? formatBytes(fileSize) : ''}</span>
+              </div>
+              <button
+                onClick={clearDocument}
+                className="text-[var(--canvas-text-muted)] hover:text-[var(--canvas-danger)] transition-colors p-1"
+                title={t('Clear PDF')}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+          
+          <div
+            onClick={() => void pickFile()}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isDragOver ? 'var(--accent-dim)' : 'transparent',
+              border: 'none',
+              borderRadius: '6px',
+              width: '32px',
+              height: '32px',
+              padding: 0,
+              cursor: 'pointer',
+              color: 'var(--canvas-text-primary)',
+              flexShrink: 0,
+              transition: 'background var(--transition-fast)'
+            }}
+            onMouseEnter={(e) => {
+              if (!isDragOver) e.currentTarget.style.background = 'var(--accent-dim)';
+            }}
+            onMouseLeave={(e) => {
+              if (!isDragOver) e.currentTarget.style.background = 'transparent';
+            }}
+            title={t('Upload PDF')}
+          >
+            <Upload size={16} />
+          </div>
+        </div>
+
+        {file && loading && (
+          <div className="flex items-center gap-1.5 text-[var(--canvas-text-muted)] text-xs flex-shrink-0">
+            <Loader2 className="animate-spin text-[var(--canvas-accent)]" size={14} />
+            <span>{t('Opening the PDF…')}</span>
+          </div>
+        )}
+
+        {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
+        <div
+          className="canvas-save-group"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
+        >
+        {/* Output Filename Input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
+          <input
+            id="edit-output-name"
+            type="text"
+            aria-label={t('Output filename')}
+            value={outputFilename}
+            onChange={(e) => setOutputFilename(e.target.value)}
+            placeholder="edited_document"
+            disabled={!file || loading}
+            title={t('Output Filename')}
+            style={{
+              width: '100%',
+              height: '32px',
+              background: 'var(--canvas-input-bg)',
+              border: '1px solid var(--canvas-input-border)',
+              color: 'var(--canvas-text-primary)',
+              padding: '0 10px',
+              borderRadius: '6px',
+              outline: 'none',
+              fontSize: '13px',
+              minWidth: 0,
+            }}
+          />
+        </div>
+
+        {/* Save as PDF Button */}
+        <button
+          onClick={handleSave}
+          disabled={!file || loading || saving || pages.length === 0}
+          style={{
+            height: '32px',
+            padding: '0 14px',
+            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary)',
+            color: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-text-muted)' : 'var(--canvas-on-accent)',
+            borderRadius: '6px',
+            fontWeight: 600,
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+            border: 'none',
+            cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
+            transition: 'background 0.2s ease'
+          }}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="animate-spin" size={14} />
+              <span>{saveProgress ? `${t('Saving...')} ${saveProgress.done}/${saveProgress.total}` : t('Saving...')}</span>
+            </>
+          ) : (
+            <span>{t('Save as PDF')}</span>
+          )}
+        </button>
+        </div>
         </div>
         </div>
       </div>
@@ -2083,6 +2110,7 @@ export function EditCanvasPage() {
                     aria-label={t('Text color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
+                  <EyedropperButton active={sampleTarget === 'text'} onClick={() => setSampleTarget(sampleTarget === 'text' ? null : 'text')} />
                 </div>
               </div>
             )}
@@ -2123,6 +2151,7 @@ export function EditCanvasPage() {
                     aria-label={t('Stroke color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px', opacity: (selectedObject ? (selectedObject as ShapeObject).strokeWidth : defaultShapeProps.strokeWidth) === 0 ? 0.4 : 1 }}
                   />
+                  <EyedropperButton active={sampleTarget === 'stroke'} onClick={() => setSampleTarget(sampleTarget === 'stroke' ? null : 'stroke')} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Width')}</span>
@@ -2162,6 +2191,7 @@ export function EditCanvasPage() {
                     aria-label={t('Fill color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
+                  <EyedropperButton active={sampleTarget === 'fill'} onClick={() => setSampleTarget(sampleTarget === 'fill' ? null : 'fill')} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Opacity')}</span>
@@ -2243,6 +2273,7 @@ export function EditCanvasPage() {
                     aria-label={t('Stroke color')}
                     style={{ width: '26px', height: '26px', border: '1px solid var(--canvas-input-border)', background: 'transparent', cursor: 'pointer', borderRadius: '4px', padding: '1px' }}
                   />
+                  <EyedropperButton active={sampleTarget === 'stroke'} onClick={() => setSampleTarget(sampleTarget === 'stroke' ? null : 'stroke')} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span className="text-xs font-semibold text-[var(--canvas-text-muted)]">{t('Width')}</span>
@@ -2373,7 +2404,7 @@ export function EditCanvasPage() {
                   >
                     <PageCanvas
                       page={p}
-                      activeTool={activeTool}
+                      activeTool={sampleTarget ? 'eyedropper' : activeTool}
                       selectedObjectId={selectedObjectId}
                       setSelectedObjectId={setSelectedObjectId}
                       setActiveTool={setActiveTool}
