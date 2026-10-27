@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { imageThumbnail } from '../../api/pdfImage';
+import { useContinuousRotation } from '../../hooks/useContinuousRotation';
 
 interface ConverterThumbnailProps {
   path: string;
@@ -37,6 +38,7 @@ export function ConverterThumbnail({ path, rotation, flipH, alt = '' }: Converte
   const url = ready ? loaded.url : null;
   const failed = ready && loaded.url === null;
   const turned = rotation % 180 !== 0;
+  const angle = useContinuousRotation(rotation);
 
   return (
     <span className={`conv-thumb${turned ? ' conv-thumb--turned' : ''}`}>
@@ -45,7 +47,7 @@ export function ConverterThumbnail({ path, rotation, flipH, alt = '' }: Converte
           src={url}
           alt={alt}
           draggable={false}
-          style={{ transform: `rotate(${rotation}deg) ${flipH ? 'scaleX(-1)' : ''}` }}
+          style={{ transform: `rotate(${angle}deg) ${flipH ? 'scaleX(-1)' : ''}` }}
         />
       ) : (
         <span className="conv-thumb-empty" aria-hidden={!failed}>{failed ? '!' : ''}</span>

@@ -11,6 +11,7 @@ import { Copy, FlipVertical2, RotateCw, Trash2 } from 'lucide-react';
 import { sourceLetter } from './pageList';
 import type { InsertPosition, PageRef, SourceHandle } from './types';
 import { t } from '../../i18n';
+import { useContinuousRotation } from '../../hooks/useContinuousRotation';
 
 export interface PageGridProps {
   pages: PageRef[];
@@ -60,6 +61,7 @@ const PageCell = memo(function PageCell({
     id: page.key,
     disabled,
   });
+  const angle = useContinuousRotation(page.rotation);
 
   return (
     <div
@@ -110,7 +112,7 @@ const PageCell = memo(function PageCell({
             src={thumbnail}
             alt=""
             draggable={false}
-            style={{ transform: `rotate(${page.rotation}deg) ${page.flip ? 'scaleX(-1)' : ''}` }}
+            style={{ transform: `rotate(${angle}deg) ${page.flip ? 'scaleX(-1)' : ''}` }}
           />
         ) : (
           <span className="organize-cell-placeholder" aria-hidden="true" />

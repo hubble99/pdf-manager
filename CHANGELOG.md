@@ -4,6 +4,10 @@
 
 > Every feature now runs on the native Rust core. The Python program that started next to the app (`pdf-manager-backend.exe`) no longer exists, so Dokuwu is one process tree: no local server, no port 8000, nothing to wait for at start-up. Results are still saved to Downloads under a free name and never overwrite a file.
 
+**Fixed**
+
+- **Rotate (Organize PDF, Images to PDF preview):** rotating a page clockwise again and again no longer spins it backwards when it passes a full turn; every click turns a quarter clockwise.
+
 **Improved**
 
 - **Start-up and exit:** the splash screen closes as soon as the core answers, and quitting no longer waits for a Python cleanup call. Leftover folders from the old backend (`~/PDFManager/temp` and `~/PDFManager/output`) are removed by the same cleanup that already clears the core's scratch files; your fonts in `~/PDFManager/data/fonts` stay where they are.

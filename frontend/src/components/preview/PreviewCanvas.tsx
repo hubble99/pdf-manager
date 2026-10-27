@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { FileX, Loader2 } from 'lucide-react';
 import { fetchPagePreview, isAbort, previewKey, type PdfSource } from '../../api/pdfRender';
 import { t } from '../../i18n';
+import { useContinuousRotation } from '../../hooks/useContinuousRotation';
 
 export interface PreviewCanvasProps {
   file?: PdfSource;
@@ -66,6 +67,7 @@ export function PreviewCanvas({
   const [url, setUrl] = useState<string | null>(imageUrl || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const imageAngle = useContinuousRotation(imageRotation);
   const [imageDimensions, setImageDimensions] = useState<{ sourceKey: string; w: number; h: number } | null>(null);
   const [loadedPdfPreview, setLoadedPdfPreview] = useState<LoadedPdfPreview | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -189,7 +191,7 @@ export function PreviewCanvas({
   }, [displayKey, imageDimensions, imageRotation, zoom]);
   const canCenterHorizontally = !scaledStage || !viewport || scaledStage.w <= viewport.w - 64;
   const canCenterVertically = !scaledStage || !viewport || scaledStage.h <= viewport.h - 64;
-  const innerTransform = `translate(-50%, -50%) rotate(${imageRotation}deg) ${flipH ? 'scaleX(-1) ' : ''}scale(${zoom})`;
+  const innerTransform = `translate(-50%, -50%) rotate(${imageAngle}deg) ${flipH ? 'scaleX(-1) ' : ''}scale(${zoom})`;
 
   return (
     <div
