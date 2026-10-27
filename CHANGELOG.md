@@ -8,6 +8,7 @@
 
 - **Rotate (Organize PDF, Images to PDF preview):** rotating a page clockwise again and again no longer spins it backwards when it passes a full turn; every click turns a quarter clockwise.
 - **Edit Content:** pages that hold a Form XObject (a stamp, overlay or reused drawing) or graphics with constant transparency are no longer refused as "unsupported structure" or "collateral change". On the UAT sample the editable share rose from 0% to 86% for the password-owned OSH_ND letter and from 0% to 61% for the ELT certificate; the other files are unchanged. Transparency is compared at 8-bit precision, so a change below 1/255 in a graphic's opacity is not noticed.
+- **Edit Content:** editing any text on a page no longer turns outlined ("fake bold") text, such as the green heading of the OSH_ND letterhead, into a thick smudge. PDFium wrote the thin outline width back without the scale of the space it was measured in (0.1 pt became 3.3 pt); Dokumen now keeps the width the page really draws, and refuses the edit if a page strokes text at several scales.
 - **PDF to Word:** a letterhead or footer picture that lies under text now stays behind the text instead of pushing it down, and a footer line at the bottom edge is a page-anchored frame, so a long text above it can no longer open an extra, nearly empty page. On the 8 UAT files the page count now equals the original in 7. Vector shapes (for example a green bar drawn as a path) are still not converted, and text boxes whose font is replaced can wrap longer than in the PDF.
 
 **Improved**

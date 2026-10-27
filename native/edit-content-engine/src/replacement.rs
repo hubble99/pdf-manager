@@ -306,6 +306,37 @@ fn keep_native_colors(page: &mut PdfPage) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// PDFium writes a stroked text object's line width back as the number it read,
+/// without the scale of the space the width was measured in, so a thin outline
+/// (fake bold) drawn through a scaled CTM would come out many times thicker.
+/// This sets the width the viewer showed; the page's scale comes from its own
+/// content stream, and a page that stroked text at several scales is refused.
+fn keep_text_stroke_widths(page: &mut PdfPage, scale: Option<f64>) -> Result<(), &'static str> {
+    let Some(scale) = scale else { return Ok(()) };
+    if (scale - 1.0).abs() <= 1e-9 {
+        return Ok(());
+    }
+    for mut object in page.objects().iter() {
+        let stroked = object.as_text_object().is_some_and(|text| {
+            !matches!(
+                text.render_mode(),
+                PdfPageTextRenderMode::FilledUnstroked
+                    | PdfPageTextRenderMode::Invisible
+                    | PdfPageTextRenderMode::FilledUnstrokedClipping
+                    | PdfPageTextRenderMode::InvisibleClipping
+            )
+        });
+        if !stroked {
+            continue;
+        }
+        let width = object.stroke_width().map_err(|_| "REJECTED_PERSISTENCE")?;
+        object
+            .set_stroke_width(PdfPoints::new((f64::from(width.value) * scale) as f32))
+            .map_err(|_| "REJECTED_PERSISTENCE")?;
+    }
+    Ok(())
+}
+
 fn regenerate_observed(
     pdfium: &Pdfium,
     working: &Path,
@@ -325,6 +356,9 @@ fn regenerate_observed(
             .get(edit.target.page_index as _)
             .map_err(|_| "REJECTED_PERSISTENCE")?;
         keep_native_colors(&mut page)?;
+        let stroke_scale = crate::native_inspector::text_stroke_scale_of_page(working, edit.target.page_index as usize)
+            .map_err(|_| "REJECTED_UNSUPPORTED_STRUCTURE")?;
+        keep_text_stroke_widths(&mut page, stroke_scale)?;
         {
             let mut object = page
                 .objects()
