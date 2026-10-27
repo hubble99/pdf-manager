@@ -115,7 +115,9 @@ def png_bytes(img: Image.Image) -> bytes:
 
 
 def write_ico(logo: Logo, path: Path) -> None:
-    sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+    # Largest first: Tauri takes the first frame as the window and taskbar icon, so a small
+    # first frame is stretched and looks blurry. Windows picks frames by size, not by order.
+    sizes = [256, 128, 64, 48, 40, 32, 24, 20, 16]
     frames = [(s, png_bytes(logo.square(s))) for s in sizes]
     header = struct.pack("<HHH", 0, 1, len(frames))
     offset = 6 + 16 * len(frames)
