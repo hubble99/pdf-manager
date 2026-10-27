@@ -102,7 +102,10 @@ $cargo = (Get-Command cargo.exe -ErrorAction Stop).Source
 $workerManifest = Join-Path $nativeRoot 'Cargo.toml'
 & $cargo build --locked --release --target 'x86_64-pc-windows-msvc' --manifest-path $workerManifest
 if ($LASTEXITCODE -ne 0) { throw 'The pinned Edit Content worker build failed.' }
-$workerPath = Join-Path $nativeRoot 'target/x86_64-pc-windows-msvc/release/edit-content-engine.exe'
+# cargo writes under CARGO_TARGET_DIR when it is set; copying from the crate's own
+# target folder then picks up a stale worker.
+$workerTargetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $nativeRoot 'target' }
+$workerPath = Join-Path $workerTargetRoot 'x86_64-pc-windows-msvc/release/edit-content-engine.exe'
 if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
     throw 'The Windows x64 Edit Content worker was not produced.'
 }
