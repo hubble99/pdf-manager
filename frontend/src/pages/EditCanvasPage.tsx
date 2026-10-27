@@ -2324,7 +2324,7 @@ export function EditCanvasPage() {
               <Upload size={28} className="text-[var(--canvas-accent)]" />
             </div>
             <p className="text-base font-semibold text-[var(--canvas-text-primary)] mt-2">{t('No Document Uploaded')}</p>
-            <p className="text-sm">
+            <p className="text-sm" style={{ maxWidth: '440px', textAlign: 'center', textWrap: 'balance' }}>
               {desktop
                 ? t('Click here or drag a file to begin editing.')
                 : t('Canvas PDF runs in the Dokuwu desktop app. It reads the PDF straight from your computer, which the browser preview cannot do.')}

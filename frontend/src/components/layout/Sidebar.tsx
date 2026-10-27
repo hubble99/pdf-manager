@@ -107,7 +107,9 @@ export function Sidebar() {
 
         {featuresByGroup().map((group) => (
           <Fragment key={group.id}>
-            {!collapsed && <div className="sidebar-section-label">{group.label}</div>}
+            {collapsed
+              ? <div className="sidebar-section-divider" aria-hidden="true" />
+              : <div className="sidebar-section-label">{group.label}</div>}
             {group.features.map((feature) => (
               <NavEntry
                 key={feature.id}

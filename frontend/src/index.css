@@ -5640,3 +5640,26 @@ select.input {
     animation: none;
   }
 }
+
+/* ── Collapsed sidebar: same rhythm as the open one ─────────────────────────── */
+/* A collapsed row had a shorter height than an open one (the collapsed padding is
+   overridden by the later .nav-item rule), so the icons sat closer together. */
+.nav-item {
+  min-height: 33px;
+}
+
+/* Where the open sidebar shows a group label, the collapsed one shows a short rule. */
+.sidebar-section-divider {
+  height: 1px;
+  margin: 8px 14px;
+  background: var(--outline-variant);
+}
+
+.sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-header {
+  padding-left: 0;
+  padding-right: 0;
+}
