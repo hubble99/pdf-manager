@@ -10,6 +10,7 @@ export const ID: Record<string, string> = {
   'Nothing was saved.': 'Tidak ada yang disimpan.',
   'Reading the PDF…': 'Membaca PDF…',
   'Saving the compressed PDF…': 'Menyimpan PDF terkompres…',
+  'Merging repeated pictures and fonts…': 'Menggabungkan gambar dan font yang berulang…',
   'The compressed PDF could not be saved. Check that the Downloads folder is writable and has free space.': 'PDF terkompres tidak dapat disimpan. Pastikan folder Downloads dapat ditulisi dan masih punya ruang kosong.',
   'The computer is low on memory. Close other programs and try again.': 'Memori komputer hampir habis. Tutup program lain lalu coba lagi.',
   'The PDF could not be found. It may have been moved or renamed.': 'PDF tidak ditemukan. Mungkin sudah dipindahkan atau diganti namanya.',

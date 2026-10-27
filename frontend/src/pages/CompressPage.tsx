@@ -135,7 +135,9 @@ export function CompressPage() {
     ? t('Saving the compressed PDF…')
     : progress?.stage === 'images' && progress.total
       ? t('Compressing picture {done} of {total}…', { done: Math.min(progress.done + 1, progress.total), total: progress.total })
-      : t('Reading the PDF…');
+      : progress?.stage === 'deduplicating'
+        ? t('Merging repeated pictures and fonts…')
+        : t('Reading the PDF…');
   const sizeBefore = probe?.sizeBytes ?? 0;
 
   // ── Render ──────────────────────────────────────────────────────────────────
