@@ -198,6 +198,22 @@ fn the_registry_forgets_the_least_recently_used_file_when_full() {
     assert!(registry.thumbnails(&render, &second, 1, 1, 100).is_err(), "the oldest was evicted");
 }
 
+/// Deletes `path`, waiting for the render workers to let go of it (Windows
+/// refuses to delete an open file; they release it a moment after the last page).
+fn delete_when_released(path: &std::path::Path) {
+    let started = std::time::Instant::now();
+    loop {
+        match std::fs::remove_file(path) {
+            Ok(()) => return,
+            Err(e) if started.elapsed() < std::time::Duration::from_secs(10) => {
+                let _ = e;
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Err(e) => panic!("the file stayed open: {e}"),
+        }
+    }
+}
+
 #[test]
 fn a_file_that_changed_since_it_was_added_is_refused() {
     let dir = tempfile::tempdir().unwrap();
@@ -212,7 +228,7 @@ fn a_file_that_changed_since_it_was_added_is_refused() {
     assert_eq!(err.code(), "invalid_input");
     assert!(err.to_string().contains("changed on disk"), "{err}");
 
-    std::fs::remove_file(&path).unwrap();
+    delete_when_released(&path);
     assert_eq!(registry.thumbnails(&render, &id, 1, 2, 100).unwrap_err().code(), "not_found");
 }
 
@@ -534,4 +550,16 @@ fn flushing_to_disk_part_way_gives_the_same_pages() {
     for page in 1..=18 {
         assert!(render(&plain, page) == render(&flushed, page), "page {page}");
     }
+}
+
+#[test]
+fn a_rendered_file_is_not_kept_open_once_rendering_stops() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = pdf_with(&dir, "doc.pdf", 2);
+    let registry = OrganizeRegistry::new();
+    let render = RenderService::with_workers(3);
+    let id = registry.open(&path).unwrap().document_id;
+    registry.thumbnails(&render, &id, 1, 2, 100).unwrap();
+    delete_when_released(&path);
+    assert!(!path.exists());
 }
