@@ -8,11 +8,10 @@ import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from '../config/app';
 import { FEATURE_GROUPS, FEATURES } from '../config/features';
 import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
 
-const { getMock, postMock, toastMock, openMock } = vi.hoisted(() => ({
-  getMock: vi.fn(), postMock: vi.fn(), toastMock: vi.fn(), openMock: vi.fn(),
+const { toastMock, openMock } = vi.hoisted(() => ({
+  toastMock: vi.fn(), openMock: vi.fn(),
 }));
 
-vi.mock('../api/client', () => ({ default: { get: getMock, post: postMock } }));
 vi.mock('../hooks/useToast', () => ({ useToast: () => ({ showToast: toastMock }) }));
 vi.mock('../utils/openExternal', () => ({ openInSystemBrowser: openMock }));
 
@@ -98,7 +97,7 @@ describe('Home', () => {
 
 describe('Donation page', () => {
   beforeEach(() => {
-    getMock.mockReset(); postMock.mockReset(); toastMock.mockReset(); openMock.mockReset();
+    toastMock.mockReset(); openMock.mockReset();
     openMock.mockResolvedValue(undefined);
   });
 
@@ -152,7 +151,7 @@ describe('Donation page', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(DONATION.paypalUrl));
   });
 
-  it('opens the PayPal link in the system browser and tells the backend nothing', async () => {
+  it('opens the PayPal link in the system browser', async () => {
     renderAt('/donation', <DonationPage />);
     const open = document.getElementById('donation-open') as HTMLButtonElement;
     expect(open).toBeEnabled();
@@ -161,8 +160,6 @@ describe('Donation page', () => {
 
     await waitFor(() => expect(openMock).toHaveBeenCalledWith(DONATION.paypalUrl));
     expect(openMock).toHaveBeenCalledTimes(1);
-    expect(getMock).not.toHaveBeenCalled();
-    expect(postMock).not.toHaveBeenCalled();
   });
 
   it('collects no card, account, or credential data', () => {

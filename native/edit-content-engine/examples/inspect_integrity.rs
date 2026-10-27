@@ -1,11 +1,10 @@
 //! Read-only phase-7 baseline diagnostic. Reports unsupported evidence categories,
 //! not document text; a successful capture alone is not transaction acceptance.
-//! Arguments: PDF path, inspector Python path, backend module directory.
+//! Arguments: PDF path.
 use edit_content_engine::discovery::discover_document;
 use edit_content_engine::identity::ObjectRegistry;
-use edit_content_engine::resource_inspector::{
-    InspectionOutcome, ProcessResourceInspector, ResourceInspector,
-};
+use edit_content_engine::native_inspector::NativeResourceInspector;
+use edit_content_engine::resource_inspector::{InspectionOutcome, ResourceInspector};
 use edit_content_engine::verification::capture;
 use pdfium_render::prelude::*;
 use std::path::PathBuf;
@@ -16,8 +15,7 @@ fn main() {
     let library = PathBuf::from(std::env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH").unwrap());
     edit_content_engine::verify_pdfium_library(&library).unwrap();
     let pdfium = Pdfium::new(Pdfium::bind_to_library(library).unwrap());
-    let inspector = ProcessResourceInspector::new(PathBuf::from(&args[2]), vec!["-c".into(),
-        "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(), args[3].clone()]);
+    let inspector = NativeResourceInspector;
     let InspectionOutcome::Supported(resources) = inspector.inspect(&source) else {
         panic!("unsupported resource inspection");
     };

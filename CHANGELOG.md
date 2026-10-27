@@ -1,8 +1,22 @@
 # Changelog
 
-## Unreleased
+## 1.11.0 — 2026-10-27 · Phase 3: the Python backend is gone
+
+> Every feature now runs on the native Rust core. The Python program that started next to the app (`pdf-manager-backend.exe`) no longer exists, so Dokuwu is one process tree: no local server, no port 8000, nothing to wait for at start-up. Results are still saved to Downloads under a free name and never overwrite a file.
+
+**Improved**
+
+- **Start-up and exit:** the splash screen closes as soon as the core answers, and quitting no longer waits for a Python cleanup call. Leftover folders from the old backend (`~/PDFManager/temp` and `~/PDFManager/output`) are removed by the same cleanup that already clears the core's scratch files; your fonts in `~/PDFManager/data/fonts` stay where they are.
+- **Settings > About:** the technology line now names what the app uses (Rust, MuPDF, PDFium).
 
 **Internal**
+
+- **Python sidecar removed:** the backend (`backend/`: FastAPI routes, PyMuPDF code, PyInstaller spec, requirements and tests), the sidecar launch and its permissions in Tauri (`tauri-plugin-shell`, `externalBin`), the HTTP client in the interface (`axios`, `api/client.ts`, `downloadHelper.ts`) and the "Backend offline" banner are deleted. The last Python version of every feature stays in git history at `bef33cc` as the reference the Rust ports were compared against.
+- **Tests:** the Rust tests that used Python as an independent reader (`pypdf`) now read the result with PDFium, and the Edit Content engine tests use the native inspector only. The old Python-versus-Rust comparison scripts were deleted with the code they compared against. The Python tools that remain are offline developer tools (`make_fixtures.py`, `gen_inspector_tables.py`, `generate_fixtures.py`); the app and the build need no Python.
+- **Edit Content engine:** the process-based and local-service resource inspectors (which started Python) and their `--inspector-*` options are removed; the worker always uses the native inspector.
+- **Build:** `npm run prepare:edit-content:desktop` only prepares the Edit Content worker and PDFium; no virtual environment or PyInstaller is needed.
+
+**Internal (Phase 3, earlier steps)**
 
 - **Settings and start-up:** clearing temporary files, opening the Downloads folder and the start-up readiness check now run on the Rust core instead of the Python backend. Clearing is refused while a job is running, and leftovers of a crashed run are swept at start-up and exit.
 - **Organize PDF:** thumbnails and saving now run on the Rust core instead of the Python backend. Files are read from where they are (no upload copy), the result is saved to Downloads under a free name with a "Show in folder" button, and saving can be cancelled without leaving a partial file. Pages, rotation and mirroring match the old output pixel for pixel; memory stays near the size of the input (500 pages, 184 MB: about 190 MiB). One difference: the thumbnail of a transparent picture is now shown on white, like the saved page. You can also drop a PDF or image on the window to insert it.

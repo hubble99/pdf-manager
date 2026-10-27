@@ -155,6 +155,8 @@ export function EditContentPage() {
   const sessionRevision = session?.acceptedRevision;
 
   useEffect(() => {
+    // Any change to the draft or target invalidates the previous advisory check.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCheck({ state: 'idle' });
     if (!sessionId || sessionRevision === undefined || !selected || !draftDirty) return undefined;
     const edit = buildEditCommand(selected.text, draft);

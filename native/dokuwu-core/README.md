@@ -1,8 +1,8 @@
 # dokuwu-core
 
 Shared native engine for Dokuwu. New features are written here in Rust and
-called from Tauri commands, instead of going through the Python sidecar. The
-sidecar stays in place for every feature that has not been ported yet.
+called from Tauri commands. Since 1.11.0 every feature runs here; the Python
+sidecar the app used before is gone.
 
 The crate has no Tauri dependency. `frontend/src-tauri/src/core_bridge.rs`
 wraps each operation in a command, and tests call the operations directly.

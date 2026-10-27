@@ -3,7 +3,6 @@ import {
   buildOutputFilename,
   sanitizeFilenameStem,
 } from '../utils/filenamePolicy';
-import { getFilenameFromHeaders } from '../utils/downloadHelper';
 
 describe('filename policy', () => {
   it('preserves valid spaces and Unicode', () => {
@@ -23,12 +22,5 @@ describe('filename policy', () => {
   it('handles blank and Windows reserved names', () => {
     expect(sanitizeFilenameStem('   ')).toBe('output');
     expect(buildOutputFilename('CON', 'pdf')).toBe('_CON.pdf');
-  });
-
-  it('decodes RFC 5987 download filenames', () => {
-    expect(getFilenameFromHeaders(
-      { 'content-disposition': "attachment; filename*=UTF-8''Hasil%20Editing.pdf" },
-      'fallback.pdf',
-    )).toBe('Hasil Editing.pdf');
   });
 });

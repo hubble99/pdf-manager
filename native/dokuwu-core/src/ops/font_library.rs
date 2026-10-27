@@ -4,11 +4,10 @@
 //!
 //! The folder holds the font files and `fonts.json`, an index from an id to
 //! `{family, full_name, filename, weight, bold, italic}`. The layout is the one
-//! the Python backend used, so fonts added by an earlier version are listed and
-//! usable, and the Python stamper still reads what is added here until it is
-//! replaced. The rules that decide what a font is called (family, weight,
-//! italic) and which face is nearest to a request are ported unchanged from
-//! `backend/core/font_library.py`.
+//! earlier versions used, so fonts added by them are listed and usable. The
+//! rules that decide what a font is called (family, weight, italic) and which
+//! face is nearest to a request were ported unchanged from the Python
+//! `core/font_library.py` of version 1.10.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -278,8 +277,8 @@ fn probe(data: &[u8]) -> Result<Probe, String> {
     })
 }
 
-/// The folder where the Python backend kept its fonts, which the library keeps
-/// using so both read the same files: `~/PDFManager/data/fonts`.
+/// The folder where earlier versions kept their fonts, which the library keeps
+/// using: `~/PDFManager/data/fonts`.
 pub fn default_dir() -> Option<PathBuf> {
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     let home = std::env::var_os(var)

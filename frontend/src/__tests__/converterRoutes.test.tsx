@@ -2,13 +2,6 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 
-const { postMock } = vi.hoisted(() => ({ postMock: vi.fn() }));
-
-vi.mock('../api/client', () => ({
-  default: { post: postMock },
-  checkHealth: vi.fn(async () => true),
-}));
-
 vi.mock('../components/PdfThumbnail', () => ({
   PdfThumbnail: ({ page = 1 }: { page?: number }) => <span data-testid={`thumb-${page}`} />,
 }));
@@ -21,10 +14,6 @@ vi.mock('../utils/tauriDialog', () => ({
 
 describe('converter routes', () => {
   beforeEach(() => {
-    postMock.mockReset();
-    postMock.mockImplementation(async (url: string) => {
-      throw new Error(`Unexpected request: ${url}`);
-    });
     window.history.pushState({}, '', '/');
   });
 

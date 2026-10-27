@@ -1,7 +1,7 @@
 # Edit Content engine worker
 
-This crate is the independent worker foundation for Edit Content V1.
-It is not registered with FastAPI or Edit Canvas.
+This crate is the isolated worker process of Edit Content; the host in `dokuwu-core` starts it.
+It has no network surface and does not share state with Canvas PDF.
 
 The worker requires explicit `--pdfium-library`, `--workspace-root`, and
 `--source-file` paths. Before loading PDFium, the
@@ -52,13 +52,12 @@ The worker returns a private `edit-content-preparation/v1` result containing an
 opaque candidate token and complete hash-bound evidence; preparation never
 advances accepted worker state or authorizes publication.
 
-The Python Content coordinator is the sole commit authority. It resolves the
+The Rust Content host (`dokuwu-core`) is the sole commit authority. It resolves the
 token only within the owned worker workspace, rechecks the verified bytes,
 prepares bounded immutable checkpoints/outputs, and makes state visible through
 one Windows atomic commit-record switch. Content history stores checked bytes,
 not inverse mutations. Pre-commit failure retains prior state; post-commit
 reply or cleanup failure retains the recorded outcome and is never replayed.
 
-Phase 5 is complete at this internal boundary. Public backend routing,
-frontend workflow, packaging, corpus release evidence, and user acceptance
-remain later tasks; no production Content mutation route is registered yet.
+The worker is driven only by the host in `dokuwu-core`; it exposes no network
+surface of its own.

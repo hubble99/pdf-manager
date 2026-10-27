@@ -137,7 +137,7 @@ export function explainGuard(reason?: string): string {
 }
 
 /**
- * The message for a refused reply, in the interface language. The backend's own
+ * The message for a refused reply, in the interface language. The engine's own
  * text is English, so it is used only for a reason the page does not know.
  */
 export function replyError(reply: Pick<ContentReply, 'error' | 'guardReason'>): string {

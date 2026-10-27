@@ -28,7 +28,7 @@ describe('housekeeping client', () => {
   });
 
   it('reads the health of the core', async () => {
-    const health = { appVersion: '1.10.1', coreVersion: '0.1.0', sidecarRequired: true };
+    const health = { appVersion: '1.11.0', coreVersion: '0.1.0' };
     mocks.invoke.mockResolvedValue(health);
     expect(await getCoreHealth()).toEqual(health);
   });

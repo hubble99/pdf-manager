@@ -120,10 +120,10 @@ describe('invisible text', () => {
 });
 
 describe('refused replies', () => {
-  it('prefers the page text for a known guard over the backend English text', () => {
-    expect(replyError({ guardReason: 'REJECTED_LAYOUT', error: 'backend text' }))
+  it('prefers the page text for a known guard over the engine English text', () => {
+    expect(replyError({ guardReason: 'REJECTED_LAYOUT', error: 'engine text' }))
       .toBe('The replacement would require unsupported layout changes.');
-    expect(replyError({ guardReason: 'SOMETHING_NEW', error: 'backend text' })).toBe('backend text');
+    expect(replyError({ guardReason: 'SOMETHING_NEW', error: 'engine text' })).toBe('engine text');
     expect(replyError({ error: 'Cancelled safely.' })).toBe('Cancelled safely.');
     expect(replyError({})).toBe('This text cannot be edited safely.');
   });

@@ -14,7 +14,7 @@ export const APP_NAME = 'Dokuwu';
  * The version the interface reports.
  *
  * `frontend/package.json` is the runtime version source and is kept in step with
- * `backend/version.py` and `tauri.conf.json` at release time, so the UI never
+ * `src-tauri/Cargo.toml` and `tauri.conf.json` at release time, so the UI never
  * hardcodes a version of its own. This matters because the reference design's
  * "v2.0 Productivity Suite" is a placeholder: the app must always show the
  * version that is actually running.
@@ -23,7 +23,7 @@ export const APP_VERSION: string = packageJson.version;
 
 /** Public repository and feedback destinations shown on Settings > About. */
 export const APP_SOURCE_URL = 'https://github.com/hubble99/pdf-manager';
-export const APP_TECH_STACK = 'Tauri 2, React 19, Vite, FastAPI, PyMuPDF';
+export const APP_TECH_STACK = 'Tauri 2, React 19, Vite, Rust, MuPDF, PDFium';
 
 export const APP_TAGLINE = t('Local document tools that keep your files on your device.');
 

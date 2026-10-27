@@ -1,7 +1,7 @@
 //! Dokuwu's shared native engine.
 //!
-//! This crate holds the feature logic that runs in Rust instead of the Python
-//! sidecar. It has no Tauri dependency: the app's `src-tauri` crate wraps each
+//! This crate holds the feature logic of the app, all of it Rust. It has no
+//! Tauri dependency: the app's `src-tauri` crate wraps each
 //! operation in a Tauri command and turns progress into window events, and
 //! tests call the operations directly.
 //!

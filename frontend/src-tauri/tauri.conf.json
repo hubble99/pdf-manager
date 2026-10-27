@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Dokuwu",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "identifier": "com.pdfmanager.app",
   "build": {
     "frontendDist": "../dist",
@@ -37,9 +37,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/pdf-manager-backend"
-    ],
     "resources": {
       "target/edit-content-runtime/": "edit-content/"
     },
@@ -51,6 +48,6 @@
     "copyright": "Copyright © 2026 Dokuwu",
     "category": "Utility",
     "shortDescription": "Professional PDF management toolkit",
-    "longDescription": "Dokuwu is a professional desktop application for merging, splitting, compressing, converting, and editing PDF documents. Powered by PyMuPDF and FastAPI."
+    "longDescription": "Dokuwu is a professional desktop application for merging, splitting, compressing, converting, and editing PDF documents. Everything runs on your computer."
   }
 }

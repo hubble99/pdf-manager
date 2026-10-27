@@ -3,9 +3,8 @@ use edit_content_engine::discovery::discover_document;
 use edit_content_engine::identity::ObjectRegistry;
 use edit_content_engine::preflight::PreflightInput;
 use edit_content_engine::replacement::prepare_candidate;
-use edit_content_engine::resource_inspector::{
-    InspectionOutcome, ProcessResourceInspector, ResourceInspector,
-};
+use edit_content_engine::native_inspector::NativeResourceInspector;
+use edit_content_engine::resource_inspector::{InspectionOutcome, ResourceInspector};
 use edit_content_engine::verification::{capture, compare};
 use edit_content_engine::verify_pdfium_library;
 use edit_content_engine::workspace::{CancellationToken, SessionWorkspace};
@@ -20,21 +19,12 @@ fn main() {
     let object_index = args[3].parse::<usize>().unwrap();
     let find = &args[4];
     let replacement = &args[5];
-    let python = PathBuf::from(&args[6]);
-    let backend = PathBuf::from(&args[7]);
-    let output = PathBuf::from(&args[8]);
+    let output = PathBuf::from(&args[6]);
     fs::create_dir_all(&output).unwrap();
     let library = PathBuf::from(std::env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH").unwrap());
     verify_pdfium_library(&library).unwrap();
     let pdfium = Pdfium::new(Pdfium::bind_to_library(library).unwrap());
-    let inspector = ProcessResourceInspector::new(
-        python,
-        vec![
-            "-c".into(),
-            "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
-            backend.display().to_string(),
-        ],
-    );
+    let inspector = NativeResourceInspector;
     let workspace = SessionWorkspace::create(
         &output.join("sessions"),
         &source,

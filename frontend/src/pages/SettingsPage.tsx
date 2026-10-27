@@ -169,7 +169,7 @@ export function SettingsPage() {
             </div>
             <div className="settings-card-body">
               <p className="settings-hint">
-                {t('Temporary files and generated outputs from backend operations can accumulate over time.')}
+                {t('Temporary files and generated outputs can accumulate over time.')}
               </p>
               <div className="settings-actions-left">
                 <button className="btn btn-secondary" onClick={handleClearTemp} disabled={isClearing}>

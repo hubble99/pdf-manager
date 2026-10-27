@@ -1,7 +1,7 @@
 import type { CanvasImageAsset, ImageObject } from '../../types/canvas';
 import { generateCanvasObjectId } from './ids';
 
-/** Image formats Canvas PDF accepts. The browser decodes them and the backend embeds them. */
+/** Image formats Canvas PDF accepts. The browser decodes them and the core embeds them. */
 export const CANVAS_IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
 export const CANVAS_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'] as const;
 export const CANVAS_IMAGE_ACCEPT = [...CANVAS_IMAGE_MIME_TYPES, ...CANVAS_IMAGE_EXTENSIONS].join(',');

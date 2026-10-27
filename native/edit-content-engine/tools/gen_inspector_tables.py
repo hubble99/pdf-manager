@@ -1,8 +1,9 @@
 """Writes the data tables of the native resource inspector.
 
-The Python inspector gets these from fontTools (Adobe Glyph List), the codecs
-(WinAnsi, MacRoman) and pypdf (PDFDocEncoding). The Rust inspector carries them
-as data so both agree. Run from the repository root with the backend's venv:
+The tables come from fontTools (Adobe Glyph List), the codecs (WinAnsi,
+MacRoman) and pypdf (PDFDocEncoding), and the Rust inspector carries them as
+data. This is an offline developer tool, not part of the app; run it from the
+repository root in any Python environment with fontTools and pypdf installed:
 
     python native/edit-content-engine/tools/gen_inspector_tables.py
 """

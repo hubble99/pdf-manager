@@ -383,7 +383,7 @@ describe('Edit Content page', () => {
     fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press É to continue' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
 
-    // The page's own (translatable) guard text is shown, not the backend's English text.
+    // The page's own (translatable) guard text is shown, not the engine's English text.
     expect(await screen.findByText(
       'The existing PDF font cannot represent the replacement. Your text is kept. Change it and apply again.',
     )).toBeInTheDocument();
