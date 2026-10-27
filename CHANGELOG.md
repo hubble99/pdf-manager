@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Brand**
+
+- **New logo:** Dokuwu has a new logo, a friendly document mascot with a folded corner and a checked shield. It replaces the old icon everywhere: the app and installer icon, the taskbar and Start Menu tiles, the Microsoft Store package assets, the sidebar, Home, and the website. Small sizes use a simplified version (document and face only) so the icon stays clear at 16 to 48 px. The artwork is vector (`docs/brand`), and `scripts/brand/generate_brand_assets.py` rebuilds every icon from it.
+- **Loading screen:** the logo pops in, floats gently and waves while the app starts. The animation uses transforms only, so it adds almost no CPU or memory use, and it is switched off when Windows is set to reduce motion.
+
+**Improved**
+
+- **Feature icons:** the sidebar, the Home cards and the page headers now use a new icon set drawn in the Dokuwu logo's style: a glossy document sheet with a folded corner (a picture frame for the image tools) and one white emblem per feature. The sheet is blue-teal like the logo and turns rose in the Dusty Rose theme.
+- **Support:** the Support / Donation entry (sidebar, Home card and page header) has a matching icon, and the Home page header shows the Dokuwu mark instead of a heart.
+- **Canvas PDF:** the top bar is tidied into two rows. The first names the page (with its icon) and holds the PDF, the output name and Save as PDF at the right edge; the second holds the tools, zoom and undo/redo. Nothing wraps into a stray line any more.
+
 ## 1.11.0 — 2026-10-27 · Phase 3: the Python backend is gone
 
 > Every feature now runs on the native Rust core. The Python program that started next to the app (`pdf-manager-backend.exe`) no longer exists, so Dokuwu is one process tree: no local server, no port 8000, nothing to wait for at start-up. Results are still saved to Downloads under a free name and never overwrite a file.

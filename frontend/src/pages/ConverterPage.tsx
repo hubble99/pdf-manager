@@ -11,6 +11,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PageThumbGrid } from '../components/preview';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
@@ -228,7 +229,7 @@ export function ConverterPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={FileImage}
+        icon={FEATURE_ICONS['converter']}
         title={t('PDF & Image')}
         description={TAB_COPY[activeTab].description}
       />

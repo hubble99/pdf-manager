@@ -9,6 +9,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
@@ -221,7 +222,7 @@ export function MergePage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={Merge}
+        icon={FEATURE_ICONS['merge']}
         title={t('Merge PDF')}
         description={t('Combine multiple PDF files into one document')}
       />

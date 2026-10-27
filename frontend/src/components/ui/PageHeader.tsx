@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { IconComponent } from '../icons';
 
 interface PageHeaderProps {
-  icon: LucideIcon;
+  icon: IconComponent;
   title: string;
   description: string;
   actions?: ReactNode;

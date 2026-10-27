@@ -1,0 +1,31 @@
+/*
+ * Feature icons: the logo's document sheet in miniature. The gradients default to the
+ * brand blue-teal; a theme can recolour them by setting the --fg-* variables (see the
+ * Dusty Rose block below), so the icons follow the theme without a second icon set.
+ * The emblem is white (soft accent) so it reads on every body colour.
+ */
+.feature-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+
+.feature-glyph-emblem { stroke: #fff; }
+.feature-glyph-emblem [data-accent] { stroke: var(--fg-accent, #c4fbf0); }
+.feature-glyph-emblem rect[data-accent],
+.feature-glyph-emblem circle[data-accent] { fill: var(--fg-accent, #c4fbf0); }
+.feature-glyph-emblem [data-solid] { fill: #fff; stroke: none; }
+
+/* Dusty Rose: the blue body would clash with the rose surfaces, so the sheet turns rose. */
+[data-theme="dusty-rose"] {
+  --fg-back-0: #e58aa8;
+  --fg-back-1: #b2466c;
+  --fg-back-2: #6a2243;
+  --fg-front-0: #f0a3bb;
+  --fg-front-1: #d96b90;
+  --fg-front-2: #b84a76;
+  --fg-front-3: #923860;
+  --fg-flap-0: #ffe8ee;
+  --fg-flap-1: #ffc9d8;
+  --fg-accent: #ffeab8;
+  --fg-shadow: rgba(106, 34, 67, 0.32);
+}

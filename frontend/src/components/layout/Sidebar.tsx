@@ -1,16 +1,17 @@
 import { Fragment, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, FileText, Heart, Home, Settings } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Home, Settings } from 'lucide-react';
 import { APP_NAME, APP_VERSION } from '../../config/app';
+import { BrandLogo } from '../BrandLogo';
 import { BETA_TOOLTIP, DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
+import { FEATURE_ICONS, type IconComponent } from '../icons';
 import type { NavItemId } from '../../types';
 import { t } from '../../i18n';
 
 interface NavEntryProps {
   id: NavItemId;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   path: string;
   collapsed: boolean;
   /** The donation entry carries its own accent colour. */
@@ -81,8 +82,8 @@ export function Sidebar() {
       {/* ── Header / Logo ── */}
       <div className="sidebar-header">
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" aria-hidden="true">
-            <FileText size={17} strokeWidth={2.25} />
+          <div className="sidebar-logo-icon sidebar-logo-icon--brand" aria-hidden="true">
+            <BrandLogo variant="mark" size={32} />
           </div>
           {!collapsed && (
             <div className="sidebar-brand">
@@ -128,7 +129,7 @@ export function Sidebar() {
         <NavEntry
           id={DONATION_ENTRY.id}
           label={DONATION_ENTRY.name}
-          icon={Heart}
+          icon={FEATURE_ICONS.donation}
           path={DONATION_ENTRY.route}
           collapsed={collapsed}
           accent

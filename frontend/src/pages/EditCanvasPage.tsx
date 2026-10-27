@@ -26,7 +26,6 @@ import {
   ZoomOut,
   Maximize2,
   Scan,
-  FileEdit,
   AlignLeft,
   AlignCenter,
   AlignRight,
@@ -41,6 +40,7 @@ import { baseName, stemOf } from '../utils/paths';
 import { isTauri } from '../utils/tauriDialog';
 import { isEmptyTextState } from '../utils/textPlaceholder';
 import { Filename } from '../components/Filename';
+import { FEATURE_ICONS } from '../components/icons';
 import * as fabric from 'fabric';
 import type {
   CanvasObject,
@@ -210,6 +210,8 @@ function LazyPageContainer({
 
 import { PageCanvas } from '../components/PageCanvas';
 import { t, tn } from '../i18n';
+
+const CanvasIcon = FEATURE_ICONS['edit-canvas'];
 
 // ── Main EditCanvasPage Component ────────────────────────────────────────────
 export function EditCanvasPage() {
@@ -1405,30 +1407,35 @@ export function EditCanvasPage() {
         data-testid="canvas-image-input"
       />
 
-      {/* ── Primary Horizontal Top Bar (Height: 52px) ───────────────────────── */}
+      {/* ── Top bar: row 1 names the page and holds the file and Save; row 2 is the toolbar ── */}
       <div
         className="canvas-top-bar"
         style={{
-          minHeight: '52px',
           background: 'var(--canvas-topbar-bg)',
           borderBottom: '1px solid var(--canvas-topbar-border)',
-          padding: '6px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          rowGap: '6px',
-          columnGap: '10px',
           zIndex: 20,
           flexShrink: 0,
         }}
       >
+        <div
+          className="canvas-top-bar-head"
+          style={{
+            minHeight: '52px',
+            padding: '6px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            rowGap: '6px',
+            columnGap: '12px',
+          }}
+        >
         {/* Brand / Title Icon */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <span
-            className="text-[var(--canvas-accent)] font-bold text-sm flex items-center gap-1.5"
-            style={{ whiteSpace: 'nowrap' }}
+            className="font-bold flex items-center gap-2"
+            style={{ whiteSpace: 'nowrap', fontSize: '16px', color: 'var(--canvas-text-primary)', letterSpacing: '-0.01em' }}
           >
-            <FileEdit size={18} />
+            <CanvasIcon size={28} />
             <span>{t('Canvas PDF')}</span>
           </span>
         </div>
@@ -1501,9 +1508,85 @@ export function EditCanvasPage() {
           </div>
         )}
 
-        {/* Separator 1 */}
-        <div style={{ width: '1px', height: '24px', background: 'var(--canvas-topbar-border)', flexShrink: 0 }} />
+        {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
+        <div
+          className="canvas-save-group"
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
+        >
+        {/* Output Filename Input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
+          <input
+            id="edit-output-name"
+            type="text"
+            aria-label={t('Output filename')}
+            value={outputFilename}
+            onChange={(e) => setOutputFilename(e.target.value)}
+            placeholder="edited_document"
+            disabled={!file || loading}
+            title={t('Output Filename')}
+            style={{
+              width: '100%',
+              height: '32px',
+              background: 'var(--canvas-input-bg)',
+              border: '1px solid var(--canvas-input-border)',
+              color: 'var(--canvas-text-primary)',
+              padding: '0 10px',
+              borderRadius: '6px',
+              outline: 'none',
+              fontSize: '13px',
+              minWidth: 0,
+            }}
+          />
+        </div>
 
+        {/* Save as PDF Button */}
+        <button
+          onClick={handleSave}
+          disabled={!file || loading || saving || pages.length === 0}
+          style={{
+            height: '32px',
+            padding: '0 14px',
+            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary)',
+            color: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-text-muted)' : 'var(--canvas-on-accent)',
+            borderRadius: '6px',
+            fontWeight: 600,
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
+            border: 'none',
+            cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
+            transition: 'background 0.2s ease'
+          }}
+        >
+          {saving ? (
+            <>
+              <Loader2 className="animate-spin" size={14} />
+              <span>{saveProgress ? `${t('Saving...')} ${saveProgress.done}/${saveProgress.total}` : t('Saving...')}</span>
+            </>
+          ) : (
+            <span>{t('Save as PDF')}</span>
+          )}
+        </button>
+        </div>
+        </div>
+
+        <div
+          className="canvas-top-bar-tools"
+          style={{
+            minHeight: '44px',
+            padding: '4px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            rowGap: '6px',
+            columnGap: '10px',
+            borderTop: '1px solid var(--canvas-topbar-border)',
+          }}
+        >
         {/* Canvas Tool Buttons (Icon Only) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
           {[
@@ -1694,70 +1777,6 @@ export function EditCanvasPage() {
             <Redo2 size={16} />
           </button>
         </div>
-
-        {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
-        <div
-          className="canvas-save-group"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
-        >
-        {/* Output Filename Input */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
-          <input
-            id="edit-output-name"
-            type="text"
-            aria-label={t('Output filename')}
-            value={outputFilename}
-            onChange={(e) => setOutputFilename(e.target.value)}
-            placeholder="edited_document"
-            disabled={!file || loading}
-            title={t('Output Filename')}
-            style={{
-              width: '100%',
-              height: '32px',
-              background: 'var(--canvas-input-bg)',
-              border: '1px solid var(--canvas-input-border)',
-              color: 'var(--canvas-text-primary)',
-              padding: '0 10px',
-              borderRadius: '6px',
-              outline: 'none',
-              fontSize: '13px',
-              minWidth: 0,
-            }}
-          />
-        </div>
-
-        {/* Save as PDF Button */}
-        <button
-          onClick={handleSave}
-          disabled={!file || loading || saving || pages.length === 0}
-          style={{
-            height: '32px',
-            padding: '0 14px',
-            background: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-input-border)' : 'var(--primary)',
-            color: (!file || loading || saving || pages.length === 0) ? 'var(--canvas-text-muted)' : 'var(--canvas-on-accent)',
-            borderRadius: '6px',
-            fontWeight: 600,
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '6px',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            border: 'none',
-            cursor: (!file || loading || saving || pages.length === 0) ? 'not-allowed' : 'pointer',
-            transition: 'background 0.2s ease'
-          }}
-        >
-          {saving ? (
-            <>
-              <Loader2 className="animate-spin" size={14} />
-              <span>{saveProgress ? `${t('Saving...')} ${saveProgress.done}/${saveProgress.total}` : t('Saving...')}</span>
-            </>
-          ) : (
-            <span>{t('Save as PDF')}</span>
-          )}
-        </button>
         </div>
       </div>
 

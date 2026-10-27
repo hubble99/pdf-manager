@@ -12,6 +12,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import {
   compressPhotos,
   fileSizes,
@@ -227,7 +228,7 @@ export function PhotoCompressPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={ImageMinus}
+        icon={FEATURE_ICONS['photo-compress']}
         title={t('Compress Photos')}
         description={t('Make JPEG and PNG photos smaller, one or many at once')}
       />

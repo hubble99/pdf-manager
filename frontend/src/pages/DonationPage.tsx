@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Copy, ExternalLink, Flag, Globe, Heart } from 'lucide-react';
+import { Copy, ExternalLink, Flag, Globe } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { DONATION, DONATION_TEXTS, QRIS_IS_PLACEHOLDER } from '../config/donation';
@@ -60,7 +61,7 @@ export function DonationPage() {
 
   return (
     <div className="feature-page">
-      <PageHeader icon={Heart} title={DONATION_TEXTS.title} description={DONATION_TEXTS.summary} />
+      <PageHeader icon={FEATURE_ICONS.donation} title={DONATION_TEXTS.title} description={DONATION_TEXTS.summary} />
 
       <Tabs
         ariaLabel={t('Donation method')}

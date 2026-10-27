@@ -8,10 +8,7 @@
  * Features are grouped by the task the user is performing, not by file type, so
  * tools that are not about PDFs fit the same structure without regrouping.
  */
-import {
-  FileImage, FilePenLine, FileType2, ImageDown, ImageMinus, Layers, Merge, Minimize2, PenLine, QrCode, Scissors, Shield,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { FEATURE_ICONS, type IconComponent } from '../components/icons';
 import type { NavItemId } from '../types';
 import { t } from '../i18n';
 
@@ -25,7 +22,7 @@ export interface FeatureEntry {
   /** One line, shown on the Home card. */
   description: string;
   group: FeatureGroupId;
-  icon: LucideIcon;
+  icon: IconComponent;
   route: string;
   /**
    * Marks a feature the product still considers unstable. The badge is rendered
@@ -56,53 +53,53 @@ export const FEATURE_GROUPS: { id: FeatureGroupId; label: string }[] = [
 
 export const FEATURES: FeatureEntry[] = [
   {
-    id: 'merge', name: t('Merge PDF'), group: 'organize', icon: Merge,
+    id: 'merge', name: t('Merge PDF'), group: 'organize', icon: FEATURE_ICONS['merge'],
     description: t('Combine several PDFs into one, in the order you choose.'), route: '/merge',
   },
   {
-    id: 'extract', name: t('Split PDF'), group: 'organize', icon: Scissors,
+    id: 'extract', name: t('Split PDF'), group: 'organize', icon: FEATURE_ICONS['extract'],
     description: t('Take out the pages or ranges you need as a new document.'), route: '/extract',
   },
   {
-    id: 'organize', name: t('Organize PDF'), group: 'organize', icon: Layers,
+    id: 'organize', name: t('Organize PDF'), group: 'organize', icon: FEATURE_ICONS['organize'],
     description: t('Reorder, rotate, mirror, delete, and insert pages visually.'), route: '/organize',
   },
   {
-    id: 'converter', name: t('PDF & Image'), group: 'convert', icon: FileImage,
+    id: 'converter', name: t('PDF & Image'), group: 'convert', icon: FEATURE_ICONS['converter'],
     description: t('Turn PDF pages into images, or images into a single PDF.'), route: '/converter',
   },
   {
-    id: 'pdf-to-word', name: t('PDF to Word'), group: 'convert', icon: FileType2,
+    id: 'pdf-to-word', name: t('PDF to Word'), group: 'convert', icon: FEATURE_ICONS['pdf-to-word'],
     description: t('Turn a PDF into an editable Word document.'), route: '/pdf-to-word',
     beta: true, betaNote: PDF_TO_WORD_BETA_NOTE,
   },
   {
-    id: 'image-format', name: t('WEBP to PNG/JPG'), group: 'convert', icon: ImageDown,
+    id: 'image-format', name: t('WEBP to PNG/JPG'), group: 'convert', icon: FEATURE_ICONS['image-format'],
     description: t('Convert WEBP images to PNG, JPG, or JPEG, many at once.'), route: '/image-format',
   },
   {
-    id: 'edit-canvas', name: t('Canvas PDF'), group: 'edit', icon: PenLine,
+    id: 'edit-canvas', name: t('Canvas PDF'), group: 'edit', icon: FEATURE_ICONS['edit-canvas'],
     description: t('Add text, shapes, images, drawings, and highlights onto a page.'), route: '/edit-canvas',
   },
   {
-    id: 'edit-content', name: t('Edit Content'), group: 'edit', icon: FilePenLine,
+    id: 'edit-content', name: t('Edit Content'), group: 'edit', icon: FEATURE_ICONS['edit-content'],
     description: t('Correct existing text in a PDF, verified before it is saved.'), route: '/edit-content',
     beta: true,
   },
   {
-    id: 'compress', name: t('Compress PDF'), group: 'optimize', icon: Minimize2,
+    id: 'compress', name: t('Compress PDF'), group: 'optimize', icon: FEATURE_ICONS['compress'],
     description: t('Reduce file size while keeping the document readable.'), route: '/compress',
   },
   {
-    id: 'photo-compress', name: t('Compress Photos'), group: 'optimize', icon: ImageMinus,
+    id: 'photo-compress', name: t('Compress Photos'), group: 'optimize', icon: FEATURE_ICONS['photo-compress'],
     description: t('Make JPEG and PNG photos smaller, many at once.'), route: '/photo-compress',
   },
   {
-    id: 'protect', name: t('Protect PDF'), group: 'protect', icon: Shield,
+    id: 'protect', name: t('Protect PDF'), group: 'protect', icon: FEATURE_ICONS['protect'],
     description: t('Add or remove password protection and permissions.'), route: '/protect',
   },
   {
-    id: 'qr-barcode', name: t('QR & Barcode'), group: 'create', icon: QrCode,
+    id: 'qr-barcode', name: t('QR & Barcode'), group: 'create', icon: FEATURE_ICONS['qr-barcode'],
     description: t('Generate a QR code or barcode and save it as an image.'), route: '/qr-barcode',
   },
 ];

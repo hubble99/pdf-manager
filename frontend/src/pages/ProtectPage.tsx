@@ -9,6 +9,7 @@ import {
   Shield,
   Upload,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { addHistoryEntry } from '../utils/historyStore';
@@ -215,7 +216,7 @@ export function ProtectPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={Shield}
+        icon={FEATURE_ICONS['protect']}
         title={t('Protect PDF')}
         description={t('Add or remove AES-256 password protection from PDF files')}
       />
