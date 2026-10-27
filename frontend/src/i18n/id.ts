@@ -11,7 +11,7 @@ export const ID: Record<string, string> = {
   'Reading the PDF…': 'Membaca PDF…',
   'Saving the compressed PDF…': 'Menyimpan PDF terkompres…',
   'Leave this feature?': 'Tinggalkan fitur ini?',
-  'The file you loaded here will be removed. You will need to add it again if you come back.': 'File yang Anda muat di sini akan dihapus. Anda perlu memasukkannya lagi jika kembali.',
+  'The file you loaded here will be removed. You will need to add it again if you come back.': 'File yang kamu muat di sini akan dihapus. Kamu perlu menambahkannya lagi kalau kembali.',
   'Stay': 'Tetap di sini',
   'Leave': 'Tinggalkan',
   'Merging repeated pictures and fonts…': 'Menggabungkan gambar dan font yang berulang…',
