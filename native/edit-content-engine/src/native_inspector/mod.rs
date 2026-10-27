@@ -63,6 +63,30 @@ pub fn inspect_file_with_reason(source: &Path) -> Result<Value, &'static str> {
     }
 }
 
+/// The scale at which `page_index` of the PDF at `source` draws its stroked text
+/// (see `Ctx::text_stroke_scale`): `Ok(None)` when it has none, `Err` when the
+/// page mixes scales or cannot be read.
+pub fn text_stroke_scale_of_page(source: &Path, page_index: usize) -> Result<Option<f64>, &'static str> {
+    let bytes = std::fs::read(source).map_err(|_| "unreadable")?;
+    let outcome = std::panic::catch_unwind(|| -> PResult<Option<f64>> {
+        let pdf = Pdf::open(bytes)?;
+        let ctx = Ctx { pdf: &pdf, fonts: RefCell::new(HashMap::new()) };
+        let scopes = ctx.page_scopes()?;
+        let scope = scopes.get(page_index).ok_or(Reject("no such page"))?;
+        let page = Page { dict: &scope.dict, rotate: scope.rotate.clone() };
+        match ctx.text_stroke_scale(&page)? {
+            J::Float(scale) => Ok(Some(scale)),
+            J::Null => Ok(None),
+            _ => Err(Reject("stroked text at several scales")),
+        }
+    });
+    match outcome {
+        Ok(Ok(scale)) => Ok(scale),
+        Ok(Err(Reject(why))) => Err(why),
+        Err(_) => Err("internal error"),
+    }
+}
+
 pub fn inspect_bytes(bytes: Vec<u8>) -> PResult<Value> {
     let source_sha = sha256_hex(&bytes);
     let pdf = Pdf::open(bytes)?;
@@ -105,6 +129,7 @@ pub fn inspect_bytes(bytes: Vec<u8>) -> PResult<Value> {
             ("markedContentProof", optional(ctx.marked_content_proof(&page, resources))?),
             ("preservationResources", optional(ctx.resource_fingerprints(resources))?),
             ("imageResourceBindings", optional(ctx.image_resource_bindings(&page, resources))?),
+            ("textStrokeScale", optional(ctx.text_stroke_scale(&page))?),
             ("pagePreservation", page_preservation),
         ]));
     }

@@ -416,6 +416,14 @@ fn corpus() -> Vec<Case> {
             pdf: form_overlay_page(), old: "word", new: "ward", expect: PREPARED,
         },
         Case {
+            // "Fake bold": fill plus a thin stroke drawn through a scaled CTM. PDFium would
+            // write the stroke width back without that scale, so the bold text would come
+            // back many times thicker; the verifier refuses unless the width was kept.
+            name: "outlined text drawn through a scaled CTM beside the edited text",
+            pdf: single_page("q 0.1 0 0 0.1 0 0 cm 0 0.5 0 rg 0 0.5 0 RG 3 w 300 1400 1000 200 re W* n BT /F1 120 Tf 2 Tr 300 1450 Td (bold) Tj ET Q BT /F1 12 Tf 30 100 Td (word) Tj ET"),
+            old: "word", new: "wor", expect: PREPARED,
+        },
+        Case {
             // Quartz output repeats identical objects; the verifier must pair twins
             // one-to-one instead of treating them as ambiguous.
             name: "duplicate identical paths beside the edited text",

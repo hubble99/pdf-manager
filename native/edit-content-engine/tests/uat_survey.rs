@@ -140,6 +140,21 @@ impl Worker {
 }
 
 
+/// Finds `name` anywhere below `root`, so a prepared candidate can be saved for a visual check.
+fn find_file(root: &Path, name: &str) -> Option<PathBuf> {
+    for entry in std::fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file(&path, name) {
+                return Some(found);
+            }
+        } else if path.file_name().is_some_and(|n| n == name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
 fn first_word_edit(full: &str) -> Option<Value> {
     let start = full.char_indices().find(|(_, c)| c.is_alphanumeric())?.0;
     let word: String = full[start..].chars().take_while(|c| c.is_alphanumeric()).collect();
@@ -207,6 +222,13 @@ fn survey_real_pdfs() {
             tried += 1;
             if reply.status == "prepared" {
                 prepared += 1;
+                if let (Some(dump), Some(token)) = (env::var_os("EDIT_CONTENT_UAT_DUMP").map(PathBuf::from), reply.result["candidateToken"].as_str()) {
+                    let name = format!("{token}.pdf");
+                    if let Some(found) = find_file(&worker.workspace_root, &name) {
+                        let _ = std::fs::create_dir_all(&dump);
+                        let _ = std::fs::copy(found, dump.join(format!("{}-page{}-path{}.pdf", number + 1, object["pageIndex"], object["sourceScope"]["objectPath"])));
+                    }
+                }
             } else {
                 let reason = reply.guard_reason.clone().unwrap_or_else(|| reply.status.clone());
                 *tally.entry(reason.clone()).or_default() += 1;

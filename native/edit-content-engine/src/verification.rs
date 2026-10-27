@@ -400,8 +400,27 @@ pub fn capture(
             }
             style["clipPath"] = simple_clip_path(&object)?;
             if object.as_text_object().is_some() || object.as_path_object().is_some() {
-                style["strokeWidth"] =
-                    json!(finite(object.stroke_width().map_err(|_| integrity(line!()))?.value)?);
+                let stroked_text = object.as_text_object().is_some_and(|text| {
+                    !matches!(
+                        text.render_mode(),
+                        PdfPageTextRenderMode::FilledUnstroked
+                            | PdfPageTextRenderMode::Invisible
+                            | PdfPageTextRenderMode::FilledUnstrokedClipping
+                            | PdfPageTextRenderMode::InvisibleClipping
+                    )
+                });
+                let width = finite(object.stroke_width().map_err(|_| integrity(line!()))?.value)?;
+                if stroked_text {
+                    // The width as drawn: PDFium reports it without the scale of the
+                    // space it was measured in, which the page's own stream gives.
+                    let scale = match &resource_page["textStrokeScale"] {
+                        Value::Null => 1.0,
+                        value => value.as_f64().ok_or_else(|| integrity(line!()))?,
+                    };
+                    style["drawnStrokeWidth"] = json!(finite((width * scale) as f32)?);
+                } else {
+                    style["strokeWidth"] = json!(width);
+                }
                 style["join"] = json!(format!("{:?}", object.line_join().map_err(|_| integrity(line!()))?));
                 style["cap"] = json!(format!("{:?}", object.line_cap().map_err(|_| integrity(line!()))?));
                 style["dashPhase"] =
@@ -571,6 +590,49 @@ pub fn capture(
     })
 }
 
+/// Styles are equal, or differ only in a clip that PDFium drops once nothing is
+/// left to clip. PDFium measures a stroked text object with the line width it
+/// has stored; a thinner stroke (the width the page really draws, see
+/// `drawnStrokeWidth`) can leave the whole object inside a clip rectangle that
+/// the same object, measured with the thicker stored width, crossed. PDFium then
+/// no longer keeps that clip. Drawing is the same, so the clip is not collateral
+/// as long as the object really lies inside it.
+fn style_equivalent(original: &ObjectEvidence, other: &ObjectEvidence) -> bool {
+    if equivalent(&original.style, &other.style, "style") {
+        return true;
+    }
+    if original.kind != "text" || original.style.get("drawnStrokeWidth").is_none() || other.style["clipPath"] != json!([]) {
+        return false;
+    }
+    let Some(polygon) = original.style["clipPath"].as_array().filter(|segments| segments.len() >= 4) else {
+        return false;
+    };
+    let vertices: Vec<[f64; 2]> = polygon[..polygon.len() - 1]
+        .iter()
+        .filter_map(|segment| {
+            let point = segment["point"].as_array()?;
+            Some([point.first()?.as_f64()?, point.get(1)?.as_f64()?])
+        })
+        .collect();
+    if vertices.len() + 1 != polygon.len() {
+        return false;
+    }
+    let mut without_clip = (original.style.clone(), other.style.clone());
+    without_clip.0["clipPath"] = json!([]);
+    if !equivalent(&without_clip.0, &without_clip.1, "style") {
+        return false;
+    }
+    let turn = |a: [f64; 2], b: [f64; 2], p: [f64; 2]| (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+    let orientation = area(&vertices).signum();
+    other.quad.iter().all(|corner| {
+        (0..vertices.len()).all(|i| {
+            let (a, b) = (vertices[i], vertices[(i + 1) % vertices.len()]);
+            let length = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+            orientation * turn(a, b, *corner) >= -0.01 * length
+        })
+    })
+}
+
 fn near(a: f64, b: f64, absolute: f64, relative: f64) -> bool {
     a.is_finite() && b.is_finite() && (a - b).abs() <= absolute + relative * a.abs().max(b.abs())
 }
@@ -584,6 +646,8 @@ fn equivalent(a: &Value, b: &Value, key: &str) -> bool {
             match key {
                 "matrix" => near(a, b, 0.000001, 0.000001),
                 "fontSize" => near(a, b, 0.0001, 0.0),
+                // Written back with six significant digits.
+                "drawnStrokeWidth" => near(a, b, 0.0, 0.0001),
                 "geometry" | "point" => near(a, b, 0.01, 0.0),
                 _ => a.is_finite() && b.is_finite() && a == b,
             }
@@ -735,7 +799,7 @@ pub fn compare(
                 original.page == other.page
                     && original.kind == other.kind
                     && expected_text == other.text.as_deref()
-                    && equivalent(&original.style, &other.style, "style")
+                    && style_equivalent(original, other)
                     && equivalent(&original.payload, &other.payload, "payload")
                     // PDFium can recompute a text object's derived tight width
                     // after serialization even when its text, exact font,

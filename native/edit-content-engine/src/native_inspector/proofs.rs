@@ -430,6 +430,61 @@ impl<'a> Ctx<'a> {
         ]))
     }
 
+    // ------------------------------------------------------- stroked text
+
+    /// The scale at which the page's stroked text is drawn.
+    ///
+    /// A text object's line width is measured in the user space that was current
+    /// when the text was shown, but PDFium folds that space into the text matrix
+    /// and, when it writes the page again, keeps the number as it was. Stroked
+    /// text (the "fake bold" some producers draw as fill plus a thin stroke)
+    /// would come back many times thicker. Callers need this scale to write the
+    /// width that the viewer showed.
+    ///
+    /// `Null`: no stroked text. A number: every stroked text is drawn at that
+    /// scale (the square root of the determinant of its CTM). `"mixed"`: the
+    /// scales differ.
+    pub fn text_stroke_scale(&self, page: &Page<'_>) -> PResult<J> {
+        let Some(operations) = self.contents_of(page)? else { return Ok(J::Null) };
+        require(operations.len() <= MAX_OPERATIONS)?;
+        type Matrix = [f64; 6];
+        let mut ctm: Matrix = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+        let mut mode = 0.0;
+        let mut stack: Vec<(Matrix, f64)> = Vec::new();
+        let mut found: Option<f64> = None;
+        for Op { args, op } in operations.iter() {
+            match op.as_slice() {
+                b"q" => stack.push((ctm, mode)),
+                b"Q" => (ctm, mode) = stack.pop().ok_or(Reject("unbalanced Q"))?,
+                b"cm" => {
+                    let values: Vec<f64> = args.iter().filter_map(number).collect();
+                    require(values.len() == 6)?;
+                    let m = [values[0], values[1], values[2], values[3], values[4], values[5]];
+                    ctm = [
+                        m[0] * ctm[0] + m[1] * ctm[2],
+                        m[0] * ctm[1] + m[1] * ctm[3],
+                        m[2] * ctm[0] + m[3] * ctm[2],
+                        m[2] * ctm[1] + m[3] * ctm[3],
+                        m[4] * ctm[0] + m[5] * ctm[2] + ctm[4],
+                        m[4] * ctm[1] + m[5] * ctm[3] + ctm[5],
+                    ];
+                }
+                b"Tr" => mode = number(args.first().ok_or(Reject("missing operand"))?).ok_or(Reject("not a number"))?,
+                b"Tj" | b"TJ" | b"'" | b"\"" if matches!(mode as i64, 1 | 2 | 5 | 6) => {
+                    let scale = (ctm[0] * ctm[3] - ctm[1] * ctm[2]).abs().sqrt();
+                    require(scale.is_finite() && scale > 0.0)?;
+                    match found {
+                        None => found = Some(scale),
+                        Some(earlier) if (earlier - scale).abs() <= 1e-9 * earlier => {}
+                        Some(_) => return Ok(J::str("mixed")),
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(found.map_or(J::Null, J::Float))
+    }
+
     // ------------------------------------------------------------ text slots
 
     /// `text_paint_slots`.
