@@ -1,16 +1,17 @@
 import { Fragment, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, FileText, Heart, Home, Settings } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+
 import { APP_NAME, APP_VERSION } from '../../config/app';
 import { BETA_TOOLTIP, DONATION_ENTRY, HOME_ENTRY, featuresByGroup } from '../../config/features';
+import type { IconComponent } from '../icons';
 import type { NavItemId } from '../../types';
 import { t } from '../../i18n';
 
 interface NavEntryProps {
   id: NavItemId;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   path: string;
   collapsed: boolean;
   /** The donation entry carries its own accent colour. */

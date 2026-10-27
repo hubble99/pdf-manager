@@ -10,6 +10,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PageHeader } from '../components/ui';
 import { PDF_TO_WORD_BETA_NOTE } from '../config/features';
@@ -100,7 +101,7 @@ export function PdfToWordPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={FileType2}
+        icon={FEATURE_ICONS['pdf-to-word']}
         title={t('PDF to Word')}
         description={t('Turn a PDF into an editable Word document (.docx)')}
         badge={{ label: 'BETA', title: PDF_TO_WORD_BETA_NOTE }}

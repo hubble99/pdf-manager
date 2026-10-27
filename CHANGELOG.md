@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Improved**
+
+- **Feature icons:** the sidebar, the Home cards and the page headers now use a new icon set drawn in the Dokuwu logo's style: a glossy blue-teal document sheet with a folded corner (a picture frame for the image tools) and one white emblem per feature. The colours are the same in every theme.
+
 ## 1.11.0 — 2026-10-27 · Phase 3: the Python backend is gone
 
 > Every feature now runs on the native Rust core. The Python program that started next to the app (`pdf-manager-backend.exe`) no longer exists, so Dokuwu is one process tree: no local server, no port 8000, nothing to wait for at start-up. Results are still saved to Downloads under a free name and never overwrite a file.

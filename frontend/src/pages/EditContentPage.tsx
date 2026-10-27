@@ -20,6 +20,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 
 import { Filename } from '../components/Filename';
 import { PageHeader, StateView } from '../components/ui';
@@ -609,7 +610,7 @@ export function EditContentPage() {
   return (
     <div className="feature-page edit-content-page">
       <PageHeader
-        icon={FilePenLine}
+        icon={FEATURE_ICONS['edit-content']}
         title={t('Edit Content')}
         description={t('Correct supported native PDF text with guarded regeneration and verification')}
         badge={{ label: 'BETA', title: BETA_TOOLTIP }}

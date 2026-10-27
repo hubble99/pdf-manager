@@ -5526,3 +5526,38 @@ select.input {
 @media (prefers-reduced-motion: reduce) {
   .size-bar--busy > i { animation: none; }
 }
+
+/* ── Brand feature icons ────────────────────────────────────────────────────── */
+/* The glyphs carry their own colours, so they ignore the muted/active text colour
+   that line icons take; the tile behind a page header icon would only box them in. */
+.nav-item-icon.feature-glyph {
+  width: 20px;
+  height: 20px;
+  /* Occupies the same 16px slot as a line icon, so labels stay aligned with Home. */
+  margin: -2px;
+}
+
+.page-header-icon:has(.feature-glyph),
+.home-card-icon:has(.feature-glyph) {
+  background: transparent;
+}
+
+.page-header-icon .feature-glyph {
+  width: 34px;
+  height: 34px;
+}
+
+.home-card-icon:has(.feature-glyph) {
+  width: 30px;
+  height: 30px;
+}
+
+.home-card-icon .feature-glyph {
+  width: 30px;
+  height: 30px;
+}
+
+.page-header-icon .feature-glyph,
+.home-card-icon .feature-glyph {
+  filter: drop-shadow(0 1px 1.5px rgba(16, 31, 138, 0.28));
+}
