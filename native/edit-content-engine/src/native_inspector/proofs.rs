@@ -102,10 +102,24 @@ impl<'a> Ctx<'a> {
                     let state = self.semantic(state, None)?;
                     let J::Obj(entries) = state else { reject!("unproven nondefault graphics state") };
                     for (key, value) in entries.iter() {
+                        // A constant alpha is carried by each object's own colour and
+                        // alpha, which verification compares before and after, so any
+                        // value from 0 to 1 is accepted here. Blend modes, soft masks
+                        // and every other key stay unproven.
+                        if matches!(key.as_str(), "/CA" | "/ca") {
+                            let alpha = match value {
+                                J::Int(n) => *n as f64,
+                                J::Float(f) => *f,
+                                _ => reject!("unproven nondefault graphics state"),
+                            };
+                            if !(0.0..=1.0).contains(&alpha) {
+                                reject!("unproven nondefault graphics state");
+                            }
+                            continue;
+                        }
                         let default = match key.as_str() {
                             "/Type" => J::str("/ExtGState"),
                             "/BM" => J::str("/Normal"),
-                            "/CA" | "/ca" => J::Int(1),
                             _ => reject!("unproven nondefault graphics state"),
                         };
                         if *value != default {
@@ -141,24 +155,35 @@ impl<'a> Ctx<'a> {
             None => Obj::Dict(Default::default()),
         };
         let Some(mapping) = as_dict(&mapping) else { reject!("invalid image resource dictionary") };
-        let mut result: Vec<(String, String)> = Vec::new();
+        // A form XObject (a producer's overlay layer, for example) is not an image
+        // object, but it is a page dependency like one: its whole semantic hash is
+        // bound here and flagged, so the page's dependency list still has to be
+        // accounted for exactly while the image bijection ignores it.
+        let mut result: Vec<(String, String, bool)> = Vec::new();
         for (_, value) in mapping.iter() {
             let image = self.resolve(value)?;
             let Obj::Stream(stream) = &image else { reject!("opaque or nested image resource") };
-            if !name_is(stream.dict.get("/Subtype"), "/Image") {
+            let form = name_is(stream.dict.get("/Subtype"), "/Form");
+            if !form && !name_is(stream.dict.get("/Subtype"), "/Image") {
                 reject!("opaque or nested image resource");
             }
             let raw = self.pdf.stream_bytes(stream);
-            if raw.is_empty() || raw.len() > 64 * 1024 * 1024 {
+            if (raw.is_empty() && !form) || raw.len() > 64 * 1024 * 1024 {
                 reject!("unbounded or empty image stream");
             }
-            result.push((sha256_hex(raw), self.semantic_hash(value, None)?));
+            result.push((sha256_hex(raw), self.semantic_hash(value, None)?, form));
         }
         result.sort();
         Ok(J::Arr(
             result
                 .into_iter()
-                .map(|(raw, semantic)| J::obj([("rawSha256", J::Str(raw)), ("semanticSha256", J::Str(semantic))]))
+                .map(|(raw, semantic, form)| {
+                    let mut entry = vec![("rawSha256", J::Str(raw)), ("semanticSha256", J::Str(semantic))];
+                    if form {
+                        entry.push(("form", J::Bool(true)));
+                    }
+                    J::obj(entry)
+                })
                 .collect(),
         ))
     }
