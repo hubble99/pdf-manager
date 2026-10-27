@@ -14,7 +14,9 @@ export interface GlyphDef {
 
 export type GlyphId =
   | 'merge' | 'extract' | 'organize' | 'converter' | 'pdf-to-word' | 'image-format'
-  | 'edit-canvas' | 'edit-content' | 'compress' | 'photo-compress' | 'protect' | 'qr-barcode';
+  | 'edit-canvas' | 'edit-content' | 'compress' | 'photo-compress' | 'protect' | 'qr-barcode'
+  /** Not a feature: the Support / Donation entry, drawn in the same style. */
+  | 'donation';
 
 export const GLYPHS: Record<GlyphId, GlyphDef> = {
   merge: {
@@ -127,5 +129,9 @@ export const GLYPHS: Record<GlyphId, GlyphDef> = {
         <path data-accent d="M13.8 13.8h1.8M17.8 13.8v1.8M13.8 16.2v1.8h1.8M17.8 18h.01" />
       </>
     ),
+  },
+  donation: {
+    base: 'tile',
+    emblem: <path data-solid d="M12 18.2c-5.4-3.7-6-7.6-3.3-9.2a3.1 3.1 0 0 1 3.3 1.3 3.1 3.1 0 0 1 3.3-1.3c2.7 1.6 2.1 5.5-3.3 9.2z" />,
   },
 };

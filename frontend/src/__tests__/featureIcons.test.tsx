@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { FEATURE_ICONS } from '../components/icons';
@@ -26,5 +27,13 @@ describe('feature icons', () => {
     const { container } = render(<><Icon /><Icon /></>);
     const ids = [...container.querySelectorAll('linearGradient')].map((g) => g.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('recolours the sheet for the Dusty Rose theme instead of staying blue', () => {
+    const css = readFileSync('src/components/icons/feature-glyph.css', 'utf8');
+    const block = css.slice(css.indexOf('[data-theme="dusty-rose"]'));
+    for (const name of ['back-0', 'back-1', 'back-2', 'front-0', 'front-1', 'front-2', 'front-3', 'flap-0', 'flap-1']) {
+      expect(block, name).toContain(`--fg-${name}:`);
+    }
   });
 });

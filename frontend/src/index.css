@@ -5538,8 +5538,14 @@ select.input {
 }
 
 .page-header-icon:has(.feature-glyph),
+.page-header-icon:has(.brand-mark),
 .home-card-icon:has(.feature-glyph) {
   background: transparent;
+}
+
+.page-header-icon .brand-mark {
+  width: 30px;
+  height: 30px;
 }
 
 .page-header-icon .feature-glyph {
@@ -5559,5 +5565,78 @@ select.input {
 
 .page-header-icon .feature-glyph,
 .home-card-icon .feature-glyph {
-  filter: drop-shadow(0 1px 1.5px rgba(16, 31, 138, 0.28));
+  filter: drop-shadow(0 1px 1.5px var(--fg-shadow, rgba(16, 31, 138, 0.28)));
+}
+
+/* ── Brand logo ───────────────────────────────────────────────────────────── */
+.sidebar-logo-icon--brand {
+  background: transparent;
+  border-radius: 0;
+}
+
+.sidebar-logo-icon--brand > img {
+  display: block;
+}
+
+.home-hero-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.home-hero-brand-text {
+  min-width: 0;
+}
+
+.home-hero-brand-text > .home-hero-tagline {
+  margin-bottom: 0;
+}
+
+.brand-logo {
+  display: inline-block;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.brand-logo > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Splash animation: pop in, float, wave twice. The pop and float move the whole
+   element (compositor only); the wave rotates one arm and ends by itself. */
+.brand-logo--animated {
+  animation:
+    brand-pop 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.25) both,
+    brand-float 3.2s ease-in-out 0.6s infinite;
+}
+
+.brand-logo--animated .dk-wave {
+  transform-box: fill-box;
+  transform-origin: 0% 100%;
+  animation: brand-wave 0.9s ease-in-out 0.8s 2;
+}
+
+@keyframes brand-pop {
+  from { opacity: 0; transform: translateY(14px) scale(0.86); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes brand-wave {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-16deg); }
+  65% { transform: rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-logo--animated,
+  .brand-logo--animated .dk-wave {
+    animation: none;
+  }
 }

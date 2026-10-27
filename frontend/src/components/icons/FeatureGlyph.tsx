@@ -29,19 +29,19 @@ export function FeatureGlyph({ id, size = 24, className }: FeatureGlyphProps) {
     >
       <defs>
         <linearGradient id={`${uid}-back`} x1="0" y1="2.5" x2="0" y2="21.5" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#22c2dc" />
-          <stop offset=".45" stopColor="#1f5cc0" />
-          <stop offset="1" stopColor="#101f8a" />
+          <stop offset="0" style={{ stopColor: 'var(--fg-back-0, #22c2dc)' }} />
+          <stop offset=".45" style={{ stopColor: 'var(--fg-back-1, #1f5cc0)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--fg-back-2, #101f8a)' }} />
         </linearGradient>
         <linearGradient id={`${uid}-front`} x1="0" y1="2.5" x2="0" y2="21.5" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#8fe8f0" />
-          <stop offset=".3" stopColor="#4fb6ea" />
-          <stop offset=".7" stopColor="#3a7be0" />
-          <stop offset="1" stopColor="#3a56d0" />
+          <stop offset="0" style={{ stopColor: 'var(--fg-front-0, #8fe8f0)' }} />
+          <stop offset=".3" style={{ stopColor: 'var(--fg-front-1, #4fb6ea)' }} />
+          <stop offset=".7" style={{ stopColor: 'var(--fg-front-2, #3a7be0)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--fg-front-3, #3a56d0)' }} />
         </linearGradient>
         <linearGradient id={`${uid}-flap`} x1="14" y1="2.5" x2="19.5" y2="8" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#c8f3f6" />
-          <stop offset="1" stopColor="#9ee6ee" />
+          <stop offset="0" style={{ stopColor: 'var(--fg-flap-0, #c8f3f6)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--fg-flap-1, #9ee6ee)' }} />
         </linearGradient>
         <linearGradient id={`${uid}-rim`} x1="4.5" y1="2.5" x2="8" y2="12" gradientUnits="userSpaceOnUse">
           <stop offset="0" stopColor="#fff" stopOpacity=".9" />
