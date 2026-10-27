@@ -1,0 +1,14 @@
+/*
+ * Feature icons: the logo's document sheet in miniature. The gradients are the brand
+ * colours and stay the same in every theme; the emblem is white (minty accent) so it
+ * reads on the blue body in light and dark themes alike.
+ */
+.feature-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+
+.feature-glyph-emblem { stroke: #fff; }
+.feature-glyph-emblem [data-accent] { stroke: #c4fbf0; }
+.feature-glyph-emblem rect[data-accent],
+.feature-glyph-emblem circle[data-accent] { fill: #c4fbf0; }

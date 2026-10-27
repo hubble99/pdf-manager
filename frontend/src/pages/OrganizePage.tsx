@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import {
-  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Info, Layers, ListTree, Loader2,
+  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Info, ListTree, Loader2,
   RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipVertical2, Upload, X,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { PageHeader } from '../components/ui';
 import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
@@ -69,7 +70,7 @@ export function OrganizePage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={Layers}
+        icon={FEATURE_ICONS['organize']}
         title={t('Organize PDF')}
         description={t('Reorder, rotate, mirror, delete, and insert pages in one workspace')}
       />

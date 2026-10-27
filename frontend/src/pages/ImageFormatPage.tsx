@@ -12,6 +12,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import {
   convertWebpImages,
   isCoreCancelled,
@@ -189,7 +190,7 @@ export function ImageFormatPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={ImageDown}
+        icon={FEATURE_ICONS['image-format']}
         title={t('WEBP to PNG/JPG')}
         description={t('Convert WEBP images to PNG, JPG, or JPEG, one or many at once')}
       />

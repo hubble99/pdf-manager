@@ -7,6 +7,7 @@ import {
   Loader2,
   QrCode,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { generateBarcode, generateQr, generationErrorText, pngDimensions } from '../api/qrBarcode';
 import { useToast } from '../hooks/useToast';
 import { PageHeader, RadioCardGroup, RangeField, Tabs } from '../components/ui';
@@ -314,7 +315,7 @@ export function QrBarcodePage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={QrCode}
+        icon={FEATURE_ICONS['qr-barcode']}
         title={t('QR & Barcode')}
         description={t('Generate custom QR codes and barcodes')}
       />

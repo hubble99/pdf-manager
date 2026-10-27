@@ -10,6 +10,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PageHeader, RangeField, SegmentedControl, SizeCompareCard } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
@@ -148,7 +149,7 @@ export function CompressPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={Minimize2}
+        icon={FEATURE_ICONS['compress']}
         title={t('Compress PDF')}
         description={t('Reduce file size while keeping the document readable')}
       />

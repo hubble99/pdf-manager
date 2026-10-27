@@ -8,6 +8,7 @@ import {
   Scissors,
   Upload,
 } from 'lucide-react';
+import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PageThumbGrid } from '../components/preview';
@@ -214,7 +215,7 @@ export function ExtractPage() {
   return (
     <div className="feature-page">
       <PageHeader
-        icon={Scissors}
+        icon={FEATURE_ICONS['extract']}
         title={t('Split PDF')}
         description={t('Take out the pages or ranges you need as a new document')}
       />
