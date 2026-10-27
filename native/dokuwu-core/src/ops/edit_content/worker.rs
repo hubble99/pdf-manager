@@ -210,7 +210,10 @@ impl WorkerAdapter {
         }
         let mut child = command
             .spawn()
-            .map_err(|_| WorkerError::with_code("Content worker could not be started", "ENGINE_START_FAILED"))?;
+            .map_err(|error| {
+                log::warn!("edit-content worker could not be started ({error}); worker: {program}, PDFium: {}", self.config.pdfium_library.display());
+                WorkerError::with_code("Content worker could not be started", "ENGINE_START_FAILED")
+            })?;
         let stdin = child.stdin.take().expect("piped");
         let stdout = child.stdout.take().expect("piped");
         let stderr = child.stderr.take().expect("piped");
