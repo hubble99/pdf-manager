@@ -155,7 +155,7 @@ export function CompressPage() {
       />
 
       <div className="page-body">
-        <div className={`form-col${inputPath ? '' : ' form-col--center'}`}>
+        <div className={`form-col${inputPath ? ' form-col--balanced' : ' form-col--center'}`}>
 
           {!desktop ? (
             <div className="card status-card" role="note">
@@ -185,6 +185,7 @@ export function CompressPage() {
             </>
           ) : (
             <>
+              <div className="col-stack">
               {/* File */}
               <div className="card card--flush">
                 <div className="card-head">
@@ -210,8 +211,54 @@ export function CompressPage() {
                     </button>
                   </span>
                 </div>
+                <div className="card-body">
+                  <div className="field">
+                    <label htmlFor="compress-output-name">{t('Output Filename')}</label>
+                    <div className="input-suffix-wrap">
+                      <input
+                        id="compress-output-name"
+                        className="input"
+                        type="text"
+                        value={outputName}
+                        disabled={running}
+                        onChange={(e) => setOutputName(e.target.value)}
+                        placeholder={`compressed_${stemOf(inputPath)}`}
+                      />
+                      <span className="input-suffix">.pdf</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              <SizeCompareCard sizeBefore={sizeBefore} result={result} />
+
+              {/* Result — the file is already in the Downloads folder */}
+              {result && (
+                <div className="card status-card status-card--ok">
+                  <CheckCircle size={22} aria-hidden="true" />
+                  <div className="status-card-copy">
+                    <b>{result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}</b>
+                    <small>
+                      <Filename name={baseName(result.outputPath)} />
+                      {result.keptOriginal
+                        ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
+                        : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
+                    </small>
+                  </div>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    id="compress-open-folder-btn"
+                    onClick={() => openOutputFolder()}
+                    title={t('Open folder')}
+                  >
+                    <FolderOpen size={14} />
+                    {t('Open Folder')}
+                  </button>
+                </div>
+              )}
+              </div>
+
+              <div className="col-stack">
               {/* Quality */}
               <div className="card card--flush">
                 <div className="card-head">
@@ -261,54 +308,6 @@ export function CompressPage() {
                 </div>
               </div>
 
-              <SizeCompareCard sizeBefore={sizeBefore} result={result} />
-
-              {/* Output filename */}
-              <div className="card card--flush">
-                <div className="card-body">
-                  <div className="field">
-                    <label htmlFor="compress-output-name">{t('Output Filename')}</label>
-                    <div className="input-suffix-wrap">
-                      <input
-                        id="compress-output-name"
-                        className="input"
-                        type="text"
-                        value={outputName}
-                        disabled={running}
-                        onChange={(e) => setOutputName(e.target.value)}
-                        placeholder={`compressed_${stemOf(inputPath)}`}
-                      />
-                      <span className="input-suffix">.pdf</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Result — the file is already in the Downloads folder */}
-              {result && (
-                <div className="card status-card status-card--ok">
-                  <CheckCircle size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <b>{result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}</b>
-                    <small>
-                      <Filename name={baseName(result.outputPath)} />
-                      {result.keptOriginal
-                        ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
-                        : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
-                    </small>
-                  </div>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    id="compress-open-folder-btn"
-                    onClick={() => openOutputFolder()}
-                    title={t('Open folder')}
-                  >
-                    <FolderOpen size={14} />
-                    {t('Open Folder')}
-                  </button>
-                </div>
-              )}
-
               {/* Progress */}
               {running && (
                 <div className="card status-card" role="status" aria-live="polite">
@@ -351,6 +350,7 @@ export function CompressPage() {
                     </>
                   )}
                 </button>
+              </div>
               </div>
             </>
           )}

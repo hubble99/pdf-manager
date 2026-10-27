@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { BrandLogo } from '../components/BrandLogo';
+import { themedLogoSvg } from '../components/brandColors';
+import { ThemeContext } from '../context/ThemeContext.context';
 import { APP_NAME } from '../config/app';
 
 describe('BrandLogo', () => {
@@ -23,5 +25,23 @@ describe('BrandLogo', () => {
     expect(img).toHaveAttribute('alt', '');
     expect(img).toHaveAttribute('width', '32');
     expect(container.querySelector('svg')).not.toBeInTheDocument();
+  });
+
+  it('recolours the logo in the Dusty Rose theme and leaves it blue elsewhere', () => {
+    const source = '<svg><stop stop-color="#1f5cc0"/><stop stop-color="#ffffff"/></svg>';
+    const rose = themedLogoSvg(source, 'dusty-rose');
+    expect(rose).not.toContain('#1f5cc0');
+    expect(rose).toContain('#ffffff');
+    expect(themedLogoSvg(source, 'light')).toContain('#1f5cc0');
+  });
+
+  it('inlines the mark in Dusty Rose so it can be recoloured', () => {
+    const { container } = render(
+      <ThemeContext.Provider value={{ theme: 'dusty-rose', setTheme: () => undefined }}>
+        <BrandLogo variant="mark" size={32} />
+      </ThemeContext.Provider>,
+    );
+    expect(container.querySelector('svg')).toBeInTheDocument();
+    expect(container.querySelector('img')).not.toBeInTheDocument();
   });
 });
