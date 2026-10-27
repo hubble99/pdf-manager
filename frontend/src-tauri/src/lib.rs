@@ -1,8 +1,5 @@
 use tauri::Manager;
 
-#[cfg(any(not(debug_assertions), test))]
-mod desktop_lifecycle;
-
 mod core_bridge;
 mod core_canvas;
 mod core_convert;
@@ -15,14 +12,11 @@ mod core_organize;
 mod core_protect;
 mod core_pdf_render;
 
-struct DesktopLifecycleToken(String);
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let builder = tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_shell::init())
     .manage(core_bridge::CoreState::default())
     .manage(core_pdf_render::RenderState::default())
     .manage(core_convert::ThumbState::default())
@@ -112,27 +106,6 @@ pub fn run() {
             .level(log::LevelFilter::Info)
             .build(),
         )?;
-      } else {
-        // Production: spawn the Python sidecar
-        use tauri_plugin_shell::ShellExt;
-        let resource_dir = app.path().resource_dir()?;
-        let lifecycle_token = DesktopLifecycleToken(uuid::Uuid::new_v4().simple().to_string());
-        let sidecar = app.shell()
-          .sidecar("pdf-manager-backend")
-          .expect("sidecar not found — run tauri build first")
-          .env(
-            "PDF_MANAGER_EDIT_CONTENT_RESOURCE_DIR",
-            resource_dir.join("edit-content").to_string_lossy().into_owned(),
-          )
-          .env("PDF_MANAGER_DESKTOP_LIFECYCLE_TOKEN", lifecycle_token.0.clone())
-          // Lets the sidecar notice the app dying even when only the app process is killed.
-          .env("PDF_MANAGER_APP_PID", std::process::id().to_string());
-        let (_rx, child) = sidecar
-          .spawn()
-          .expect("failed to spawn pdf-manager-backend sidecar");
-        
-        app.manage(std::sync::Mutex::new(Some(child)));
-        app.manage(lifecycle_token);
       }
       Ok(())
     });
@@ -140,8 +113,8 @@ pub fn run() {
   let app = builder.build(tauri::generate_context!())
     .expect("error while building tauri application");
 
-  app.run(|app_handle, event| match event {
-    tauri::RunEvent::Exit => {
+  app.run(|app_handle, event| {
+    if let tauri::RunEvent::Exit = event {
       // Stop native core jobs at their next checkpoint.
       if let Some(core) = app_handle.try_state::<core_bridge::CoreState>() {
         core.runner.cancel_all();
@@ -158,37 +131,6 @@ pub fn run() {
       }
 
       core_housekeeping::clear_on_exit();
-
-      // ── Graceful shutdown sequence ──────────────────────────────────────────
-      // 1. Drain Content requests, then request the existing temp cleanup.
-      // 2. Give the backend a short window to finish cleanup.
-      // 3. Kill the sidecar process (safety net in case step 1 fails).
-      #[cfg(not(debug_assertions))]
-      {
-        if let Some(token) = app_handle.try_state::<DesktopLifecycleToken>() {
-          let _ = desktop_lifecycle::post(
-            "/api/v1/edit-content/shutdown", Some(&token.0), std::time::Duration::from_secs(15),
-          );
-        }
-
-        // Best-effort HTTP call — ignore errors (backend may already be gone).
-        let _ = desktop_lifecycle::post(
-          "/api/v1/settings/clear-temp", None, std::time::Duration::from_secs(3),
-        );
-
-        // Give the backend a moment to process the cleanup and begin shutdown.
-        std::thread::sleep(std::time::Duration::from_millis(500));
-      }
-
-      // Kill the sidecar process (works in both debug and release).
-      if let Some(state) = app_handle.try_state::<std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>>>() {
-        if let Ok(mut child_lock) = state.lock() {
-          if let Some(child) = child_lock.take() {
-            let _ = child.kill();
-          }
-        }
-      }
     }
-    _ => {}
   });
 }

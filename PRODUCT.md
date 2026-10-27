@@ -25,7 +25,7 @@ application instead of routing document contents through a hosted service.
 ## Operating Context
 
 Users work with files from their computer in a Tauri desktop shell backed by a
-local React and FastAPI application. The document or preview is the primary
+local React interface that calls a native Rust core. The document or preview is the primary
 workspace; controls support repetitive work without obscuring it.
 
 ## Capabilities and Constraints

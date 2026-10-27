@@ -10,10 +10,6 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 use crate::core_bridge::CoreState;
 
-/// True while some feature still calls the Python sidecar. `remove-python-sidecar`
-/// sets this to false (and then deletes it together with the sidecar).
-pub const SIDECAR_REQUIRED: bool = true;
-
 /// Scratch folders older than this are leftovers of a crashed run.
 const STALE_AFTER: Duration = Duration::from_secs(60 * 60);
 
@@ -22,17 +18,14 @@ const STALE_AFTER: Duration = Duration::from_secs(60 * 60);
 pub struct Health {
     pub app_version: String,
     pub core_version: &'static str,
-    pub sidecar_required: bool,
 }
 
-/// The core answers as soon as the app runs; the splash screen closes on this
-/// (plus the sidecar's own health while `sidecar_required`).
+/// The core answers as soon as the app runs; the splash screen closes on this.
 #[tauri::command]
 pub fn core_health<R: Runtime>(app: AppHandle<R>) -> Health {
     Health {
         app_version: app.package_info().version.to_string(),
         core_version: dokuwu_core::VERSION,
-        sidecar_required: SIDECAR_REQUIRED,
     }
 }
 
@@ -89,7 +82,6 @@ mod tests {
         let app = tauri::test::mock_app();
         let health = core_health(app.handle().clone());
         assert_eq!(health.core_version, dokuwu_core::VERSION);
-        assert!(health.sidecar_required);
         assert!(!health.app_version.is_empty());
     }
 

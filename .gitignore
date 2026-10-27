@@ -1,9 +1,4 @@
-# ── Python ──────────────────────────────────────────────────────────────────────
-backend/.venv/
-backend/__pycache__/
-backend/dist/
-backend/build/
-backend/*.spec.bak
+# ── Python (offline developer tools only) ────────────────────────────────────────
 **/__pycache__/
 *.pyc
 *.pyo
@@ -22,10 +17,6 @@ frontend/.vite/
 # ── Rust / Tauri ─────────────────────────────────────────────────────────────────
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
-
-# ── Sidecar binary (too large for git, built locally or in CI) ───────────────────
-frontend/src-tauri/binaries/*.exe
-frontend/src-tauri/binaries/*.app
 
 # ── Environment ──────────────────────────────────────────────────────────────────
 .env
@@ -49,7 +40,6 @@ dist-package/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────────
 *.log
-backend/logs/
 
 # ── Test artifacts ───────────────────────────────────────────────────────────────
 .pytest_cache/
@@ -57,8 +47,6 @@ htmlcov/
 .coverage
 frontend/coverage/
 frontend-lint.json
-backend/test*.pdf
-backend/test*.png
 
 # ── Local test documents and transient build inputs ───────────────────────────────
 # document_testing/ berisi dokumen asli milik pengguna untuk verifikasi manual dan

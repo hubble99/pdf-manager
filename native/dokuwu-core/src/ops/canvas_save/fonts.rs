@@ -1,6 +1,6 @@
 //! Choosing the font a text object is drawn with.
 //!
-//! Layered like the old backend: the app's font library first, then the
+//! Layered like the earlier versions: the app's font library first, then the
 //! Windows font folder, then the built-in Helvetica. No synthetic bold is
 //! applied; when a face for the request does not exist the nearest one (or the
 //! built-in font) is used as it is.

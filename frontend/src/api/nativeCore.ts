@@ -1,6 +1,6 @@
 /**
  * Client for the native Rust core (`native/dokuwu-core`), reached through
- * Tauri commands instead of the Python sidecar's HTTP API.
+ * Tauri commands.
  *
  * Long operations are jobs: a `core_*_start` command returns a job id, then
  * progress and the outcome arrive as `core://job-progress` and

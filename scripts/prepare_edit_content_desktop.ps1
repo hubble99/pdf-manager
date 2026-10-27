@@ -162,27 +162,4 @@ foreach ($entry in $runtimeFiles) {
     Assert-Hash $stagedPath $entry.sha256 "Staged package file $($entry.path)" | Out-Null
 }
 
-$backendRoot = Join-Path $repoRoot 'backend'
-$python = Join-Path $backendRoot '.venv/Scripts/python.exe'
-if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    throw 'The existing backend virtual environment is required to build the desktop sidecar.'
-}
-$binaryRoot = Join-Path $tauriRoot 'binaries'
-New-Item -ItemType Directory -Force -Path $binaryRoot | Out-Null
-$workRoot = Join-Path $tauriRoot 'target/pyinstaller-work'
-New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
-Push-Location $backendRoot
-try {
-    & $python -m PyInstaller --noconfirm --distpath $binaryRoot --workpath $workRoot 'build.spec'
-    if ($LASTEXITCODE -ne 0) { throw 'The packaged backend sidecar build failed.' }
-} finally {
-    Pop-Location
-}
-$backendOutput = Join-Path $binaryRoot 'pdf-manager-backend.exe'
-$backendSidecar = Join-Path $binaryRoot 'pdf-manager-backend-x86_64-pc-windows-msvc.exe'
-if (-not (Test-Path -LiteralPath $backendOutput -PathType Leaf)) {
-    throw 'The packaged backend sidecar was not produced.'
-}
-Copy-Item -LiteralPath $backendOutput -Destination $backendSidecar -Force
-
 "Prepared Edit Content desktop resources: PDFium $($manifest.buildIdentity), worker SHA-256 $workerSha256, notices $($pin.notices.Count)."

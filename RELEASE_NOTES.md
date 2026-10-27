@@ -1,3 +1,15 @@
+# Dokuwu 1.11.0 — Release Notes
+
+**Release type:** minor. Phase 3 of the move to the native Rust core: the last
+Python code is gone. The detailed entry is in [`CHANGELOG.md`](CHANGELOG.md).
+
+## 1.11.0 highlights
+- **No more Python backend.** Every tool runs on the Rust core; the helper program `pdf-manager-backend.exe` and the local server it started no longer exist, so the app starts without waiting for it and quitting leaves nothing behind.
+- **Edit Content, Canvas PDF, Organize and Settings** were the last features to move; their results match the earlier versions (page images pixel for pixel, same edit decisions).
+- Files in your Downloads folder are never overwritten, and your font library stays where it was.
+
+---
+
 # Dokuwu 1.10.1 — Release Notes
 
 **Release type:** patch. A fix found while testing 1.10.0 on Windows. The

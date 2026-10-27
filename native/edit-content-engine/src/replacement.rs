@@ -371,7 +371,7 @@ fn regenerate_observed(
 mod tests {
     use super::*;
     use crate::discovery::discover_document;
-    use crate::resource_inspector::{InspectionOutcome, ProcessResourceInspector};
+    use crate::resource_inspector::InspectionOutcome;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn write_fixture(path: &Path) {
@@ -434,25 +434,7 @@ mod tests {
             &CancellationToken::default(),
         )
         .unwrap();
-        let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("backend");
-        let python = if cfg!(windows) {
-            backend.join(".venv/Scripts/python.exe")
-        } else {
-            backend.join(".venv/bin/python")
-        };
-        let inspector = ProcessResourceInspector::new(
-            python,
-            vec![
-                "-c".into(),
-                "import sys; sys.path.insert(0, sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
-                backend.display().to_string(),
-            ],
-        );
+        let inspector = crate::native_inspector::NativeResourceInspector;
         let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
         else {
             panic!("real resource inspection required");

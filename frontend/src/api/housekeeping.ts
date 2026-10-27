@@ -15,8 +15,6 @@ export interface ClearReport {
 export interface CoreHealth {
   appVersion: string;
   coreVersion: string;
-  /** True while a feature still needs the Python sidecar. */
-  sidecarRequired: boolean;
 }
 
 async function call<T>(command: string): Promise<T> {

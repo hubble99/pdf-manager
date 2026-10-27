@@ -1,12 +1,10 @@
 //! Edge-case corpus for Edit Content V1, run through the real worker, the real
-//! PDFium library and the real read-only resource inspector.
+//! PDFium library and the native read-only resource inspector.
 //!
 //! Each case is a small synthetic PDF that reproduces one class of document
 //! seen in UAT (longer text, missing glyphs, multi-line input, hidden text
 //! layers, Type 3 fonts, signature stamps). The test pins the engine's verdict
-//! for each class so a later change cannot silently loosen or tighten it. Every
-//! test runs twice: once with the Python inspector and once with the native one,
-//! and both must give the same pinned verdicts.
+//! for each class so a later change cannot silently loosen or tighten it.
 //!
 //! Run with `EDIT_CONTENT_TEST_PDFIUM_PATH=<pinned libpdfium> cargo test --locked`.
 
@@ -15,33 +13,12 @@ use serde_json::{json, Value};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const HELVETICA: &str =
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
-
-fn backend_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("backend")
-}
-
-fn test_python() -> PathBuf {
-    if let Some(path) = env::var_os("EDIT_CONTENT_TEST_PYTHON") {
-        return PathBuf::from(path);
-    }
-    let backend = backend_root();
-    if cfg!(windows) {
-        backend.join(".venv/Scripts/python.exe")
-    } else {
-        backend.join(".venv/bin/python")
-    }
-}
 
 fn stream(data: &str, extra: &str) -> String {
     format!(
@@ -152,7 +129,7 @@ struct Worker {
 }
 
 impl Worker {
-    fn open(pdf: &[u8], native: bool) -> Self {
+    fn open(pdf: &[u8]) -> Self {
         let library = env::var_os("EDIT_CONTENT_TEST_PDFIUM_PATH")
             .map(PathBuf::from)
             .expect("EDIT_CONTENT_TEST_PDFIUM_PATH must identify the pinned phase-1 library");
@@ -164,21 +141,13 @@ impl Worker {
         let source = env::temp_dir().join(format!("edit-content-corpus-source-{unique}.pdf"));
         std::fs::create_dir(&workspace_root).unwrap();
         std::fs::write(&source, pdf).unwrap();
-        let script = backend_root().join("features/edit_content/resource_inspector_cli.py");
         let mut command = Command::new(env!("CARGO_BIN_EXE_edit-content-engine"));
         command
             .args(["--pdfium-library", library.to_str().unwrap()])
             .args(["--session-id", "session-corpus"])
             .args(["--workspace-root", workspace_root.to_str().unwrap()])
-            .args(["--source-file", source.to_str().unwrap()]);
-        if native {
-            command.arg("--native-inspector");
-        } else {
-            command
-                .args(["--inspector-program", test_python().to_str().unwrap()])
-                .args(["--inspector-arg", script.to_str().unwrap()])
-                .env("PYTHONPATH", backend_root());
-        }
+            .args(["--source-file", source.to_str().unwrap()])
+            .arg("--native-inspector");
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -456,26 +425,17 @@ fn corpus() -> Vec<Case> {
     ]
 }
 
-fn open_case(pdf: &[u8], old: &str, native: bool) -> (Worker, Value) {
-    let mut worker = Worker::open(pdf, native);
+fn open_case(pdf: &[u8], old: &str) -> (Worker, Value) {
+    let mut worker = Worker::open(pdf);
     let object = worker.object(old);
     (worker, object)
 }
 
 #[test]
 fn edge_case_corpus_verdicts_are_pinned() {
-    edge_case_corpus_verdicts(false);
-}
-
-#[test]
-fn edge_case_corpus_verdicts_are_pinned_with_the_native_inspector() {
-    edge_case_corpus_verdicts(true);
-}
-
-fn edge_case_corpus_verdicts(native: bool) {
     let mut failures = Vec::new();
     for case in corpus() {
-        let (mut worker, object) = open_case(&case.pdf, case.old, native);
+        let (mut worker, object) = open_case(&case.pdf, case.old);
         let target = object["targetId"].as_str().unwrap().to_string();
         let edit = replace_start(object["text"].as_str().unwrap(), case.old, case.new);
         let preflight = worker.preflight(&target, &edit);
@@ -541,15 +501,6 @@ fn edge_case_corpus_verdicts(native: bool) {
 /// snapshot, so the same target can be corrected and applied without reselecting.
 #[test]
 fn a_guard_rejection_keeps_the_target_usable_for_a_corrected_draft() {
-    guard_rejection_keeps_the_target(false);
-}
-
-#[test]
-fn a_guard_rejection_keeps_the_target_usable_with_the_native_inspector() {
-    guard_rejection_keeps_the_target(true);
-}
-
-fn guard_rejection_keeps_the_target(native: bool) {
     for (pdf, old, rejected_new, reason) in [
         (
             single_page("BT /F1 12 Tf 30 100 Td (word) Tj ET"),
@@ -564,7 +515,7 @@ fn guard_rejection_keeps_the_target(native: bool) {
             "REJECTED_LAYOUT",
         ),
     ] {
-        let (mut worker, object) = open_case(&pdf, old, native);
+        let (mut worker, object) = open_case(&pdf, old);
         let target = object["targetId"].as_str().unwrap().to_string();
         let text = object["text"].as_str().unwrap().to_string();
         let rejected = worker.apply(&target, &replace_start(&text, old, rejected_new));

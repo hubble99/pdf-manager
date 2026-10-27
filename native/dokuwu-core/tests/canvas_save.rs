@@ -1,5 +1,5 @@
 //! Stamping Canvas annotations onto a PDF (`ops::canvas_save`). The cases follow
-//! the tests of the Python route this replaced (`backend/tests/test_edit_canvas*.py`),
+//! the tests of the Python route this replaced (`test_edit_canvas*.py` in 1.10),
 //! judged on what the saved page shows.
 
 mod common;

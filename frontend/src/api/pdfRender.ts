@@ -4,7 +4,6 @@
  * A PDF is named by its path on disk; nothing is uploaded.
  */
 import { invoke } from '@tauri-apps/api/core';
-import axios from 'axios';
 import { NativeCoreError, type CoreErrorCode } from './nativeCore';
 
 export type PreviewQuality = 'low' | 'auto' | 'high';
@@ -70,7 +69,7 @@ export function previewKey(source: PdfSource, page: number): string {
 }
 
 export const isAbort = (err: unknown): boolean =>
-  axios.isCancel(err) || (err instanceof DOMException && err.name === 'AbortError');
+  err instanceof DOMException && err.name === 'AbortError';
 
 /**
  * Loads the preview image of one page from the native core.

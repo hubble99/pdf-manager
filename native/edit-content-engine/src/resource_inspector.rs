@@ -1,13 +1,7 @@
 use serde_json::Value;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, Instant};
 
 use crate::MAX_REPLY_BYTES;
-
-const INSPECTOR_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// Multiple names are unambiguous only when they reference the same inspected
 /// dictionary with a valid semantic proof. Distinct dictionaries stay distinct,
@@ -51,92 +45,6 @@ pub enum InspectionOutcome {
 
 pub trait ResourceInspector: Send {
     fn inspect(&self, source: &Path) -> InspectionOutcome;
-}
-
-pub struct ProcessResourceInspector {
-    program: PathBuf,
-    arguments: Vec<String>,
-}
-
-impl ProcessResourceInspector {
-    pub fn new(program: PathBuf, arguments: Vec<String>) -> Self {
-        Self { program, arguments }
-    }
-}
-
-impl ResourceInspector for ProcessResourceInspector {
-    fn inspect(&self, source: &Path) -> InspectionOutcome {
-        let mut command = Command::new(&self.program);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW for the console sidecar.
-        }
-        let mut child = match command
-            .args(&self.arguments)
-            .arg("--input")
-            .arg(source)
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .stdout(Stdio::piped())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(_) => return InspectionOutcome::Unsupported,
-        };
-        let Some(mut stdout) = child.stdout.take() else {
-            let _ = child.kill();
-            return InspectionOutcome::Unsupported;
-        };
-        let reader = thread::spawn(move || {
-            let mut collected = Vec::new();
-            let mut buffer = [0_u8; 64 * 1024];
-            let mut oversized = false;
-            loop {
-                let count = stdout.read(&mut buffer).map_err(|_| ())?;
-                if count == 0 {
-                    break;
-                }
-                if collected.len().saturating_add(count) > MAX_REPLY_BYTES {
-                    oversized = true;
-                } else if !oversized {
-                    collected.extend_from_slice(&buffer[..count]);
-                }
-            }
-            if oversized {
-                Err(())
-            } else {
-                Ok(collected)
-            }
-        });
-        let started = Instant::now();
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break Some(status),
-                Ok(None) if started.elapsed() < INSPECTOR_TIMEOUT => {
-                    thread::sleep(Duration::from_millis(10));
-                }
-                _ => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break None;
-                }
-            }
-        };
-        let bytes = reader.join().ok().and_then(Result::ok);
-        if status.is_none_or(|value| !value.success()) || bytes.is_none() {
-            return InspectionOutcome::Unsupported;
-        }
-        let value: Value = match serde_json::from_slice(&bytes.unwrap()) {
-            Ok(value) => value,
-            Err(_) => return InspectionOutcome::Unsupported,
-        };
-        if value.get("supported").and_then(Value::as_bool) == Some(true) {
-            InspectionOutcome::Supported(value)
-        } else {
-            InspectionOutcome::Unsupported
-        }
-    }
 }
 
 /// Content-addressed memo in front of another inspector.
@@ -185,84 +93,6 @@ impl ResourceInspector for CachingInspector {
     }
 }
 
-/// Asks a long-lived loopback inspector instead of launching a process per call.
-///
-/// The service performs exactly the inspection the one-shot process does, but
-/// has already paid interpreter startup. It is only an accelerator: any
-/// transport problem (cannot connect, timeout, malformed or oversized reply,
-/// rejected token) permanently routes this worker to `fallback`. A well-formed
-/// reply is authoritative, including "unsupported", so a document the service
-/// rejects is never second-guessed by a laxer path.
-pub struct ServiceInspector {
-    endpoint: String,
-    token: String,
-    fallback: Box<dyn ResourceInspector>,
-    unavailable: std::cell::Cell<bool>,
-}
-
-impl ServiceInspector {
-    pub fn new(endpoint: String, token: String, fallback: Box<dyn ResourceInspector>) -> Self {
-        Self { endpoint, token, fallback, unavailable: std::cell::Cell::new(false) }
-    }
-
-    fn ask(&self, source: &Path) -> Result<Value, ()> {
-        use std::net::{TcpStream, ToSocketAddrs};
-        if !source.is_absolute() {
-            return Err(());
-        }
-        let address = self.endpoint.to_socket_addrs().map_err(|_| ())?.next().ok_or(())?;
-        if !address.ip().is_loopback() {
-            return Err(());
-        }
-        let mut stream = TcpStream::connect_timeout(&address, Duration::from_secs(2)).map_err(|_| ())?;
-        stream.set_write_timeout(Some(Duration::from_secs(5))).map_err(|_| ())?;
-        let request = serde_json::json!({ "token": self.token, "input": source.to_str().ok_or(())? });
-        let mut line = request.to_string().into_bytes();
-        line.push(b'\n');
-        stream.write_all(&line).map_err(|_| ())?;
-        let deadline = Instant::now() + INSPECTOR_TIMEOUT;
-        let mut collected = Vec::new();
-        let mut buffer = [0_u8; 64 * 1024];
-        loop {
-            let remaining = deadline.checked_duration_since(Instant::now()).ok_or(())?;
-            stream
-                .set_read_timeout(Some(remaining.max(Duration::from_millis(1))))
-                .map_err(|_| ())?;
-            let count = stream.read(&mut buffer).map_err(|_| ())?;
-            if count == 0 {
-                return Err(()); // Closed before a complete reply line.
-            }
-            collected.extend_from_slice(&buffer[..count]);
-            if collected.len() > MAX_REPLY_BYTES + 1 {
-                return Err(());
-            }
-            if collected.contains(&b'\n') {
-                break;
-            }
-        }
-        let value: Value = serde_json::from_slice(&collected).map_err(|_| ())?;
-        if value.get("error").and_then(Value::as_str) == Some("unauthorized") {
-            return Err(());
-        }
-        Ok(value)
-    }
-}
-
-impl ResourceInspector for ServiceInspector {
-    fn inspect(&self, source: &Path) -> InspectionOutcome {
-        if !self.unavailable.get() {
-            match self.ask(source) {
-                Ok(value) if value.get("supported").and_then(Value::as_bool) == Some(true) => {
-                    return InspectionOutcome::Supported(value)
-                }
-                Ok(_) => return InspectionOutcome::Unsupported,
-                Err(()) => self.unavailable.set(true),
-            }
-        }
-        self.fallback.inspect(source)
-    }
-}
-
 /// Inspection results that outlive this worker process.
 ///
 /// A session restarts its worker after every commit and once while opening, and
@@ -270,7 +100,7 @@ impl ResourceInspector for ServiceInspector {
 /// already seen. Entries are keyed by the SHA-256 of the inspected bytes plus a
 /// build identity, only supported results are stored, and anything unreadable,
 /// oversized or inconsistent is treated as a miss. The directory is private to
-/// the session and removed by the backend when the session ends.
+/// the session and removed by the host when the session ends.
 pub struct DiskCachingInspector {
     inner: Box<dyn ResourceInspector>,
     directory: PathBuf,
@@ -445,8 +275,6 @@ mod caching_tests {
 #[cfg(test)]
 mod persistence_tests {
     use super::*;
-    use std::io::{BufRead, BufReader};
-    use std::net::TcpListener;
     use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
 
@@ -480,19 +308,6 @@ mod persistence_tests {
         let path = dir.join(name);
         std::fs::write(&path, bytes).unwrap();
         path
-    }
-
-    fn serve_once(reply: &'static str) -> (String, std::thread::JoinHandle<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let endpoint = listener.local_addr().unwrap().to_string();
-        let handle = std::thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = String::new();
-            BufReader::new(stream.try_clone().unwrap()).read_line(&mut request).unwrap();
-            stream.write_all(reply.as_bytes()).unwrap();
-            request
-        });
-        (endpoint, handle)
     }
 
     fn counting(calls: &Arc<AtomicU32>, supported: bool) -> Box<dyn ResourceInspector> {
@@ -554,73 +369,10 @@ mod persistence_tests {
         for index in 0..(DISK_CACHE_ENTRIES + 3) {
             let source = file(&dir, "s.pdf", format!("content {index}").as_bytes());
             assert!(matches!(inspector.inspect(&source), InspectionOutcome::Supported(_)));
-            std::thread::sleep(Duration::from_millis(15));
+            std::thread::sleep(std::time::Duration::from_millis(15));
         }
         let kept = std::fs::read_dir(&cache).unwrap().count();
         assert_eq!(kept, DISK_CACHE_ENTRIES);
     }
 
-    #[test]
-    fn service_reply_is_used_without_touching_the_fallback() {
-        let dir = scratch("svc");
-        let source = file(&dir, "a.pdf", b"x");
-        let (endpoint, server) = serve_once("{\"supported\":true,\"from\":\"service\"}\n");
-        let calls = Arc::new(AtomicU32::new(0));
-        let inspector = ServiceInspector::new(endpoint, "tok".into(), counting(&calls, true));
-        match inspector.inspect(&source) {
-            InspectionOutcome::Supported(value) => assert_eq!(value["from"], "service"),
-            other => panic!("unexpected {other:?}"),
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-        let request: Value = serde_json::from_str(&server.join().unwrap()).unwrap();
-        assert_eq!(request["token"], "tok");
-        assert_eq!(request["input"], source.to_str().unwrap());
-    }
-
-    #[test]
-    fn service_unsupported_is_final_and_does_not_retry_through_the_fallback() {
-        let dir = scratch("svc-unsupported");
-        let source = file(&dir, "a.pdf", b"x");
-        let (endpoint, server) = serve_once("{\"supported\":false}\n");
-        let calls = Arc::new(AtomicU32::new(0));
-        let inspector = ServiceInspector::new(endpoint, "tok".into(), counting(&calls, true));
-        assert!(matches!(inspector.inspect(&source), InspectionOutcome::Unsupported));
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-        server.join().unwrap();
-    }
-
-    #[test]
-    fn service_failures_fall_back_and_stop_asking_the_service() {
-        let dir = scratch("svc-down");
-        let source = file(&dir, "a.pdf", b"x");
-        // Nothing listens on this port any more.
-        let endpoint = {
-            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-            listener.local_addr().unwrap().to_string()
-        };
-        let calls = Arc::new(AtomicU32::new(0));
-        let inspector = ServiceInspector::new(endpoint, "tok".into(), counting(&calls, true));
-        assert!(matches!(inspector.inspect(&source), InspectionOutcome::Supported(_)));
-        assert!(matches!(inspector.inspect(&source), InspectionOutcome::Supported(_)));
-        assert_eq!(calls.load(Ordering::SeqCst), 2);
-        assert!(inspector.unavailable.get());
-    }
-
-    #[test]
-    fn rejected_token_malformed_replies_and_non_loopback_endpoints_fall_back() {
-        let dir = scratch("svc-bad");
-        let source = file(&dir, "a.pdf", b"x");
-        for reply in ["{\"supported\":false,\"error\":\"unauthorized\"}\n", "garbage\n", "{\"supported\":true"] {
-            let (endpoint, server) = serve_once(reply);
-            let calls = Arc::new(AtomicU32::new(0));
-            let inspector = ServiceInspector::new(endpoint, "tok".into(), counting(&calls, true));
-            assert!(matches!(inspector.inspect(&source), InspectionOutcome::Supported(_)));
-            assert_eq!(calls.load(Ordering::SeqCst), 1, "reply {reply:?} must fall back");
-            server.join().unwrap();
-        }
-        let calls = Arc::new(AtomicU32::new(0));
-        let remote = ServiceInspector::new("192.0.2.1:9".into(), "tok".into(), counting(&calls, true));
-        assert!(matches!(remote.inspect(&source), InspectionOutcome::Supported(_)));
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-    }
 }

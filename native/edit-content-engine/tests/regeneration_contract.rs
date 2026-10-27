@@ -5,9 +5,8 @@ use edit_content_engine::discovery::discover_document;
 use edit_content_engine::identity::ObjectRegistry;
 use edit_content_engine::preflight::PreflightInput;
 use edit_content_engine::replacement::prepare_candidate;
-use edit_content_engine::resource_inspector::{
-    InspectionOutcome, ProcessResourceInspector, ResourceInspector,
-};
+use edit_content_engine::native_inspector::NativeResourceInspector;
+use edit_content_engine::resource_inspector::{InspectionOutcome, ResourceInspector};
 use edit_content_engine::verification::verify;
 use edit_content_engine::workspace::{CancellationToken, SessionWorkspace};
 use edit_content_engine::{sha256_reader, verify_pdfium_library};
@@ -16,30 +15,31 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn test_python() -> PathBuf {
-    if let Some(path) = std::env::var_os("EDIT_CONTENT_TEST_PYTHON") {
-        return PathBuf::from(path);
+/// The decoded content streams of a saved PDF, read without PDFium: every
+/// `stream ... endstream` body, inflated when it is Flate data.
+fn content_streams(path: &Path) -> Vec<String> {
+    use std::io::Read;
+    let bytes = fs::read(path).unwrap();
+    let mut streams = Vec::new();
+    let mut rest = &bytes[..];
+    while let Some(start) = rest.windows(6).position(|w| w == b"stream") {
+        let after = &rest[start + 6..];
+        let body_start = after.iter().position(|b| *b == b'\n').map_or(0, |i| i + 1);
+        let body = &after[body_start..];
+        let Some(end) = body.windows(9).position(|w| w == b"endstream") else {
+            break;
+        };
+        let raw = &body[..end];
+        let mut inflated = Vec::new();
+        let data = if flate2::read::ZlibDecoder::new(raw).read_to_end(&mut inflated).is_ok() {
+            inflated
+        } else {
+            raw.to_vec()
+        };
+        streams.push(String::from_utf8_lossy(&data).into_owned());
+        rest = &body[end + 9..];
     }
-    let backend = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("backend");
-    if cfg!(windows) {
-        backend.join(".venv/Scripts/python.exe")
-    } else {
-        backend.join(".venv/bin/python")
-    }
-}
-
-fn backend_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("backend")
+    streams
 }
 
 struct Fixture(PathBuf);
@@ -159,21 +159,12 @@ fn round_trip(pdfium: &Pdfium, replacement: &str, regenerate: bool) -> (String, 
         (text, count as usize)
     };
     if replacement.is_empty() {
-        let backend = backend_root();
-        let inspection = std::process::Command::new(test_python())
-            .args(["-c", "import json,sys; sys.path.insert(0,sys.argv.pop(1)); from pypdf import PdfReader; p=PdfReader(sys.argv[1]).pages[0]; print(json.dumps({'stream':p.get_contents().get_data().decode('ascii'), 'text':p.extract_text()}))"])
-            .arg(&backend)
-            .arg(&candidate)
-            .output().unwrap();
+        let streams = content_streams(&candidate);
         assert!(
-            inspection.status.success(),
-            "independent reader failed: {}",
-            String::from_utf8_lossy(&inspection.stderr)
+            streams.iter().any(|stream| stream.contains("[<20>] TJ")),
+            "serialized text operand not found in {streams:?}"
         );
-        let persisted: serde_json::Value = serde_json::from_slice(&inspection.stdout).unwrap();
-        assert_eq!(persisted["text"], " ");
-        assert!(persisted["stream"].as_str().unwrap().contains("[<20>] TJ"));
-        eprintln!("independent reader: one space; serialized text operand: <20>");
+        eprintln!("serialized text operand: <20>");
     }
     assert_eq!(hash(&source), original_hash);
     result
@@ -233,15 +224,7 @@ fn guarded_fixture_rejects(pdfium: &Pdfium, fixture: Fixture) {
         &CancellationToken::default(),
     )
     .unwrap();
-    let backend = backend_root();
-    let inspector = ProcessResourceInspector::new(
-        test_python(),
-        vec![
-            "-c".into(),
-            "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
-            backend.display().to_string(),
-        ],
-    );
+    let inspector = NativeResourceInspector;
     let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
     else {
         panic!("real resource inspection required");
@@ -294,15 +277,7 @@ fn guarded_fixture_round_trip(
         &CancellationToken::default(),
     )
     .unwrap();
-    let backend = backend_root();
-    let inspector = ProcessResourceInspector::new(
-        test_python(),
-        vec![
-            "-c".into(),
-            "import sys; sys.path.insert(0,sys.argv.pop(1)); from features.edit_content.resource_inspector_cli import main; raise SystemExit(main())".into(),
-            backend.display().to_string(),
-        ],
-    );
+    let inspector = NativeResourceInspector;
     let InspectionOutcome::Supported(inspection) = inspector.inspect(workspace.source_path())
     else {
         panic!("real resource inspection required");
@@ -352,17 +327,13 @@ fn guarded_fixture_round_trip(
             }
         }
     }
-    let independent = std::process::Command::new(test_python())
-        .args(["-c", "import json,sys; sys.path.insert(0,sys.argv.pop(1)); from pypdf import PdfReader; print(json.dumps(PdfReader(sys.argv[1]).pages[0].extract_text()))"])
-        .arg(&backend)
-        .arg(&candidate.path).output().unwrap();
-    assert!(
-        independent.status.success(),
-        "{}",
-        String::from_utf8_lossy(&independent.stderr)
-    );
+    let independent = {
+        let document = pdfium.load_pdf_from_file(&candidate.path, None).unwrap();
+        let text = document.pages().get(0).unwrap().text().unwrap().all();
+        text.replace("\r\n", "\n")
+    };
     assert_eq!(
-        serde_json::from_slice::<String>(&independent.stdout).unwrap(),
+        independent,
         if expected_count == 2 {
             format!("{replacement}\nkept")
         } else {

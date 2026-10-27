@@ -6,8 +6,7 @@ use edit_content_engine::preflight::{
 };
 use edit_content_engine::replacement::{prepare_from_checkpoint, AcceptedCheckpointRef};
 use edit_content_engine::resource_inspector::{
-    InspectionOutcome, ProcessResourceInspector, ResourceInspector, TestResourceInspector,
-    UnavailableResourceInspector,
+    InspectionOutcome, ResourceInspector, TestResourceInspector, UnavailableResourceInspector,
 };
 use edit_content_engine::verification::verify;
 use edit_content_engine::viewport::{Point, ViewportTransform};
@@ -34,9 +33,6 @@ struct Config {
     session_id: String,
     workspace_root: PathBuf,
     source_file: PathBuf,
-    inspector_program: Option<PathBuf>,
-    inspector_arguments: Vec<String>,
-    inspector_endpoint: Option<String>,
     native_inspector: bool,
     inspection_cache_dir: Option<PathBuf>,
     inspection_cache_id: String,
@@ -62,9 +58,6 @@ fn parse_config() -> Result<Config, String> {
     let mut session_id = None;
     let mut workspace_root = None;
     let mut source_file = None;
-    let mut inspector_program = None;
-    let mut inspector_arguments = Vec::new();
-    let mut inspector_endpoint = None;
     let mut native_inspector = false;
     let mut inspection_cache_dir = None;
     let mut inspection_cache_id = String::new();
@@ -79,12 +72,6 @@ fn parse_config() -> Result<Config, String> {
             "--session-id" => session_id = args.next(),
             "--workspace-root" => workspace_root = args.next().map(PathBuf::from),
             "--source-file" => source_file = args.next().map(PathBuf::from),
-            "--inspector-program" => inspector_program = args.next().map(PathBuf::from),
-            "--inspector-arg" => inspector_arguments.push(
-                args.next()
-                    .ok_or_else(|| "missing inspector argument value".to_string())?,
-            ),
-            "--inspector-endpoint" => inspector_endpoint = args.next(),
             "--native-inspector" => native_inspector = true,
             "--inspection-cache-dir" => inspection_cache_dir = args.next().map(PathBuf::from),
             "--inspection-cache-id" => {
@@ -125,9 +112,6 @@ fn parse_config() -> Result<Config, String> {
     if test_timeout.is_some() && !test_mode {
         return Err("test timeout requires test mode".into());
     }
-    if native_inspector && inspector_program.is_some() {
-        return Err("native inspector excludes an external inspector".into());
-    }
     Ok(Config {
         pdfium_library: pdfium_library
             .ok_or_else(|| "explicit PDFium library argument is required".to_string())?,
@@ -138,9 +122,6 @@ fn parse_config() -> Result<Config, String> {
             .ok_or_else(|| "explicit workspace root argument is required".to_string())?,
         source_file: source_file
             .ok_or_else(|| "explicit source file argument is required".to_string())?,
-        inspector_program,
-        inspector_arguments,
-        inspector_endpoint,
         native_inspector,
         inspection_cache_dir,
         inspection_cache_id,
@@ -827,7 +808,6 @@ fn input_loop<W: io::Write + Send + 'static>(
 
 fn run(config: Config) -> Result<(), String> {
     verify_pdfium_library(&config.pdfium_library)?;
-    contain_inspector_processes()?;
     if let Some(parent_process_id) = config.parent_process_id {
         watch_parent_process(parent_process_id);
     }
@@ -839,49 +819,23 @@ fn run(config: Config) -> Result<(), String> {
         &cancellation,
     )
     .map_err(|error| format!("private workspace setup failed: {error:?}"))?;
-    let inspector: Box<dyn ResourceInspector> = match config.inspector_program {
-        Some(program) => {
-            let one_shot: Box<dyn ResourceInspector> = Box::new(ProcessResourceInspector::new(
-                program,
-                config.inspector_arguments,
-            ));
-            // The token travels in the environment so it never shows up in a process listing.
-            let token = env::var("EDIT_CONTENT_INSPECTOR_TOKEN").unwrap_or_default();
-            let base: Box<dyn ResourceInspector> = match config.inspector_endpoint {
-                Some(endpoint) if !token.is_empty() => Box::new(
-                    edit_content_engine::resource_inspector::ServiceInspector::new(
-                        endpoint, token, one_shot,
-                    ),
+    let inspector: Box<dyn ResourceInspector> = if config.native_inspector {
+        let native: Box<dyn ResourceInspector> =
+            Box::new(edit_content_engine::native_inspector::NativeResourceInspector);
+        match config.inspection_cache_dir {
+            Some(directory) if !config.inspection_cache_id.is_empty() => Box::new(
+                edit_content_engine::resource_inspector::DiskCachingInspector::new(
+                    native,
+                    directory,
+                    config.inspection_cache_id,
                 ),
-                _ => one_shot,
-            };
-            match config.inspection_cache_dir {
-                Some(directory) if !config.inspection_cache_id.is_empty() => Box::new(
-                    edit_content_engine::resource_inspector::DiskCachingInspector::new(
-                        base,
-                        directory,
-                        config.inspection_cache_id,
-                    ),
-                ),
-                _ => base,
-            }
+            ),
+            _ => native,
         }
-        None if config.native_inspector => {
-            let native: Box<dyn ResourceInspector> =
-                Box::new(edit_content_engine::native_inspector::NativeResourceInspector);
-            match config.inspection_cache_dir {
-                Some(directory) if !config.inspection_cache_id.is_empty() => Box::new(
-                    edit_content_engine::resource_inspector::DiskCachingInspector::new(
-                        native,
-                        directory,
-                        config.inspection_cache_id,
-                    ),
-                ),
-                _ => native,
-            }
-        }
-        None if config.test_mode => Box::new(TestResourceInspector),
-        None => Box::new(UnavailableResourceInspector),
+    } else if config.test_mode {
+        Box::new(TestResourceInspector)
+    } else {
+        Box::new(UnavailableResourceInspector)
     };
     let (job_sender, job_receiver) = mpsc::sync_channel::<NativeJob>(0);
     let (startup_sender, startup_receiver) = mpsc::sync_channel(1);
@@ -1060,50 +1014,6 @@ fn run(config: Config) -> Result<(), String> {
     native
         .join()
         .map_err(|_| "native worker exited".to_string())?;
-    Ok(())
-}
-
-#[cfg(windows)]
-fn contain_inspector_processes() -> Result<(), String> {
-    use std::mem::{size_of, zeroed};
-    use std::ptr::null;
-    use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    };
-    use windows_sys::Win32::System::Threading::GetCurrentProcess;
-
-    // An unnamed, non-inheritable job keeps inspectors (including PyInstaller
-    // descendants) tied to this worker, even on forced exit or parent death.
-    unsafe {
-        let job = CreateJobObjectW(null(), null());
-        if job.is_null() {
-            return Err("Content process containment could not be created".into());
-        }
-        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        if SetInformationJobObject(
-            job,
-            JobObjectExtendedLimitInformation,
-            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-        ) == 0
-            || AssignProcessToJobObject(job, GetCurrentProcess()) == 0
-        {
-            CloseHandle(job);
-            return Err("Content process containment could not be established".into());
-        }
-        // Deliberately retain the handle for the process lifetime. Closing it
-        // here would also terminate the worker that was just assigned to it.
-        // Windows closes it on every process-exit path and kills descendants.
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn contain_inspector_processes() -> Result<(), String> {
     Ok(())
 }
 
