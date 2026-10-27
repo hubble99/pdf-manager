@@ -435,6 +435,14 @@ impl BodyWriter<'_> {
         if let Some(level) = p.heading {
             x.push_str(&format!(r#"<w:pStyle w:val="Heading{level}"/>"#));
         }
+        if let Some(frame) = p.frame {
+            x.push_str(&format!(
+                r#"<w:framePr w:w="{}" w:hRule="auto" w:wrap="around" w:vAnchor="page" w:hAnchor="page" w:x="{}" w:y="{}"/>"#,
+                twips(frame.width),
+                twips(frame.x),
+                twips(frame.y)
+            ));
+        }
         if let Some(space) = p.border_bottom {
             x.push_str(&format!(r#"<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="{}" w:color="auto"/></w:pBdr>"#, space.round() as i64));
         }
@@ -448,15 +456,21 @@ impl BodyWriter<'_> {
             }
             x.push_str("</w:tabs>");
         }
-        x.push_str(&format!(r#"<w:spacing w:before="{}" w:after="0""#, twips(p.space_before.min(1584.0))));
+        // A framed paragraph sits at its page position and takes no part in the flow.
+        let (space_before, ind_left, ind_first, ind_right) = if p.frame.is_some() {
+            (0.0, 0.0, 0.0, 0.0)
+        } else {
+            (p.space_before, p.ind_left, p.ind_first, p.ind_right)
+        };
+        x.push_str(&format!(r#"<w:spacing w:before="{}" w:after="0""#, twips(space_before.min(1584.0))));
         if let Some(pitch) = p.line_pitch {
             let line = (240.0 * line_multiple(pitch, p.size)).round() as i64;
             x.push_str(&format!(r#" w:line="{line}" w:lineRule="auto""#));
         }
         x.push_str("/>");
-        let left = twips(p.ind_left);
-        let first = twips(p.ind_first);
-        let right = twips(p.ind_right);
+        let left = twips(ind_left);
+        let first = twips(ind_first);
+        let right = twips(ind_right);
         if left != 0 || first != 0 || right != 0 {
             x.push_str(&format!(r#"<w:ind w:left="{left}" w:right="{right}""#));
             if first > 0 {

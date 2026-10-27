@@ -91,6 +91,24 @@ fn alpha_page() -> Vec<u8> {
     ])
 }
 
+/// Two different images and a form XObject (a producer's overlay layer, as
+/// Microsoft Print to PDF writes) beside the edited text.
+fn form_overlay_page() -> Vec<u8> {
+    let image = |data: &str| {
+        stream(data, "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8")
+    };
+    pdf_bytes(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R /Im2 7 0 R /Fm1 8 0 R >> >> /Contents 4 0 R >>".into(),
+        stream("q 40 0 0 40 200 100 cm /Im1 Do Q q 40 0 0 40 250 100 cm /Im2 Do Q /Fm1 Do BT /F1 12 Tf 30 100 Td (word) Tj ET", ""),
+        HELVETICA.into(),
+        image("A"),
+        image("B"),
+        stream("0.9 g 0 0 300 20 re f", "/Type /XObject /Subtype /Form /BBox [0 0 300 200]"),
+    ])
+}
+
 /// Browser-printed page: tagged content, empty `Tj` strings, and an alpha-0 text layer
 /// next to the visible text (the kind of certificate printed from a web page).
 fn browser_print_page() -> Vec<u8> {
@@ -392,6 +410,10 @@ fn corpus() -> Vec<Case> {
                 preflight: Some(("REJECTED_UNSUPPORTED_STRUCTURE", &["INVISIBLE_TEXT"])),
                 apply: Some("REJECTED_UNSUPPORTED_STRUCTURE"),
             },
+        },
+        Case {
+            name: "images and a form XObject beside the edited text",
+            pdf: form_overlay_page(), old: "word", new: "ward", expect: PREPARED,
         },
         Case {
             // Quartz output repeats identical objects; the verifier must pair twins

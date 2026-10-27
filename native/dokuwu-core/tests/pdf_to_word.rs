@@ -185,6 +185,19 @@ fn soft_masked_letterhead_is_not_black() {
 }
 
 #[test]
+fn footer_band_stays_behind_its_text_at_the_bottom_edge() {
+    let (report, files, _dir) = convert("footer-band.pdf");
+    assert_eq!(report.pages, 1);
+    let xml = document(&files);
+    assert_eq!(xml.matches("<wp:anchor").count(), 1, "the band is anchored, not placed in the text flow");
+    assert!(xml.contains(r#"behindDoc="1""#));
+    assert_eq!(xml.matches("<wp:inline").count(), 0);
+    // The footer line is a page-anchored frame, so it cannot push a second page open.
+    let head = &xml[..xml.find("Footer line over the band").unwrap()];
+    assert!(head[head.rfind("<w:framePr").expect("footer is framed")..].contains(r#"w:vAnchor="page""#));
+}
+
+#[test]
 fn mixed_page_keeps_everything() {
     let (report, files, _dir) = convert("mixed.pdf");
     assert_eq!((report.pages, report.tables, report.images), (2, 1, 1));
@@ -192,11 +205,14 @@ fn mixed_page_keeps_everything() {
     for s in ["Mixed layout", "Results", "Revenue", "140", "Appendix", "ACME Corp · Internal", "Page 2"] {
         assert!(text.contains(s), "{s}");
     }
-    // The page-2 footer sits near the bottom of the page: its space before must not be capped.
+    // The page-2 footer sits at the bottom edge: it is a page-anchored frame, so a long
+    // text above it can never push it onto an extra page.
     let xml = document(&files);
-    let before = xml.rfind("Page 2").map(|i| &xml[..i]).and_then(|h| h.rfind("w:before=\"")).map(|i| &xml[i + 10..]).unwrap();
-    let before: u32 = before[..before.find('"').unwrap()].parse().unwrap();
-    assert!(before > 12000, "footer spacing {before}");
+    let head = &xml[..xml.rfind("Page 2").unwrap()];
+    let frame = &head[head.rfind("<w:framePr").expect("footer is framed")..];
+    assert!(frame.starts_with("<w:framePr") && frame.contains(r#"w:vAnchor="page""#), "{frame}");
+    let y: u32 = frame.split("w:y=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+    assert!(y > 12000, "footer frame y {y}");
 }
 
 #[test]

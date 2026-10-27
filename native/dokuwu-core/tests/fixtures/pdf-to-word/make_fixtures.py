@@ -146,6 +146,26 @@ def letterhead_pdf():
     c.save()
 
 
+def footer_band_pdf():
+    # A coloured picture strip at the bottom edge with white text over it, like
+    # a letterhead footer. The strip must sit behind the text, and the footer
+    # line must stay at the bottom edge instead of spilling onto a new page.
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    img = Image.new("RGB", (600, 40), (20, 110, 60))
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+    c = rl_canvas.Canvas(os.path.join(OUT, "footer-band.pdf"), pagesize=A4)
+    c.setTitle("Footer band")
+    c.setFont("Helvetica", 11)
+    c.drawString(2 * cm, A4[1] - 3 * cm, "Body text above the footer band.")
+    c.drawImage(ImageReader(buf), 0, 0.4 * cm, width=A4[0], height=1.2 * cm)
+    c.setFillColorRGB(1, 1, 1)
+    c.drawString(2 * cm, 0.8 * cm, "Footer line over the band")
+    c.save()
+
+
 def scanned_pdf():
     # A page that is only a picture of text: no text layer, so nothing to extract without OCR.
     img = Image.new("RGB", (1240, 1754), "white")
@@ -236,6 +256,6 @@ def word_export_pdf():
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    for fn in (text_pdf, columns_pdf, table_pdf, images_pdf, mixed_pdf, letterhead_pdf, scanned_pdf, protected_pdf, word_export_pdf):
+    for fn in (text_pdf, columns_pdf, table_pdf, images_pdf, mixed_pdf, letterhead_pdf, footer_band_pdf, scanned_pdf, protected_pdf, word_export_pdf):
         fn()
     print("written to", OUT)

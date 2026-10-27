@@ -146,7 +146,11 @@ fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, 
     let resources = if page["nativeMarkedOwnership"].is_array() { &page["markedContentProof"]["resources"] }
         else { &page["preservationResources"] };
     let dependencies = resources["/XObject"].as_array().ok_or_else(|| integrity(line!()))?;
-    if count < 2 || bindings.len() != count || dependencies.len() != count {
+    // Form XObjects are bound as page dependencies (and so are compared with the
+    // dependency list below) but are not image objects, so they take no part in
+    // the image bijection.
+    let images = bindings.iter().filter(|binding| binding["form"] != true).count();
+    if count < 2 || images != count || bindings.len() != dependencies.len() {
         return Err(integrity(line!()));
     }
     let hash = |value: &Value| value.as_str().filter(|s| s.len() == 64 &&
@@ -156,6 +160,9 @@ fn proven_image_bindings(page: &Value, count: usize) -> Result<BTreeMap<String, 
     for binding in bindings {
         let (raw, semantic) = (hash(&binding["rawSha256"])?, hash(&binding["semanticSha256"])?);
         actual.push(semantic.clone());
+        if binding["form"] == true {
+            continue;
+        }
         let group = groups.entry(raw).or_insert(ImageGroup { all: Vec::new(), remaining: 0 });
         group.all.push(semantic);
         group.remaining += 1;
@@ -348,6 +355,15 @@ pub fn capture(
             .map_err(|_| integrity(line!()))?;
         if marked.is_some_and(|m| m.len() != page.objects().len() as usize) { return Err(integrity(line!())); }
         let image_count = page.objects().iter().filter(|o| o.as_image_object().is_some()).count();
+        // Form XObjects are drawn as one object each and are preserved by their
+        // whole semantic hash. Every form resource has to be drawn, and all of
+        // them have to mean the same thing, or no object could be bound to one.
+        let form_count = page.objects().iter().filter(|o| o.as_x_object_form_object().is_some()).count();
+        let form_hashes: Vec<Value> = resource_page["imageResourceBindings"].as_array().into_iter().flatten()
+            .filter(|binding| binding["form"] == true).map(|binding| binding["semanticSha256"].clone()).collect();
+        if form_count != form_hashes.len() || form_hashes.iter().any(|hash| *hash != form_hashes[0]) {
+            return Err(integrity(line!()));
+        }
         let mut image_bindings = if image_count > 1 {
             Some(proven_image_bindings(resource_page, image_count)?)
         } else { None };
@@ -397,6 +413,12 @@ pub fn capture(
                     .map(|p| finite(p.value))
                     .collect::<Result<Vec<_>, _>>()?);
             }
+            if object.as_text_object().is_none() && object.as_path_object().is_none() {
+                // PDFium reports a colour (and so an alpha) for some images and forms
+                // and none for others; whatever it reports must be unchanged.
+                style["fillAlpha"] = json!(object.fill_color().ok().map(|c| c.alpha()));
+                style["strokeAlpha"] = json!(object.stroke_color().ok().map(|c| c.alpha()));
+            }
             let (kind, text, payload) = if let Some(text) = object.as_text_object() {
                 let descriptor = native
                     .text_objects
@@ -425,9 +447,9 @@ pub fn capture(
                     "weight": descriptor.font.weight, "embedded": descriptor.font.embedded, "identity": fingerprint});
                 ("text", Some(text.text()), Value::Null)
             } else if let Some(path) = object.as_path_object() {
-                if path.has_transparency() && marked.is_none() {
-                    return Err(integrity(line!()));
-                }
+                // A constant alpha is part of the colours recorded below (8 bits, as for
+                // text); blend modes and soft masks never reach here, because the page's
+                // graphics states are only accepted with plain CA/ca values.
                 style["fillColor"] = color(path.fill_color().map_err(|_| integrity(line!()))?);
                 style["strokeColor"] = color(path.stroke_color().map_err(|_| integrity(line!()))?);
                 style["strokeWidth"] =
@@ -457,9 +479,14 @@ pub fn capture(
             } else if let Some(image) = object.as_image_object() {
                 // Native pixels omit masks. A unique encoded stream binds each
                 // named image to its complete resource identity, including masks.
-                let dependencies = preservation["/XObject"]
+                let mut dependencies = preservation["/XObject"]
                     .as_array()
-                    .ok_or_else(|| integrity(line!()))?;
+                    .ok_or_else(|| integrity(line!()))?
+                    .clone();
+                for form_hash in &form_hashes {
+                    let at = dependencies.iter().position(|hash| hash == form_hash).ok_or_else(|| integrity(line!()))?;
+                    dependencies.remove(at);
+                }
                 if image_count == 1 && dependencies.len() != 1 {
                     return Err(integrity(line!()));
                 }
@@ -507,6 +534,12 @@ pub fn capture(
                     "resourceIdentity": resource_identity,
                     "colorSpace": format!("{:?}", image.color_space().map_err(|_| integrity(line!()))?),
                     "bitsPerPixel": image.bits_per_pixel().map_err(|_| integrity(line!()))?}),
+                )
+            } else if let Some(form) = object.as_x_object_form_object() {
+                (
+                    "form",
+                    None,
+                    json!({"resourceIdentity": form_hashes[0], "children": form.len()}),
                 )
             } else {
                 return Err(integrity(line!()));
@@ -813,6 +846,11 @@ fn has_supported_preservation_evidence(object: &ObjectEvidence) -> bool {
                 && object.payload["fill"].is_string()
                 && object.payload["stroked"].is_boolean()
                 && object.payload["segments"].is_array()
+        }
+        "form" => {
+            object.text.is_none()
+                && object.payload["resourceIdentity"].as_str().is_some_and(|value| value.len() == 64)
+                && object.payload["children"].is_u64()
         }
         "image" => {
             object.text.is_none()

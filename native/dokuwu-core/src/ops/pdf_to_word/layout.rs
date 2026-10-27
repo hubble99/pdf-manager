@@ -50,6 +50,18 @@ pub struct Para {
     pub line_pitch: Option<f32>,
     pub size: f32,
     pub heading: Option<u8>,
+    /// A line at the very foot of the page (a footer) is positioned on the page
+    /// instead of flowing, so text above it that Word sets a little taller can
+    /// never push it onto a page of its own.
+    pub frame: Option<Frame>,
+}
+
+/// A paragraph's place on the page, in points from the page's top-left corner.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Frame {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -168,15 +180,22 @@ pub fn layout_page(model: &PageModel) -> PageLayout {
 
     // Images with text printed over them go behind the text. On an OCR'd scan
     // the invisible text is the content, so the scan picture is left out.
+    //
+    // A picture of any size with text over it (a letterhead's wave behind the
+    // signature block) must not push that text down the page, so it is anchored
+    // behind the text too. So is a footer decoration, a picture in the bottom
+    // tenth of the page of a page that has text: a row of small icons would
+    // otherwise become a stack of paragraphs under the text.
     let mut backgrounds = Vec::new();
     let mut flow_images: Vec<usize> = Vec::new();
     for (i, img) in model.images.iter().enumerate() {
         let big = img.bbox.area() >= 0.45 * page.area();
         let covers_text = lines.iter().any(|l| img.bbox.contains_point(l.bbox.cx(), l.bbox.cy(), 0.0));
+        let footer = !lines.is_empty() && img.bbox.y0 > 0.9 * model.height;
         if big && covers_text && model.has_invisible_text {
             continue;
         }
-        if big && covers_text {
+        if covers_text || footer {
             backgrounds.push(Background { image: i, rect: img.bbox });
         } else {
             flow_images.push(i);
@@ -299,7 +318,8 @@ fn page_margins(content: Option<Rect>, w: f32, h: f32) -> Margins {
         left,
         right,
         top: clamp(c.y0 - 2.0, 14.0, 144.0),
-        bottom: clamp((h - c.y1) * 0.5, 14.0, 54.0),
+        // Never more than the space the content leaves, or its last line would not fit.
+        bottom: clamp((h - c.y1) * 0.5, 0.0, 54.0),
     }
 }
 
@@ -911,6 +931,7 @@ impl<'a> Ctx<'a> {
             line_pitch: None,
             size,
             heading: None,
+            frame: None,
         }
     }
 
@@ -1015,7 +1036,20 @@ impl<'a> Ctx<'a> {
             line_pitch: pitch,
             size: op.size,
             heading,
+            frame: self.footer_frame(&op.rows, op.size),
         }
+    }
+
+    /// The page position of a paragraph that lies in the bottom 6% of the page.
+    fn footer_frame(&self, rows: &[&TextLine], size: f32) -> Option<Frame> {
+        let first = rows.first()?;
+        if first.baseline - WORD_ASCENT * size < 0.94 * self.model.height {
+            return None;
+        }
+        let left = rows.iter().map(|l| l.bbox.x0).fold(f32::INFINITY, f32::min);
+        let right = rows.iter().map(|l| l.bbox.x1).fold(f32::NEG_INFINITY, f32::max);
+        // A little wider than the text so a font that runs wider does not wrap it.
+        Some(Frame { x: left, y: first.baseline - WORD_ASCENT * size, width: (right - left) + 0.5 * size * 4.0 })
     }
 
     fn build_table(&self, grid: &GridTable, col_left: f32, space_before: f32) -> Table {
@@ -1067,6 +1101,7 @@ impl<'a> Ctx<'a> {
                     let (mut items, _) = self.build_column(&members, cx0 + 5.4, cx1 - 5.4, cy0);
                     for it in items.iter_mut() {
                         if let Item::Para(p) = it {
+                            p.frame = None;
                             p.space_before = 0.0;
                             if p.ind_left.abs() < 6.0 {
                                 p.ind_left = 0.0;
