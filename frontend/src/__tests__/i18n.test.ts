@@ -3,6 +3,7 @@ import path from 'node:path';
 import ts from 'typescript';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyLanguage, getLanguage, t, tn } from '../i18n';
+import { EN } from '../i18n/en';
 import { ID } from '../i18n/id';
 
 const SRC = path.resolve(__dirname, '..');
@@ -67,6 +68,16 @@ describe('i18n', () => {
 
   it('keeps the placeholders of every translation identical to its English text', () => {
     const broken = Object.entries(ID)
+      .filter(([key, value]) => placeholders(key).join() !== placeholders(value).join())
+      .map(([key]) => key);
+    expect(broken).toEqual([]);
+  });
+
+  it('only reworded English for strings that exist in the app, keeping their placeholders', () => {
+    const keys = collectKeys();
+    const stale = Object.keys(EN).filter((key) => !keys.has(key));
+    expect(stale).toEqual([]);
+    const broken = Object.entries(EN)
       .filter(([key, value]) => placeholders(key).join() !== placeholders(value).join())
       .map(([key]) => key);
     expect(broken).toEqual([]);

@@ -272,7 +272,7 @@ describe('merge folder mode', () => {
     expect(await screen.findByText('Saving the merged PDF…')).toBeInTheDocument();
 
     finishMerge(mergeReport());
-    expect(await screen.findByText(/Merged 4 files/)).toBeInTheDocument();
+    expect(await screen.findByText(/4 files merged successfully/)).toBeInTheDocument();
     expect(screen.queryByText('Saving the merged PDF…')).not.toBeInTheDocument();
     fireEvent.click(document.getElementById('merge-folder-open-folder-btn') as HTMLButtonElement);
     await waitFor(() => expect(calls('core_reveal_path')[0][1]).toEqual({ path: 'C:\\Users\\a\\Downloads\\merged_output.pdf' }));
@@ -313,7 +313,7 @@ describe('merge folder mode', () => {
     expect(mergeArgs().skipInvalid).toBe(true);
 
     finishMerge(mergeReport({ mergedFiles: 2, totalPages: 2 }));
-    expect(await screen.findByText(/Merged 2 files/)).toBeInTheDocument();
+    expect(await screen.findByText(/2 files merged successfully/)).toBeInTheDocument();
   });
 
   it('blocks the merge when skipping would leave too few files', async () => {

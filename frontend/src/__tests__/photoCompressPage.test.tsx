@@ -53,7 +53,7 @@ const file = (
 const addPhotos = async (names: string[]) => {
   mocks.openFilePicker.mockResolvedValue(names);
   renderPage();
-  fireEvent.click(screen.getByRole('button', { name: 'Drop photos here or click to browse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Drop your photos here, or click to pick' }));
   await screen.findByText(names[0].split('\\').pop()!);
   await screen.findByText(names.length === 1 ? '3.81 MB' : '7.63 MB');
 };
@@ -114,7 +114,7 @@ describe('PhotoCompressPage', () => {
     expect(screen.getByText('Already as small as possible')).toBeInTheDocument();
     expect(screen.getByText('3.81 MB → 976.6 KB')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Open Downloads/ }));
     await waitFor(() => expect(mocks.revealPath).toHaveBeenCalledWith('C:\\Users\\me\\Downloads\\a (compressed).jpg'));
   });
 
@@ -162,7 +162,7 @@ describe('PhotoCompressPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Compress 2 photos' }));
 
     expect(await screen.findByText('1 photo was not compressed')).toBeInTheDocument();
-    expect(screen.getByText('The image is damaged or cannot be read.')).toBeInTheDocument();
+    expect(screen.getByText('Sorry, this image is damaged or cannot be read.')).toBeInTheDocument();
     expect(screen.getByText('1 photo compressed')).toBeInTheDocument();
   });
 

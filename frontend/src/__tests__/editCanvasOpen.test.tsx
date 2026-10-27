@@ -72,7 +72,7 @@ function mount() {
 
 async function openPdf() {
   pickerMock.mockResolvedValueOnce([PATH]);
-  fireEvent.click(screen.getByText('Click here or drag a file to begin editing.'));
+  fireEvent.click(screen.getByText('Click here or drag in a file to start editing.'));
   await waitFor(() => expect(metaMock).toHaveBeenCalled());
 }
 

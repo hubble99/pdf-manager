@@ -18,7 +18,7 @@ describe('merge and extract messages', () => {
     expect(mergeErrorMessage(err('invalid_input', 'invalid input: Use a file inside the chosen folder.')))
       .toBe('Use PDF files inside the chosen folder.');
     expect(mergeErrorMessage(err('not_found', 'file not found: x')))
-      .toBe('A file could not be found. It may have been moved or renamed.');
+      .toBe('Sorry, we could not find one of the files. It may have been moved or renamed.');
     expect(mergeErrorMessage(err('internal', 'boom'))).toBe('boom');
     expect(mergeErrorMessage(new Error('plain'))).toBe('plain');
   });
@@ -35,6 +35,6 @@ describe('merge and extract messages', () => {
     expect(extractErrorMessage(err('password_required', 'x')))
       .toBe('This PDF is protected. Remove the protection first, then split its pages.');
     expect(extractErrorMessage(err('invalid_input', 'invalid input: Cannot open PDF: x')))
-      .toBe('This file does not look like a valid PDF.');
+      .toBe('Sorry, this does not look like a valid PDF.');
   });
 });

@@ -17,7 +17,7 @@ describe('PDF to Word page', () => {
 
   it('explains core errors in plain words', () => {
     expect(errorMessage(new NativeCoreError('password_required', 'x'))).toMatch(/password/i);
-    expect(errorMessage(new NativeCoreError('not_found', 'x'))).toMatch(/could not be found/);
+    expect(errorMessage(new NativeCoreError('not_found', 'x'))).toMatch(/could not find the PDF/);
     expect(errorMessage(new NativeCoreError('internal', 'boom'))).toBe('boom');
   });
 

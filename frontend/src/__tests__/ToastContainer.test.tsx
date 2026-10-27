@@ -16,7 +16,7 @@ describe('ToastContainer action feedback', () => {
           id: 'folder-toast',
           type: 'success',
           title: 'PDF saved',
-          action: { label: 'Open Folder', onClick: openFolder },
+          action: { label: 'Open Downloads', onClick: openFolder },
         }],
         showToast: vi.fn(),
         dismissToast: vi.fn(),
@@ -25,7 +25,7 @@ describe('ToastContainer action feedback', () => {
       </ToastContext.Provider>,
     );
 
-    fireEvent.click(getByRole('button', { name: 'Open Folder' }));
+    fireEvent.click(getByRole('button', { name: 'Open Downloads' }));
     expect(getByRole('button', { name: 'Opening folder…' })).toBeDisabled();
 
     await act(async () => {

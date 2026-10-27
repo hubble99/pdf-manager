@@ -468,7 +468,7 @@ describe('organize workspace', () => {
     if (confirm) fireEvent.click(confirm);
 
     expect(document.querySelectorAll('.organize-cell')).toHaveLength(0);
-    expect(screen.getByLabelText('Drop a PDF here or press Enter to browse')).toBeInTheDocument();
+    expect(screen.getByLabelText('Drop your PDF here, or press Enter to pick one')).toBeInTheDocument();
     await waitFor(() => expect(releaseMock).toHaveBeenCalledWith('doc-main'));
   });
 

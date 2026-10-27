@@ -163,7 +163,7 @@ describe('merge quick mode', () => {
         totalPages: 6, mergedFiles: 2, skipped: [], durationMs: 100,
       },
     });
-    expect(await screen.findByText('Saved to your Downloads folder')).toBeInTheDocument();
+    expect(await screen.findByText('Your file is in Downloads!')).toBeInTheDocument();
     expect(screen.getByText(/6 pages · 3\.00 MB/)).toBeInTheDocument();
     fireEvent.click(document.getElementById('merge-open-folder-btn') as HTMLButtonElement);
     await waitFor(() => expect(calls('core_reveal_path')[0][1]).toEqual({ path: 'C:\\Users\\a\\Downloads\\Gabungan.pdf' }));

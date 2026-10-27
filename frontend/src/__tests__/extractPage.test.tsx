@@ -185,7 +185,7 @@ describe('extract page', () => {
         pagesExtracted: 4, files: 2, isZip: true, durationMs: 50,
       },
     });
-    expect(await screen.findByText('Saved to your Downloads folder')).toBeInTheDocument();
+    expect(await screen.findByText('Your file is in Downloads!')).toBeInTheDocument();
     expect(screen.getByText(/4 pages extracted/)).toBeInTheDocument();
     expect(screen.getByText(/ZIP archive/)).toBeInTheDocument();
     fireEvent.click(document.getElementById('extract-open-folder-btn') as HTMLButtonElement);

@@ -87,7 +87,7 @@ describe('ImageFormatPage', () => {
     });
     renderPage();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Drop WEBP images here or click to browse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Drop your WEBP images here, or click to pick' }));
     await screen.findByText('a.webp');
     expect(screen.getByText('b.webp')).toBeInTheDocument();
     await screen.findByText('C:\\Users\\me\\Downloads');
@@ -103,7 +103,7 @@ describe('ImageFormatPage', () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Open Folder/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Open output folder/ }));
     await waitFor(() => expect(mocks.revealPath).toHaveBeenCalledWith('C:\\Users\\me\\Downloads\\a.jpg'));
   });
 
@@ -129,14 +129,14 @@ describe('ImageFormatPage', () => {
       failed: 1,
     });
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Drop WEBP images here or click to browse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Drop your WEBP images here, or click to pick' }));
     await screen.findByText('good.webp');
     await screen.findByText('C:\\Users\\me\\Downloads');
 
     fireEvent.click(screen.getByRole('button', { name: 'Convert 2 images' }));
 
     expect(await screen.findByText('1 image was not converted')).toBeInTheDocument();
-    expect(screen.getByText('This is not a WEBP image.')).toBeInTheDocument();
+    expect(screen.getByText('Sorry, this is not a WEBP image.')).toBeInTheDocument();
     expect(screen.getByText('1 image converted')).toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe('ImageFormatPage', () => {
       job.signal.addEventListener('abort', () => reject(new NativeCoreError('cancelled', 'operation cancelled')));
     }));
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Drop WEBP images here or click to browse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Drop your WEBP images here, or click to pick' }));
     await screen.findByText('a.webp');
     await screen.findByText('C:\\Users\\me\\Downloads');
 
@@ -162,7 +162,7 @@ describe('ImageFormatPage', () => {
     mocks.chooseFolderDialog.mockResolvedValue('D:\\Out');
     mocks.convertWebpImages.mockResolvedValue({ files: [file('C:\\pics\\a.webp', 'D:\\Out\\a.png')], succeeded: 1, failed: 0 });
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Drop WEBP images here or click to browse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Drop your WEBP images here, or click to pick' }));
     await screen.findByText('a.webp');
 
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));

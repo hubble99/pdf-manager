@@ -82,9 +82,9 @@ describe('qr and barcode commands', () => {
 
   it('shows the reason for an unexpected failure so it can be reported', () => {
     expect(generationErrorText(new NativeCoreError('internal', 'internal error: boom'))).toBe(
-      'Unexpected error while generating: internal error: boom'
+      'Sorry, something unexpected went wrong while generating: internal error: boom'
     );
-    expect(generationErrorText(new Error('weird'))).toBe('Unexpected error while generating: weird');
+    expect(generationErrorText(new Error('weird'))).toBe('Sorry, something unexpected went wrong while generating: weird');
   });
 
   it('reads the size of a PNG from its header', () => {
