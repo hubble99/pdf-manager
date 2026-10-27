@@ -26,6 +26,8 @@
 
 **Fixed**
 
+- **PDFs are released after use:** a PDF shown as a preview or thumbnail (Organize, Canvas, Compress and others) was kept open until the app closed, so Windows refused to delete, rename or replace it in Explorer. It is now let go about a second and a half after the last page is drawn.
+- **Upgrade cleanup:** the installer removes the old `pdf-manager-backend.exe` that 1.10.x left in the install folder.
 - **Rotate (Organize PDF, Images to PDF preview):** rotating a page clockwise again and again no longer spins it backwards when it passes a full turn; every click turns a quarter clockwise.
 - **Files stay inside their feature:** no feature shares or keeps its file any more. Until now Merge, Extract, Protect, Canvas PDF and PDF & Image kept theirs when you switched feature and the other features lost them. Now leaving any feature with a file loaded asks "Leave this feature?" and says the file will be removed and must be added again; nothing is asked when no file is loaded.
 - **Edit Content:** choosing another text after a failed edit no longer asks "Keep the current draft?" or "Save changes before leaving?" when the draft was refused by the engine or the check already says it cannot be applied. The long list of limits is shown on the start screen only, not again beside an open PDF.

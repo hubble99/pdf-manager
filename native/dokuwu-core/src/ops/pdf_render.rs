@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::SystemTime;
+use std::time::{Duration, Instant, SystemTime};
 
 use mupdf::pdf::PdfDocument;
 use mupdf::{Colorspace, Context, Matrix, MetadataName};
@@ -560,15 +560,39 @@ impl Drop for RenderService {
     }
 }
 
+/// How long a worker keeps its last file open with nothing to render. Windows
+/// refuses to delete, move or replace a file that is still open, so the file is
+/// let go shortly after the last page; scrolling keeps it open.
+const IDLE_RELEASE: Duration = Duration::from_millis(1500);
+/// How often a worker that waits for the queue checks whether it is idle.
+const IDLE_POLL: Duration = Duration::from_millis(250);
+
 fn worker(rx: Arc<Mutex<Receiver<Request>>>, stopping: Arc<AtomicBool>) {
     enable_icc();
     let mut open: Option<(FileStamp, RenderDocument)> = None;
+    let mut last_used = Instant::now();
     loop {
-        let request = {
-            let queue = rx.lock().unwrap_or_else(|e| e.into_inner());
-            match queue.recv() {
-                Ok(request) => request,
-                Err(_) => return,
+        let request = loop {
+            if open.is_some() && last_used.elapsed() >= IDLE_RELEASE {
+                open = None;
+            }
+            // Only one worker waits on the queue at a time; the others poll so
+            // that their open file is also released when the queue stays empty.
+            let queue = match rx.try_lock() {
+                Ok(queue) => queue,
+                Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    if stopping.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    thread::sleep(IDLE_POLL);
+                    continue;
+                }
+            };
+            match queue.recv_timeout(IDLE_POLL) {
+                Ok(request) => break request,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
         };
         if stopping.load(Ordering::SeqCst) {
@@ -581,6 +605,7 @@ fn worker(rx: Arc<Mutex<Receiver<Request>>>, stopping: Arc<AtomicBool>) {
             open = None;
             Err(CoreError::Internal("rendering stopped unexpectedly".into()))
         });
+        last_used = Instant::now();
         let _ = request.reply.send(result);
     }
 }
