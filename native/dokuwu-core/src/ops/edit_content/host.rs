@@ -96,6 +96,19 @@ fn home_dir() -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from).filter(|p| !p.as_os_str().is_empty())
 }
 
+/// The worker and PDFium a development build uses: the folder
+/// `npm run prepare:edit-content:desktop` fills (the same files the installer
+/// ships) when it is complete, otherwise a debug build inside the engine crate.
+fn dev_runtime(dev_root: &Path, exe: &str, library: &str) -> (PathBuf, PathBuf) {
+    let prepared = dev_root.join("frontend").join("src-tauri").join("target").join("edit-content-runtime");
+    let pinned = identity::current().map(|i| i.library_file.clone()).unwrap_or_else(|_| library.to_owned());
+    if prepared.join(exe).is_file() && prepared.join(&pinned).is_file() {
+        return (prepared.join(exe), prepared.join(pinned));
+    }
+    let engine = dev_root.join("native").join("edit-content-engine");
+    (engine.join("target").join("debug").join(exe), engine.join(library))
+}
+
 impl HostConfig {
     /// The configuration of a running app. `resource_root` is the packaged
     /// `edit-content` folder (None in development); `dev_root` is the
@@ -109,10 +122,7 @@ impl HostConfig {
         let library = if cfg!(windows) { "pdfium.dll" } else { "libpdfium.so" };
         let (mut worker, mut pdfium) = match &resource_root {
             Some(root) => (root.join(exe), root.join(identity::current().map(|i| i.library_file.as_str()).unwrap_or(library))),
-            None => {
-                let engine = dev_root.join("native").join("edit-content-engine");
-                (engine.join("target").join("debug").join(exe), engine.join(library))
-            }
+            None => dev_runtime(dev_root, exe, library),
         };
         if let Some(value) = std::env::var_os(WORKER_ENV).filter(|v| !v.is_empty()) {
             worker = PathBuf::from(value);
@@ -434,6 +444,27 @@ mod tests {
         assert_eq!(fs::read(&second).unwrap(), b"two");
         let leftovers: Vec<_> = fs::read_dir(temp.path()).unwrap().flatten().map(|e| e.file_name()).collect();
         assert_eq!(leftovers.len(), 2, "{leftovers:?}");
+    }
+
+    #[test]
+    fn a_development_build_prefers_the_prepared_runtime_when_it_is_complete() {
+        let root = tempfile::tempdir().unwrap();
+        let exe = if cfg!(windows) { "edit-content-engine.exe" } else { "edit-content-engine" };
+        let library = identity::current().unwrap().library_file.clone();
+        let runtime = root.path().join("frontend/src-tauri/target/edit-content-runtime");
+        let engine = root.path().join("native/edit-content-engine");
+
+        let (worker, pdfium) = dev_runtime(root.path(), exe, &library);
+        assert!(worker.starts_with(&engine) && pdfium.starts_with(&engine), "nothing prepared: the engine crate");
+
+        fs::create_dir_all(&runtime).unwrap();
+        fs::write(runtime.join(exe), b"x").unwrap();
+        let (worker, _) = dev_runtime(root.path(), exe, &library);
+        assert!(worker.starts_with(&engine), "a worker without its library is not enough");
+
+        fs::write(runtime.join(&library), b"x").unwrap();
+        let (worker, pdfium) = dev_runtime(root.path(), exe, &library);
+        assert_eq!((worker, pdfium), (runtime.join(exe), runtime.join(&library)));
     }
 
     #[test]
