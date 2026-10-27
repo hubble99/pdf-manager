@@ -1,4 +1,4 @@
-import { useCallback, useContext } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import { FileContext } from '../context/FileContext.context';
 import type { FeatureFileData } from '../context/FileContext.context';
 
@@ -18,6 +18,9 @@ export const useFeatureFile = <T extends FeatureFileData>(featureId: string) => 
   const clearFileData = useCallback(() => {
     clearFeatureFile(featureId);
   }, [clearFeatureFile, featureId]);
+
+  // Features do not share files and do not keep them: leaving the page removes this one.
+  useEffect(() => () => clearFeatureFile(featureId), [clearFeatureFile, featureId]);
 
   return {
     fileData: (featureFiles[featureId] || null) as T,

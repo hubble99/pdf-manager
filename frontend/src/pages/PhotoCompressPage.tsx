@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   AlertTriangle,
   CheckCircle,
@@ -53,6 +54,7 @@ export function PhotoCompressPage() {
   const { showToast } = useToast();
   const desktop = isTauri();
   const [paths, setPaths] = useState<string[]>([]);
+  useLeaveGuard(paths.length > 0);
   const [level, setLevel] = useState<CompressLevel>(DEFAULT_LEVEL);
   const [quality, setQuality] = useState(LEVELS[DEFAULT_LEVEL].quality);
   const [maxSide, setMaxSide] = useState<number | null>(LEVELS[DEFAULT_LEVEL].maxSide);

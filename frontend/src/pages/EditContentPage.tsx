@@ -27,6 +27,7 @@ import { PageHeader, StateView } from '../components/ui';
 import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { useNativePaths } from '../hooks/useNativePaths';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { baseName } from '../utils/paths';
 import { openOutputFolder } from '../utils/tauriDialog';
 import {
@@ -76,15 +77,14 @@ function isTextField(target: EventTarget | null): boolean {
     && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable);
 }
 
-function EditContentLimits({ collapsed = false }: { collapsed?: boolean }) {
-  const Wrapper = collapsed ? 'details' : 'aside';
+function EditContentLimits() {
   return (
-    <Wrapper className="edit-content-limits" aria-label={collapsed ? undefined : t('Edit Content V1 limits')}>
-      {collapsed ? <summary>{t('Edit Content V1 limits')}</summary> : <strong>{t('Edit Content V1 limits')}</strong>}
+    <aside className="edit-content-limits" aria-label={t('Edit Content V1 limits')}>
+      <strong>{t('Edit Content V1 limits')}</strong>
       <p>{t('Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.')}</p>
       <p>{t('These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.')}</p>
       <p>{t('Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.')}</p>
-    </Wrapper>
+    </aside>
   );
 }
 
@@ -149,8 +149,13 @@ export function EditContentPage() {
   }, [pickableObjects, pickerQuery]);
   const draftDirty = Boolean(selected && draft !== selected.text);
   const draftRejected = rejection !== null && rejection.draft === draft;
+  // A draft the engine refused, or that the dry run says it will refuse, cannot be
+  // applied, so there is nothing to keep or save: moving on needs no question.
+  const draftWorthKeeping = draftDirty && !draftRejected && check.state !== 'blocked';
   const defaultStem = file?.name.replace(/\.pdf$/i, '') || 'document';
-  const unsaved = draftDirty || Boolean(session?.dirty);
+  const unsaved = draftWorthKeeping || Boolean(session?.dirty);
+  // Unsaved work has its own question (save or discard); a clean session just warns that the file goes.
+  useLeaveGuard(Boolean(file && session) && !unsaved);
   const busy = phase !== 'idle';
   const sessionId = session?.sessionId;
   const sessionRevision = session?.acceptedRevision;
@@ -377,12 +382,12 @@ export function EditContentPage() {
   }, [draftDirty, navigate, refreshAcceptedCheckpoint, selectTarget, session]);
 
   const requestAction = useCallback((action: PendingAction) => {
-    if ((action.kind === 'leave' && unsaved) || (action.kind !== 'leave' && draftDirty)) {
+    if ((action.kind === 'leave' && unsaved) || (action.kind !== 'leave' && draftWorthKeeping)) {
       setPending(action);
       return;
     }
     void executePending(action);
-  }, [draftDirty, executePending, unsaved]);
+  }, [draftWorthKeeping, executePending, unsaved]);
 
   const applyDraft = useCallback(async (after?: PendingAction) => {
     if (!session || !selected || !draftDirty) return false;
@@ -748,7 +753,6 @@ export function EditContentPage() {
                   </div>
                   {selected && <span className="badge badge-info">{t('Exact object')}</span>}
                 </div>
-                <EditContentLimits collapsed={Boolean(selected)} />
                 {pickableObjects.length > 0 && (
                   <div className="edit-content-object-picker">
                     <span className="input-label">{t('Native text object')}</span>

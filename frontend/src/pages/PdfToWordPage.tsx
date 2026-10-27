@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   AlertTriangle,
   CheckCircle,
@@ -32,6 +33,7 @@ const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
 export function PdfToWordPage() {
   const { showToast } = useToast();
   const [inputPath, setInputPath] = useState<string | null>(null);
+  useLeaveGuard(inputPath !== null);
   const [outputName, setOutputName] = useState('');
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<CoreProgress | null>(null);

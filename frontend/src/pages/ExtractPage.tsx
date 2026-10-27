@@ -18,6 +18,7 @@ import { formatPageNumbers } from '../features/converter/pageSelection';
 import { extractErrorMessage } from '../features/merge/messages';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { useNativePaths } from '../hooks/useNativePaths';
 import { isCoreCancelled, revealPath, type CoreProgress } from '../api/nativeCore';
 import { getPdfInfo, type PdfInfo } from '../api/pdfRender';
@@ -51,6 +52,7 @@ const OUTPUT_MODE_OPTIONS: { value: ExtractMode; label: string; desc: string }[]
 export function ExtractPage() {
   const { showToast } = useToast();
   const { fileData: path, setFileData: setPath } = useFeatureFile<string | null>('extract');
+  useLeaveGuard(Boolean(path));
   const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
   const [infoFailed, setInfoFailed] = useState(false);
   const [pageRanges, setPageRanges] = useState('');

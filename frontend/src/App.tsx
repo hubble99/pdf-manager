@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { Sidebar } from './components/layout/Sidebar';
+import { LeaveGuardProvider } from './context/LeaveGuard';
 import { MainContent } from './components/layout/MainContent';
 import { MergePage } from './pages/MergePage';
 import { ExtractPage } from './pages/ExtractPage';
@@ -73,6 +74,7 @@ export default function App() {
         <FileProvider>
           <LanguageProvider>
           <BrowserRouter>
+          <LeaveGuardProvider>
           <div className="app-shell">
             <Sidebar />
             <MainContent>
@@ -118,6 +120,7 @@ export default function App() {
               50% { opacity: 0.3; }
             }
           `}</style>
+          </LeaveGuardProvider>
         </BrowserRouter>
           </LanguageProvider>
       </FileProvider>

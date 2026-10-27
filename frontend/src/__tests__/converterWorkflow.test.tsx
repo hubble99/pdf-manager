@@ -572,7 +572,7 @@ describe('unified converter workspace', () => {
     expect(screen.getByText(/1 page · A4 · 878\.9 KB/)).toBeInTheDocument();
   });
 
-  it('keeps preview resources valid when the converter is left and re-entered', async () => {
+  it('releases preview resources and forgets the files when the converter is left', async () => {
     function Harness() {
       const [visible, setVisible] = useState(true);
       return (
@@ -587,25 +587,23 @@ describe('unified converter workspace', () => {
       );
     }
 
-    const createObjectURL = vi.mocked(URL.createObjectURL);
     const revokeObjectURL = vi.mocked(URL.revokeObjectURL);
 
     render(<Harness />);
     await addPaths([pic('keep.png')]);
     await screen.findByText('1 file');
     await waitFor(() => expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview'));
-    const createdAfterAdd = createObjectURL.mock.calls.length;
     const revokedAfterAdd = revokeObjectURL.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: 'toggle-view' }));
     expect(screen.queryByText('1 file')).not.toBeInTheDocument();
-    const revokedAfterLeave = revokeObjectURL.mock.calls.length;
-    expect(revokedAfterLeave).toBeGreaterThan(revokedAfterAdd);
+    expect(revokeObjectURL.mock.calls.length).toBeGreaterThan(revokedAfterAdd);
 
+    // No feature keeps its file: coming back starts empty.
     fireEvent.click(screen.getByRole('button', { name: 'toggle-view' }));
-    await screen.findByText('1 file');
-    await waitFor(() => expect(document.querySelector('.sort-card img')).toHaveAttribute('src', 'blob:mock-preview'));
-    expect(createObjectURL.mock.calls.length).toBeGreaterThan(createdAfterAdd);
-    expect(revokeObjectURL.mock.calls.length).toBe(revokedAfterLeave);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'toggle-view' })).toBeInTheDocument());
+    expect(screen.queryByText('1 file')).not.toBeInTheDocument();
+    expect(document.querySelector('.sort-card img')).toBeNull();
   });
+
 });
