@@ -294,7 +294,8 @@ describe('Edit Content page', () => {
     expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
     await dropPdf();
     await screen.findByRole('heading', { name: 'Select text on the page' });
-    expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
+    // The long list of limits belongs to the start screen; it is not repeated beside an open PDF.
+    expect(screen.queryByText('Edit Content V1 limits')).not.toBeInTheDocument();
     const trigger = screen.getByRole('button', { name: 'Native text object' });
     fireEvent.click(trigger);
     const choices = screen.getByRole('listbox', { name: 'Native text options' });
@@ -457,6 +458,34 @@ describe('Edit Content page', () => {
     await screen.findByText(/unexpected change elsewhere in the PDF\. Your text is kept/);
     expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Replacement text')).toHaveValue('Press B to continue');
+  });
+
+  it('does not ask about a draft the engine refused when another text is chosen', async () => {
+    vi.mocked(contentApi.applyContentDraft).mockResolvedValue({
+      schemaVersion: 'edit-content-reply/v1', requestId: 'apply-request', sessionId: 'session-1',
+      status: 'rejected', acceptedRevision: 0, guardReason: 'REJECTED_COLLATERAL_INTEGRITY',
+      result: { state, clearDraft: false },
+    });
+    vi.mocked(contentApi.openContentSession).mockResolvedValue(accepted('open-request', {
+      state,
+      discovery: {
+        ...discovery,
+        textObjects: [
+          discovery.textObjects[0],
+          { ...discovery.textObjects[0], targetId: 'target-1', nativeObjectIdentity: 'native-1', text: 'Second line' },
+        ],
+      },
+    }));
+    renderPage();
+    await dropPdf();
+    await chooseNativeText('target-0');
+    fireEvent.change(await screen.findByLabelText('Replacement text'), { target: { value: 'Press B to continue' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply & verify/i }));
+    await screen.findByText(/unexpected change elsewhere in the PDF\. Your text is kept/);
+
+    await chooseNativeText('target-1');
+    expect(screen.queryByText('Keep the current draft?')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Replacement text')).toHaveValue('Second line');
   });
 
   it('does not restore an expired selection from the old discovery while rejection refreshes', async () => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   CheckCircle,
   FileText,
@@ -52,6 +53,7 @@ const PDF_FILTER = { name: 'PDF', extensions: ['pdf'] };
 export function CompressPage() {
   const { showToast } = useToast();
   const [inputPath, setInputPath] = useState<string | null>(null);
+  useLeaveGuard(inputPath !== null);
   const [probe, setProbe] = useState<PdfProbe | null>(null);
   const [quality, setQuality] = useState(70);
   const [outputName, setOutputName] = useState('');

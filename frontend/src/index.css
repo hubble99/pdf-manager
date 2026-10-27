@@ -1071,6 +1071,12 @@ body {
   outline: none;
 }
 
+/* A multi-line field needs breathing room above its first line. */
+textarea.input {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
 .input:focus {
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
@@ -5662,4 +5668,43 @@ select.input {
 .sidebar.collapsed .sidebar-header {
   padding-left: 0;
   padding-right: 0;
+}
+
+/* ── Leave-feature warning ─────────────────────────────────────────────────── */
+.leave-guard-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.leave-guard-dialog {
+  width: min(420px, 100%);
+  padding: var(--space-5);
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--on-surface);
+}
+
+.leave-guard-dialog h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 16px;
+}
+
+.leave-guard-dialog p {
+  margin: 0 0 var(--space-4);
+  color: var(--on-surface-variant);
+  line-height: 1.5;
+}
+
+.leave-guard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
 }

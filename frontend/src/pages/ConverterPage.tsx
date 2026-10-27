@@ -17,6 +17,7 @@ import { PageThumbGrid } from '../components/preview';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
 import { PageHeader, RadioCardGroup, SegmentedControl, Tabs } from '../components/ui';
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
 import { DPI_OPTIONS, FORMAT_OPTIONS, PAGE_SIZE_OPTIONS, formatBytes } from '../features/converter/options';
 import { IMAGE_EXTENSIONS, baseName } from '../features/converter/batch';
@@ -59,6 +60,7 @@ export function ConverterPage() {
   // The tab chooses the direction while nothing is loaded; loaded files decide it after that.
   const [chosenTab, setChosenTab] = useState<ConverterTab>('pdf');
   const activeTab: ConverterTab = kind === 'empty' ? chosenTab : kind;
+  useLeaveGuard(kind !== 'empty');
 
   const replaceIntentRef = useRef(false);
 

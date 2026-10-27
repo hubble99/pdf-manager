@@ -9,6 +9,7 @@ import { SortableArea } from '../../components/sortable/SortableArea';
 import { revealPath } from '../../api/nativeCore';
 import type { FileDescription, FolderNode } from '../../api/pdfMerge';
 import { useFolderMerge } from './useFolderMerge';
+import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { reasonLabel } from './messages';
 import { t, tn } from '../../i18n';
 
@@ -178,6 +179,7 @@ function QueueRow({
 
 export function FolderWorkspace() {
   const workspace = useFolderMerge();
+  useLeaveGuard(workspace.root !== null);
   const reorderQueue = (from: number, to: number) => workspace.moveAt(from, to);
 
   /** Keyboard alternative for a focused queue row. */

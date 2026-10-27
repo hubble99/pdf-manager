@@ -9,6 +9,7 @@ import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
 import { DeletePagesPanel, InsertPanel, SourcesPanel } from '../features/organize/panels';
 import { useOrganizeWorkspace } from '../features/organize/useOrganizeWorkspace';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { IMAGE_EXTENSIONS, PDF_EXTENSIONS } from '../features/organize/types';
 import { useNativePaths } from '../hooks/useNativePaths';
 import { useToast } from '../hooks/useToast';
@@ -22,6 +23,7 @@ const ANY_FILTER = { name: 'PDF and images', extensions: [...PDF_EXTENSIONS, ...
 
 export function OrganizePage() {
   const workspace = useOrganizeWorkspace();
+  useLeaveGuard(workspace.hasDocument);
   const { showToast } = useToast();
   const outputNameRef = useRef<HTMLInputElement>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);

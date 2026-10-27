@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { useNativePaths } from '../hooks/useNativePaths';
 import { NativeCoreError, fileSizes, revealPath } from '../api/nativeCore';
 import { baseName, stemOf } from '../utils/paths';
@@ -218,6 +219,7 @@ export function EditCanvasPage() {
   const { showToast } = useToast();
   const showToastRef = useRef(showToast);
   const { fileData: file, setFileData: setFile } = useFeatureFile<string | null>('edit-canvas');
+  useLeaveGuard(Boolean(file));
   const [fileSize, setFileSize] = useState<number | null>(null);
 
   const [pages, setPages] = useState<PageData[]>([]);

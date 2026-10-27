@@ -16,6 +16,7 @@ import { PdfThumbnail } from '../components/PdfThumbnail';
 import { PageHeader, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { useNativePaths } from '../hooks/useNativePaths';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
 import { FolderWorkspace } from '../features/merge/FolderWorkspace';
@@ -56,6 +57,7 @@ export function MergePage() {
   const { showToast } = useToast();
   const { fileData: _files, setFileData: setFiles } = useFeatureFile<FileEntry[]>('merge');
   const files = useMemo(() => _files || [], [_files]);
+  useLeaveGuard(files.length > 0);
   const [outputName, setOutputName] = useState('merged_output.pdf');
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<CoreProgress | null>(null);

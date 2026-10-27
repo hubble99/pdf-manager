@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   AlertTriangle,
   CheckCircle,
@@ -56,6 +57,7 @@ export function ImageFormatPage() {
   const { showToast } = useToast();
   const desktop = isTauri();
   const [paths, setPaths] = useState<string[]>([]);
+  useLeaveGuard(paths.length > 0);
   const [format, setFormat] = useState<ImageTargetFormat>('png');
   const [quality, setQuality] = useState(DEFAULT_JPEG_QUALITY);
   const [outputDir, setOutputDir] = useState<string | null>(null);
