@@ -1,8 +1,8 @@
 //! Compress PDF.
 //!
 //! Re-encodes the PDF's ordinary pictures as JPEG at the chosen quality and
-//! rewrites the file with unused objects removed, duplicates merged and
-//! streams deflated. The result is never larger than the input: when nothing
+//! rewrites the file with unused objects removed, duplicate streams merged (see
+//! [`dedupe`]) and streams deflated. The result is never larger than the input: when nothing
 //! gets smaller the original is copied unchanged.
 //!
 //! Dokuwu puts no limit on file size, so memory use does not follow it:
@@ -18,6 +18,7 @@
 //! The output is written to `<name>.pdf.part` and renamed when complete, so a
 //! failed or cancelled run leaves no output file.
 
+mod dedupe;
 mod image;
 
 use std::fs::{self, File};
@@ -196,7 +197,9 @@ fn run(
         work_dir = Some(work);
     }
 
-    let candidates = find_candidates(&doc, ctx)?;
+    let merged = dedupe::merge_duplicate_streams(&doc, ctx)?;
+    let mut candidates = find_candidates(&doc, ctx)?;
+    candidates.retain(|spec| !merged.removed.contains(&spec.xref));
     let counts = recompress_images(
         &mut doc,
         &candidates,
@@ -211,7 +214,7 @@ fn run(
     ctx.report("saving", 0, None);
     let mut write = PdfWriteOptions::default();
     write
-        .set_garbage_level(4)
+        .set_garbage_level(2)
         .set_compress(true)
         .set_compress_images(true)
         .set_compress_fonts(true)

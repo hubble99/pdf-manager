@@ -221,6 +221,99 @@ fn a_picture_used_on_many_pages_is_one_object() {
     assert_eq!(pages(&out), 3);
 }
 
+/// A PDF whose three pages each carry their own copy of the same picture (as
+/// Canva writes them), plus one different picture.
+fn duplicated_pictures_pdf(path: &Path) {
+    fn noise(seed: u32) -> Vec<u8> {
+        let mut x = seed;
+        (0..64 * 64 * 3)
+            .map(|_| {
+                x = x.wrapping_mul(1664525).wrapping_add(1013904223);
+                (x >> 24) as u8
+            })
+            .collect()
+    }
+    let picture = |data: &[u8]| {
+        let mut bytes = format!(
+            "<< /Type /XObject /Subtype /Image /Width 64 /Height 64 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {} >>\nstream\n",
+            data.len()
+        )
+        .into_bytes();
+        bytes.extend_from_slice(data);
+        bytes.extend_from_slice(b"\nendstream");
+        bytes
+    };
+    let same = noise(1);
+    let mut objects: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>".to_vec(),
+    ];
+    // Pages 3-5 use pictures 6, 7, 8 (identical) and 9 (different, on the last page).
+    for (page, image) in [(0, 6), (1, 7), (2, 8)] {
+        let extra = if page == 2 { " /Im9 9 0 R" } else { "" };
+        objects.push(
+            format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /Im{image} {image} 0 R{extra} >> >> /Contents {} 0 R >>",
+                10 + page
+            )
+            .into_bytes(),
+        );
+    }
+    for _ in 0..3 {
+        objects.push(picture(&same));
+    }
+    objects.push(picture(&noise(2)));
+    for (page, image) in [(0, 6), (1, 7), (2, 8)] {
+        let extra = if page == 2 { " q 50 0 0 50 120 20 cm /Im9 Do Q" } else { "" };
+        let content = format!("q 80 0 0 80 20 100 cm /Im{image} Do Q{extra}");
+        objects.push(format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes());
+    }
+    let mut bytes = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (index, object) in objects.iter().enumerate() {
+        offsets.push(bytes.len());
+        bytes.extend_from_slice(format!("{} 0 obj\n", index + 1).as_bytes());
+        bytes.extend_from_slice(object);
+        bytes.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = bytes.len();
+    bytes.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for offset in offsets {
+        bytes.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    bytes.extend_from_slice(
+        format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes(),
+    );
+    fs::write(path, bytes).unwrap();
+}
+
+#[test]
+fn copies_of_the_same_picture_are_merged_into_one() {
+    let _guard = shared();
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("copies.pdf");
+    duplicated_pictures_pdf(&input);
+    let out = dir.path().join("out.pdf");
+    let report = compress_pdf(&input, &out, &CompressOptions::new(50), &JobContext::detached()).unwrap();
+    // One copy of the repeated picture and the different one are all that is left.
+    assert_eq!(report.images_found, 2);
+    assert_eq!(image_streams(&out).len(), 2);
+    assert_eq!(pages(&out), 3);
+    // Every page still shows its picture.
+    let before = Document::open(input.to_str().unwrap()).unwrap();
+    let after = Document::open(out.to_str().unwrap()).unwrap();
+    for index in 0..3 {
+        let draw = |doc: &Document| {
+            let page = doc.load_page(index).unwrap();
+            let pixmap = page.to_pixmap(&Matrix::new(1.0, 0.0, 0.0, 1.0, 0.0, 0.0), &Colorspace::device_rgb(), false, false).unwrap();
+            pixmap.samples().to_vec()
+        };
+        let (a, b) = (draw(&before), draw(&after));
+        let mean = a.iter().zip(&b).map(|(x, y)| x.abs_diff(*y) as u64).sum::<u64>() as f64 / a.len() as f64;
+        assert!(mean < 12.0, "page {index} changed by {mean}");
+    }
+}
+
 #[test]
 fn worker_count_does_not_change_the_result() {
     let _guard = shared();
