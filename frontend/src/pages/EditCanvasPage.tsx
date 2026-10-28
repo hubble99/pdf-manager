@@ -1662,9 +1662,9 @@ export function EditCanvasPage() {
           </button>
         </div>
         {/* File, output name and Save stay on the right, also when the bar wraps. */}
-        <div className="canvas-file-group" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '8px 10px', marginLeft: 'auto', minWidth: 0 }}>
+        <div className="canvas-file-group" style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', justifyContent: 'flex-end', gap: '8px', marginLeft: 'auto', flex: '1 1 360px', minWidth: 0 }}>
         {/* Compact File Info & Upload Trigger */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: '0 1 auto', minWidth: 0 }}>
           {file && (
             <div
               style={{
@@ -1676,8 +1676,9 @@ export function EditCanvasPage() {
                 borderRadius: '6px',
                 padding: '2px 10px',
                 height: '32px',
-                maxWidth: '220px',
-                flexShrink: 0,
+                maxWidth: '150px',
+                minWidth: '80px',
+                flexShrink: 1,
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
@@ -1733,10 +1734,10 @@ export function EditCanvasPage() {
         {/* Output name + save stay together and hug the right edge, also when the bar wraps. */}
         <div
           className="canvas-save-group"
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
+          style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: '1 1 auto', minWidth: 0, maxWidth: '100%' }}
         >
         {/* Output Filename Input */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 160px', minWidth: '80px', maxWidth: '240px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 110px', minWidth: '70px', maxWidth: '240px' }}>
           <input
             id="edit-output-name"
             type="text"
