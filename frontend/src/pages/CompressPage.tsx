@@ -300,10 +300,9 @@ export function CompressPage() {
                 </div>
               )}
 
-              </div>
-              <div className="action-bar">
                 {result && (
                   <ResultCard
+                    stacked
                     title={result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}
                     detail={(
                       <>

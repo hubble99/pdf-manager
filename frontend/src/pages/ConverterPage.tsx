@@ -172,51 +172,52 @@ export function ConverterPage() {
     </>
   );
 
+  // The green card sits under the preview; the buttons close the settings column.
+  const resultBanner = kind !== 'empty' && result && (
+    <ResultCard
+      stacked
+      title={t('Saved to your Downloads folder')}
+      detail={<><Filename name={result.filename} /> · {result.detail}</>}
+      action={{
+        label: t('Show in folder'),
+        id: 'converter-open-folder',
+        onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+      }}
+    />
+  );
+
   const actions = kind !== 'empty' && (
-    <div className="action-bar">
-      {result && (
-        <ResultCard
-          title={t('Saved to your Downloads folder')}
-          detail={<><Filename name={result.filename} /> · {result.detail}</>}
-          action={{
-            label: t('Show in folder'),
-            id: 'converter-open-folder',
-            onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
-          }}
-        />
-      )}
-      <div className="form-actions">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          id="converter-clear"
-          onClick={converter.clear}
-          disabled={isConverting}
-        >
-          {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
-          {kind === 'images' ? t('Clear All') : t('Clear')}
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          id="converter-run"
-          onClick={converter.convert}
-          disabled={!canConvert}
-          title={canConvert ? undefined : pdfBlockReason ?? t('Add files to convert')}
-        >
-          {isConverting ? (
-            <>
-              <Loader2 size={15} className="converter-spin" aria-hidden="true" />
-              {kind === 'pdf' ? t('Exporting…') : t('Converting…')}
-            </>
-          ) : (
-            <>
-              <FileImage size={15} aria-hidden="true" />
-              {kind === 'pdf' ? t('Export Images') : t('Create PDF')}
-            </>
-          )}
-        </button>
-      </div>
+    <div className="form-actions">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        id="converter-clear"
+        onClick={converter.clear}
+        disabled={isConverting}
+      >
+        {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
+        {kind === 'images' ? t('Clear All') : t('Clear')}
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        id="converter-run"
+        onClick={converter.convert}
+        disabled={!canConvert}
+        title={canConvert ? undefined : pdfBlockReason ?? t('Add files to convert')}
+      >
+        {isConverting ? (
+          <>
+            <Loader2 size={15} className="converter-spin" aria-hidden="true" />
+            {kind === 'pdf' ? t('Exporting…') : t('Converting…')}
+          </>
+        ) : (
+          <>
+            <FileImage size={15} aria-hidden="true" />
+            {kind === 'pdf' ? t('Export Images') : t('Create PDF')}
+          </>
+        )}
+      </button>
     </div>
   );
 
@@ -299,6 +300,7 @@ export function ConverterPage() {
         {/* ── One PDF: pick pages, set the output ───────────────────────────── */}
         {desktop && kind === 'pdf' && pdfPath && (
           <div className="form-col form-col--split">
+            <div className="col-stack">
             <div className="card card--flush">
               <div className="card-head">
                 <span className="card-head-title">
@@ -349,6 +351,8 @@ export function ConverterPage() {
                   {pdfInfoState === 'loading' ? t('Reading the document…') : t('Pages are unavailable for this file.')}
                 </p>
               )}
+            </div>
+            {resultBanner}
             </div>
 
             <div className="col-stack">
@@ -471,14 +475,15 @@ export function ConverterPage() {
               </div>
 
               {outcome}
+              {actions}
             </div>
-            {actions}
           </div>
         )}
 
         {/* ── Images: previews on the left, page size and output on the right ── */}
         {desktop && kind === 'images' && (
           <div className="form-col form-col--split">
+            <div className="col-stack">
             <div className="card card--flush">
               <div className="card-head">
                 <span className="card-head-title">
@@ -542,6 +547,8 @@ export function ConverterPage() {
                 />
               </div>
             </div>
+            {resultBanner}
+            </div>
 
             <div className="col-stack">
             <div className="card card--flush">
@@ -583,8 +590,8 @@ export function ConverterPage() {
             </div>
 
             {outcome}
-            </div>
             {actions}
+            </div>
           </div>
         )}
       </div>
