@@ -3,7 +3,7 @@ import { useFeatureFile } from '../../hooks/useFeatureFile';
 import { useToast } from '../../hooks/useToast';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { baseName, stemOf } from '../../utils/paths';
-import { NativeCoreError, fileSizes, isCoreCancelled, revealPath, type CoreProgress } from '../../api/nativeCore';
+import { NativeCoreError, fileSizes, isCoreCancelled, type CoreProgress } from '../../api/nativeCore';
 import { getPdfInfo, type PdfInfo } from '../../api/pdfRender';
 import {
   exportPdfImages, imagesToPdf, type ImageToPdfReport, type PdfImageFormat, type PdfToImageReport,
@@ -372,7 +372,6 @@ export function useConverterWorkflow(): ConverterWorkflow {
     const isCurrent = () => generation === generationRef.current && mountedRef.current;
     const jobOptions = { signal: controller.signal, onProgress: (p: CoreProgress) => { if (isCurrent()) setProgress(p); } };
     let cancelled = false;
-    const openFolder = (path: string) => ({ label: t('Show in folder'), onClick: () => { void revealPath(path).catch(() => undefined); } });
 
     try {
       if (isPdf && pdfPath) {
@@ -394,13 +393,6 @@ export function useConverterWorkflow(): ConverterWorkflow {
           detail: `${tn(report.pages, '{n} page', '{n} pages')} · ${format} · ${dpi} DPI${report.isZip ? t(' (ZIP archive)') : ''} · ${formatBytes(report.outputSizeBytes)}${reduced}`,
         });
         addHistoryEntry({ filename, action: 'PDF to Image', size: report.outputSizeBytes });
-        showToast({
-          type: 'success',
-          title: t('Conversion complete'),
-          message: tn(report.pages, '{n} page exported to {format}', '{n} pages exported to {format}', { format }),
-          action: openFolder(report.outputPath),
-          duration: 8000,
-        });
       } else {
         const report: ImageToPdfReport = await imagesToPdf(
           images.map((entry) => ({ path: entry.path, rotation: entry.rotation, flipH: entry.flipH })),
@@ -422,15 +414,6 @@ export function useConverterWorkflow(): ConverterWorkflow {
           }));
         }
         addHistoryEntry({ filename, action: 'Image to PDF', size: report.outputSizeBytes });
-        showToast({
-          type: report.skipped.length > 0 ? 'info' : 'success',
-          title: t('Conversion complete'),
-          message: report.skipped.length > 0
-            ? tn(report.skipped.length, '{n} image was skipped because it could not be read', '{n} images were skipped because they could not be read')
-            : tn(report.pages, '{n} image converted', '{n} images converted'),
-          action: openFolder(report.outputPath),
-          duration: 8000,
-        });
       }
     } catch (err: unknown) {
       if (isCoreCancelled(err)) {

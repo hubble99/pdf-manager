@@ -215,6 +215,15 @@ describe('organize workspace', () => {
     await waitFor(() => expect(document.querySelectorAll('.organize-cell--highlighted')).toHaveLength(4));
   });
 
+  it('says at once which pages can be deleted, without an error before anything is typed', async () => {
+    await openDocument(6);
+    fireEvent.click(screen.getByRole('button', { name: /Delete pages/i }));
+
+    expect(screen.getByText(/You can delete any page from 1 to 6/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.getElementById('organize-delete-confirm')).toBeDisabled();
+  });
+
   it('blocks bulk deletion with an inline error for an out-of-range expression', async () => {
     await openDocument(4);
     fireEvent.click(screen.getByRole('button', { name: /Delete pages/i }));
@@ -489,7 +498,7 @@ describe('organize workspace', () => {
     expect(payload[1]).toMatchObject({ page: 1, rotation: 0, flip: false }); // the duplicate
     expect(payload[2]).toMatchObject({ page: 2, rotation: 90, flip: false });
     expect(payload[3]).toMatchObject({ page: 3, rotation: 0, flip: true });
-    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(await screen.findByText('Your file is in Downloads!')).toBeInTheDocument();
   });
 
   it('keeps the working list and reports an inline error when saving fails', async () => {

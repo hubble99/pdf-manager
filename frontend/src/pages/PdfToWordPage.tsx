@@ -2,10 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   AlertTriangle,
-  CheckCircle,
   FileText,
   FileType2,
-  FolderOpen,
   Info,
   Loader2,
   Upload,
@@ -13,11 +11,11 @@ import {
 } from 'lucide-react';
 import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
-import { PageHeader } from '../components/ui';
-import { PDF_TO_WORD_BETA_NOTE } from '../config/features';
+import { PageHeader, ResultCard } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { addHistoryEntry } from '../utils/historyStore';
 import { openOutputFolder } from '../utils/tauriDialog';
+import { getPdfInfo, type PdfInfo } from '../api/pdfRender';
 import { useNativePaths } from '../hooks/useNativePaths';
 import {
   convertPdfToWord,
@@ -38,6 +36,8 @@ export function PdfToWordPage() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<CoreProgress | null>(null);
   const [result, setResult] = useState<PdfToWordReport | null>(null);
+  /** Size and page count of the chosen PDF; `info` is null when the core could not read them. */
+  const [fileInfo, setFileInfo] = useState<{ path: string; info: PdfInfo | null } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const loadPath = useCallback((path: string) => {
@@ -58,6 +58,17 @@ export function PdfToWordPage() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  useEffect(() => {
+    if (!inputPath) return undefined;
+    let cancelled = false;
+    getPdfInfo(inputPath)
+      .then((info) => { if (!cancelled) setFileInfo({ path: inputPath, info }); })
+      .catch(() => { if (!cancelled) setFileInfo({ path: inputPath, info: null }); });
+    return () => { cancelled = true; };
+  }, [inputPath]);
+  const details = fileInfo && fileInfo.path === inputPath ? fileInfo : null;
+  const infoLoading = inputPath !== null && details === null;
+
   const convert = async () => {
     if (!inputPath) return;
     const controller = new AbortController();
@@ -72,13 +83,6 @@ export function PdfToWordPage() {
       });
       setResult(report);
       addHistoryEntry({ filename: baseName(report.outputPath), action: 'PDF to Word', size: report.outputSizeBytes });
-      showToast({
-        type: 'success',
-        title: t('Word document ready'),
-        message: baseName(report.outputPath),
-        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
-        duration: 8000,
-      });
     } catch (err) {
       if (isCoreCancelled(err)) {
         showToast({ type: 'info', title: t('Conversion cancelled'), message: t('No file was saved.') });
@@ -106,18 +110,10 @@ export function PdfToWordPage() {
         icon={FEATURE_ICONS['pdf-to-word']}
         title={t('PDF to Word')}
         description={t('Turn a PDF into an editable Word document (.docx)')}
-        badge={{ label: 'BETA', title: PDF_TO_WORD_BETA_NOTE }}
       />
 
       <div className="page-body">
-        <div className={`form-col${inputPath ? '' : ' form-col--center'}`}>
-          <div className="card status-card" role="note" id="pdf-to-word-beta-note">
-            <Info size={20} aria-hidden="true" />
-            <div className="status-card-copy">
-              <b>{t('Beta')}</b>
-              <small>{PDF_TO_WORD_BETA_NOTE}</small>
-            </div>
-          </div>
+        <div className={`form-col${inputPath ? ' form-col--roomy' : ' form-col--center'}`}>
           {!desktop ? (
             <div className="card status-card" role="note">
               <Info size={20} aria-hidden="true" />
@@ -151,6 +147,12 @@ export function PdfToWordPage() {
                   <span className="card-head-title">
                     <FileText size={16} className="card-head-icon" aria-hidden="true" />
                     <Filename name={baseName(inputPath)} className="file-item-name" />
+                    {details?.info && <span className="chip">{formatBytes(details.info.sizeBytes)}</span>}
+                    {details?.info && !details.info.encrypted && (
+                      <span className="chip">{tn(details.info.pages, '{n} page', '{n} pages')}</span>
+                    )}
+                    {details?.info?.encrypted && <span className="badge badge-error">{t('Password protected')}</span>}
+                    {infoLoading && <Loader2 size={12} className="spin" aria-hidden="true" />}
                   </span>
                   <span className="card-head-actions">
                     <button type="button" className="link-btn" id="pdf-to-word-change-file" onClick={() => void pickFile()} disabled={running}>
@@ -222,28 +224,41 @@ export function PdfToWordPage() {
                 </div>
               )}
 
-              {result && (
-                <div className="card status-card status-card--ok">
-                  <CheckCircle size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <b>{t('Saved to your Downloads folder')}</b>
-                    <small>
-                      <Filename name={baseName(result.outputPath)} /> · {formatBytes(result.outputSizeBytes)} · {tn(result.pages, '{n} page', '{n} pages')}
-                      {result.tables > 0 && <> · {tn(result.tables, '{n} table', '{n} tables')}</>}
-                      {result.images > 0 && <> · {tn(result.images, '{n} image', '{n} images')}</>}
-                    </small>
-                  </div>
+              <div className="action-bar">
+                {result && (
+                  <ResultCard
+                    title={t('Saved to your Downloads folder')}
+                    detail={(
+                      <>
+                        <Filename name={baseName(result.outputPath)} /> · {formatBytes(result.outputSizeBytes)} · {tn(result.pages, '{n} page', '{n} pages')}
+                        {result.tables > 0 && <> · {tn(result.tables, '{n} table', '{n} tables')}</>}
+                        {result.images > 0 && <> · {tn(result.images, '{n} image', '{n} images')}</>}
+                      </>
+                    )}
+                    action={{ label: t('Open Folder'), id: 'pdf-to-word-open-folder-btn', onClick: () => openOutputFolder() }}
+                  />
+                )}
+                <div className="form-actions">
                   <button
-                    className="btn btn-ghost btn-sm"
-                    id="pdf-to-word-open-folder-btn"
-                    onClick={() => openOutputFolder()}
-                    title={t('Open folder')}
+                    className="btn btn-primary"
+                    id="pdf-to-word-run-btn"
+                    onClick={() => void convert()}
+                    disabled={running}
                   >
-                    <FolderOpen size={14} />
-                    {t('Open Folder')}
+                    {running ? (
+                      <>
+                        <Loader2 size={15} className="spin" />
+                        {t('Converting…')}
+                      </>
+                    ) : (
+                      <>
+                        <FileType2 size={15} />
+                        {t('Convert to Word')}
+                      </>
+                    )}
                   </button>
                 </div>
-              )}
+              </div>
 
               {result && result.pagesWithoutText.length > 0 && (
                 <div className="card status-card status-card--warn" role="note">
@@ -279,26 +294,6 @@ export function PdfToWordPage() {
                 </div>
               )}
 
-              <div className="form-actions">
-                <button
-                  className="btn btn-primary"
-                  id="pdf-to-word-run-btn"
-                  onClick={() => void convert()}
-                  disabled={running}
-                >
-                  {running ? (
-                    <>
-                      <Loader2 size={15} className="spin" />
-                      {t('Converting…')}
-                    </>
-                  ) : (
-                    <>
-                      <FileType2 size={15} />
-                      {t('Convert to Word')}
-                    </>
-                  )}
-                </button>
-              </div>
             </>
           )}
         </div>

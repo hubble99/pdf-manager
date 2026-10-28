@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  CheckCircle,
   FileText,
-  FolderOpen,
   Info,
   Loader2,
   Scissors,
@@ -12,7 +10,7 @@ import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PageThumbGrid } from '../components/preview';
-import { PageHeader } from '../components/ui';
+import { PageHeader, ResultCard } from '../components/ui';
 import { parsePageRange } from '../utils/pageRange';
 import { formatPageNumbers } from '../features/converter/pageSelection';
 import { extractErrorMessage } from '../features/merge/messages';
@@ -141,13 +139,6 @@ export function ExtractPage() {
         isZip: report.isZip,
       });
       addHistoryEntry({ filename, action: 'Extracted Pages', size: report.outputSizeBytes });
-      showToast({
-        type: 'success',
-        title: t('Extraction complete!'),
-        message: tn(report.pagesExtracted, '{n} page extracted', '{n} pages extracted'),
-        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
-        duration: 8000,
-      });
     } catch (err: unknown) {
       if (!mountedRef.current || isCoreCancelled(err)) return;
       setError(extractErrorMessage(err));
@@ -420,28 +411,24 @@ export function ExtractPage() {
                 </div>
               )}
 
+            </div>
+            <div className="action-bar">
               {result && (
-                <div className="card status-card status-card--ok">
-                  <CheckCircle size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <b>{t('Saved to your Downloads folder')}</b>
-                    <small>
+                <ResultCard
+                  title={t('Saved to your Downloads folder')}
+                  detail={(
+                    <>
                       <Filename name={result.filename} /> · {tn(result.pagesExtracted, '{n} page extracted', '{n} pages extracted')}
                       {result.isZip ? t(' · ZIP archive') : ''}
-                    </small>
-                  </div>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    id="extract-open-folder-btn"
-                    onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
-                    title={t('Show in folder')}
-                  >
-                    <FolderOpen size={14} />
-                    {t('Show in folder')}
-                  </button>
-                </div>
+                    </>
+                  )}
+                  action={{
+                    label: t('Show in folder'),
+                    id: 'extract-open-folder-btn',
+                    onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+                  }}
+                />
               )}
-
               <div className="form-actions">
                 <button
                   className="btn btn-primary"

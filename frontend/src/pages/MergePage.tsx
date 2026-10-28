@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckCircle,
   FileText,
-  FolderOpen,
   Info,
   Loader2,
   Merge,
@@ -13,7 +11,7 @@ import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { addHistoryEntry } from '../utils/historyStore';
 import { PdfThumbnail } from '../components/PdfThumbnail';
-import { PageHeader, Tabs } from '../components/ui';
+import { PageHeader, ResultCard, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
@@ -178,13 +176,6 @@ export function MergePage() {
         sizeBytes: report.outputSizeBytes,
       });
       addHistoryEntry({ filename, action: 'Merged PDF', size: report.outputSizeBytes });
-      showToast({
-        type: 'success',
-        title: t('Merge complete!'),
-        message: `${filename} — ${tn(report.totalPages, '{n} page', '{n} pages')}, ${formatBytes(report.outputSizeBytes)}`,
-        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
-        duration: 8000,
-      });
     } catch (err: unknown) {
       if (!mountedRef.current || isCoreCancelled(err)) return;
       setError(mergeErrorMessage(err));
@@ -395,29 +386,6 @@ export function MergePage() {
                 </div>
               )}
 
-              {result && (
-                <div className="card result-card" role="status">
-                  <CheckCircle size={24} className="result-card-icon" />
-                  <div className="grow">
-                    <div className="result-card-title">
-                      {t('Saved to your Downloads folder')}
-                    </div>
-                    <div className="result-card-meta">
-                      <Filename name={result.filename} /> · {tn(result.totalPages, '{n} page', '{n} pages')} · {formatBytes(result.sizeBytes)}
-                    </div>
-                  </div>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    id="merge-open-folder-btn"
-                    onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
-                    title={t('Show in folder')}
-                  >
-                    <FolderOpen size={14} />
-                    {t('Show in folder')}
-                  </button>
-                </div>
-              )}
-
               <div className="action-row">
                 <button
                   className="btn btn-secondary"
@@ -447,6 +415,19 @@ export function MergePage() {
                   )}
                 </button>
               </div>
+
+              {result && (
+                <ResultCard
+                  stacked
+                  title={t('Saved to your Downloads folder')}
+                  detail={<><Filename name={result.filename} /> · {tn(result.totalPages, '{n} page', '{n} pages')} · {formatBytes(result.sizeBytes)}</>}
+                  action={{
+                    label: t('Show in folder'),
+                    id: 'merge-open-folder-btn',
+                    onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

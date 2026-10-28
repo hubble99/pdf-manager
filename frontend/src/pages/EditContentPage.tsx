@@ -9,7 +9,6 @@ import {
   Download,
   FilePenLine,
   FileText,
-  FolderOpen,
   Loader2,
   Redo2,
   RotateCcw,
@@ -23,7 +22,7 @@ import {
 import { FEATURE_ICONS } from '../components/icons';
 
 import { Filename } from '../components/Filename';
-import { PageHeader, StateView } from '../components/ui';
+import { PageHeader, ResultCard, StateView } from '../components/ui';
 import { BETA_TOOLTIP } from '../config/features';
 import { useToast } from '../hooks/useToast';
 import { useNativePaths } from '../hooks/useNativePaths';
@@ -79,11 +78,12 @@ function isTextField(target: EventTarget | null): boolean {
 
 function EditContentLimits() {
   return (
-    <aside className="edit-content-limits" aria-label={t('Edit Content V1 limits')}>
-      <strong>{t('Edit Content V1 limits')}</strong>
-      <p>{t('Replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow. Your original file is never overwritten.')}</p>
+    <aside className="edit-content-limits" aria-label={t('Edit Content limits')}>
+      <strong>{t('Edit Content limits')}</strong>
+      <p>{t('You can replace, delete, or extend the text of one selectable text object at a time. A longer replacement works only when it fits without reflow, and the font must already contain the characters you type. Your original file is never overwritten.')}</p>
       <p>{t('These stay view-only and cannot be edited: scanned pages, outlined text, Type 3 fonts, text split across objects, and invisible text such as the hidden text layer sitting over an image (a letterhead, for example). To change text that is part of an image, edit the image itself.')}</p>
-      <p>{t('Every edit is verified after it is regenerated, and a PDF that cannot be verified is rejected instead of changed. Editing a digitally signed PDF invalidates its signature.')}</p>
+      <p>{t('The PDF can be up to 16 MiB and must not be password protected; remove the password first with Protect PDF. Some PDFs, such as certificates with complex layouts or pages that mix fonts sharing one name, may refuse some edits.')}</p>
+      <p>{t('Every edit is verified after it is regenerated, and an edit that cannot be verified is refused instead of changed. A refused edit keeps your text, so you can adjust it and apply again. Editing a digitally signed PDF invalidates its signature.')}</p>
     </aside>
   );
 }
@@ -470,20 +470,13 @@ export function EditContentPage() {
       }
       setSession(reply.result.state);
       if (edit) await refreshAcceptedCheckpoint(reply.result.state);
-      setNotice(t('Verified output published.'));
+      setNotice(null);
       try {
         const exported = await exportContentOutput(
           session.sessionId, reply.result.outputId, outputName.trim() || `${defaultStem}-edited`,
         );
         const finalName = exported.fileName;
         setSavedName(finalName);
-        showToast({
-          type: 'success',
-          title: t('PDF saved'),
-          message: finalName,
-          action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
-          duration: 8000,
-        });
       } catch {
         showToast({
           type: 'info',
@@ -720,15 +713,12 @@ export function EditContentPage() {
               {!selected && statusBanners}
 
               {savedName && !unsaved && (
-                <div className="card status-card status-card--ok" id="edit-content-saved">
-                  <Check size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <p className="merge-result" role="status">{t('Saved')} <span className="merge-tree-name">{savedName}</span></p>
-                  </div>
-                  <button className="btn btn-ghost btn-sm" id="edit-content-open-folder-btn" onClick={() => openOutputFolder()} title={t('Open folder')}>
-                    <FolderOpen size={14} aria-hidden="true" /> {t('Open Folder')}
-                  </button>
-                </div>
+                <ResultCard
+                  id="edit-content-saved"
+                  title={t('Saved to your Downloads folder')}
+                  detail={<Filename name={savedName} />}
+                  action={{ label: t('Open Folder'), id: 'edit-content-open-folder-btn', onClick: () => openOutputFolder() }}
+                />
               )}
 
               {ambiguous.length > 0 && (

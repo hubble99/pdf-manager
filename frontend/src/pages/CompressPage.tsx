@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
-  CheckCircle,
   FileText,
-  FolderOpen,
   Info,
   Loader2,
   Minimize2,
@@ -13,7 +11,7 @@ import {
 } from 'lucide-react';
 import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
-import { PageHeader, RangeField, SegmentedControl, SizeCompareCard } from '../components/ui';
+import { PageHeader, RangeField, ResultCard, SegmentedControl, SizeCompareCard } from '../components/ui';
 import { addHistoryEntry } from '../utils/historyStore';
 import { useToast } from '../hooks/useToast';
 import { openOutputFolder } from '../utils/tauriDialog';
@@ -106,15 +104,6 @@ export function CompressPage() {
       });
       setResult(report);
       addHistoryEntry({ filename: baseName(report.outputPath), action: 'Compressed PDF', size: report.sizeAfter });
-      showToast({
-        type: 'success',
-        title: t('Compression complete!'),
-        message: report.keptOriginal
-          ? t('This PDF is already as small as it gets.')
-          : tn(report.imagesRecompressed, 'Reduced by {pct}% — {n} image re-encoded', 'Reduced by {pct}% — {n} images re-encoded', { pct: report.reductionPct }),
-        action: { label: t('Open Folder'), onClick: () => openOutputFolder() },
-        duration: 8000,
-      });
     } catch (err) {
       if (isCoreCancelled(err)) {
         showToast({ type: 'info', title: t('Compression cancelled'), message: t('Nothing was saved.') });
@@ -236,30 +225,6 @@ export function CompressPage() {
 
               <SizeCompareCard sizeBefore={sizeBefore} result={result} />
 
-              {/* Result — the file is already in the Downloads folder */}
-              {result && (
-                <div className="card status-card status-card--ok">
-                  <CheckCircle size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <b>{result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}</b>
-                    <small>
-                      <Filename name={baseName(result.outputPath)} />
-                      {result.keptOriginal
-                        ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
-                        : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
-                    </small>
-                  </div>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    id="compress-open-folder-btn"
-                    onClick={() => openOutputFolder()}
-                    title={t('Open folder')}
-                  >
-                    <FolderOpen size={14} />
-                    {t('Open Folder')}
-                  </button>
-                </div>
-              )}
               </div>
 
               <div className="col-stack">
@@ -335,26 +300,42 @@ export function CompressPage() {
                 </div>
               )}
 
-              <div className="form-actions">
-                <button
-                  className="btn btn-primary"
-                  id="compress-run-btn"
-                  onClick={() => void handleCompress()}
-                  disabled={running}
-                >
-                  {running ? (
-                    <>
-                      <Loader2 size={15} className="spin" />
-                      {t('Compressing…')}
-                    </>
-                  ) : (
-                    <>
-                      <Minimize2 size={15} />
-                      {t('Compress PDF')}
-                    </>
-                  )}
-                </button>
               </div>
+              <div className="action-bar">
+                {result && (
+                  <ResultCard
+                    title={result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}
+                    detail={(
+                      <>
+                        <Filename name={baseName(result.outputPath)} />
+                        {result.keptOriginal
+                          ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
+                          : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
+                      </>
+                    )}
+                    action={{ label: t('Open Folder'), id: 'compress-open-folder-btn', onClick: () => openOutputFolder() }}
+                  />
+                )}
+                <div className="form-actions">
+                  <button
+                    className="btn btn-primary"
+                    id="compress-run-btn"
+                    onClick={() => void handleCompress()}
+                    disabled={running}
+                  >
+                    {running ? (
+                      <>
+                        <Loader2 size={15} className="spin" />
+                        {t('Compressing…')}
+                      </>
+                    ) : (
+                      <>
+                        <Minimize2 size={15} />
+                        {t('Compress PDF')}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </>
           )}

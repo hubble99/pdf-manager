@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import {
-  ArrowDownUp, CheckCircle, FileImage, FilePlus2, FileText, FolderOpen, Info, ListTree, Loader2,
+  ArrowDownUp, FileImage, FilePlus2, FileText, Info, ListTree, Loader2,
   RotateCw, Save, Trash2, Undo2, Redo2, RotateCcw, FlipVertical2, Upload, X,
 } from 'lucide-react';
 import { FEATURE_ICONS } from '../components/icons';
-import { PageHeader } from '../components/ui';
+import { PageHeader, ResultCard } from '../components/ui';
 import { Filename } from '../components/Filename';
 import { PageGrid } from '../features/organize/PageGrid';
 import { DeletePagesPanel, InsertPanel, SourcesPanel } from '../features/organize/panels';
@@ -292,23 +292,14 @@ export function OrganizePage() {
             )}
 
             {workspace.result && (
-              <div className="card converter-result">
-                <CheckCircle size={26} aria-hidden="true" />
-                <div className="converter-result-copy">
-                  <p className="converter-result-title">{t('Saved')}</p>
-                  <p className="converter-result-detail">
-                    <Filename name={workspace.result.filename} /> · {workspace.result.detail}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => { void revealPath(workspace.result?.outputPath ?? '').catch(() => undefined); }}
-                  title={t('Show in folder')}
-                >
-                  <FolderOpen size={14} aria-hidden="true" /> {t('Show in folder')}
-                </button>
-              </div>
+              <ResultCard
+                title={t('Saved to your Downloads folder')}
+                detail={<><Filename name={workspace.result.filename} /> · {workspace.result.detail}</>}
+                action={{
+                  label: t('Show in folder'),
+                  onClick: () => { void revealPath(workspace.result?.outputPath ?? '').catch(() => undefined); },
+                }}
+              />
             )}
 
             <div className="organize-grid-area">

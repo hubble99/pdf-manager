@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react';
 import {
-  CheckCircle,
   FileImage,
   FileText,
-  FolderOpen,
   Images,
   Info,
   Loader2,
@@ -15,7 +13,7 @@ import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PageThumbGrid } from '../components/preview';
 import { SortableCardGrid } from '../components/sortable/SortableCardGrid';
-import { PageHeader, RadioCardGroup, SegmentedControl, Tabs } from '../components/ui';
+import { PageHeader, RadioCardGroup, ResultCard, SegmentedControl, Tabs } from '../components/ui';
 import { useConverterWorkflow } from '../features/converter/useConverterWorkflow';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { ConverterThumbnail } from '../features/converter/ConverterThumbnail';
@@ -171,60 +169,54 @@ export function ConverterPage() {
         </div>
       )}
 
-      {result && (
-        <div className="card status-card status-card--ok">
-          <CheckCircle size={22} aria-hidden="true" />
-          <div className="status-card-copy">
-            <b>{t('Saved to your Downloads folder')}</b>
-            <small><Filename name={result.filename} /> · {result.detail}</small>
-          </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            id="converter-open-folder"
-            onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
-            title={t('Show in folder')}
-          >
-            <FolderOpen size={14} aria-hidden="true" />
-            {t('Show in folder')}
-          </button>
-        </div>
-      )}
     </>
   );
 
   const actions = kind !== 'empty' && (
-    <div className="form-actions">
-      <button
-        type="button"
-        className="btn btn-secondary"
-        id="converter-clear"
-        onClick={converter.clear}
-        disabled={isConverting}
-      >
-        {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
-        {kind === 'images' ? t('Clear All') : t('Clear')}
-      </button>
-      <button
-        type="button"
-        className="btn btn-primary"
-        id="converter-run"
-        onClick={converter.convert}
-        disabled={!canConvert}
-        title={canConvert ? undefined : pdfBlockReason ?? t('Add files to convert')}
-      >
-        {isConverting ? (
-          <>
-            <Loader2 size={15} className="converter-spin" aria-hidden="true" />
-            {kind === 'pdf' ? t('Exporting…') : t('Converting…')}
-          </>
-        ) : (
-          <>
-            <FileImage size={15} aria-hidden="true" />
-            {kind === 'pdf' ? t('Export Images') : t('Create PDF')}
-          </>
-        )}
-      </button>
+    <div className="action-bar">
+      {result && (
+        <ResultCard
+          title={t('Saved to your Downloads folder')}
+          detail={<><Filename name={result.filename} /> · {result.detail}</>}
+          action={{
+            label: t('Show in folder'),
+            id: 'converter-open-folder',
+            onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+          }}
+        />
+      )}
+      <div className="form-actions">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          id="converter-clear"
+          onClick={converter.clear}
+          disabled={isConverting}
+        >
+          {kind === 'images' ? <Trash2 size={15} aria-hidden="true" /> : null}
+          {kind === 'images' ? t('Clear All') : t('Clear')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          id="converter-run"
+          onClick={converter.convert}
+          disabled={!canConvert}
+          title={canConvert ? undefined : pdfBlockReason ?? t('Add files to convert')}
+        >
+          {isConverting ? (
+            <>
+              <Loader2 size={15} className="converter-spin" aria-hidden="true" />
+              {kind === 'pdf' ? t('Exporting…') : t('Converting…')}
+            </>
+          ) : (
+            <>
+              <FileImage size={15} aria-hidden="true" />
+              {kind === 'pdf' ? t('Export Images') : t('Create PDF')}
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 
@@ -479,8 +471,8 @@ export function ConverterPage() {
               </div>
 
               {outcome}
-              {actions}
             </div>
+            {actions}
           </div>
         )}
 
@@ -591,8 +583,8 @@ export function ConverterPage() {
             </div>
 
             {outcome}
-            {actions}
             </div>
+            {actions}
           </div>
         )}
       </div>

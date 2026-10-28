@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  CheckCircle,
-  FolderOpen,
   Info,
   Lock,
   LockOpen,
@@ -13,7 +11,7 @@ import { FEATURE_ICONS } from '../components/icons';
 import { Filename } from '../components/Filename';
 import { PdfThumbnail } from '../components/PdfThumbnail';
 import { addHistoryEntry } from '../utils/historyStore';
-import { PageHeader, PasswordField, Tabs } from '../components/ui';
+import { PageHeader, PasswordField, ResultCard, Tabs } from '../components/ui';
 import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
@@ -50,13 +48,18 @@ function formatBytes(bytes: number): string {
 
 export function ProtectPage() {
   const { showToast } = useToast();
-  const { fileData: path, setFileData: setPath } = useFeatureFile<string | null>('protect');
-  useLeaveGuard(Boolean(path));
-  const [pdfInfo, setPdfInfo] = useState<PdfInfo | null>(null);
-  const [infoFailed, setInfoFailed] = useState(false);
+  // Each mode keeps its own PDF: the one chosen to encrypt is not the one to unlock.
+  const { fileData: addPath, setFileData: setAddPath } = useFeatureFile<string | null>('protect-add');
+  const { fileData: removePath, setFileData: setRemovePath } = useFeatureFile<string | null>('protect-remove');
+  useLeaveGuard(Boolean(addPath || removePath));
 
   // Tab
   const [mode, setMode] = useState<TabMode>('add');
+  const path = mode === 'add' ? addPath : removePath;
+  const setPath = mode === 'add' ? setAddPath : setRemovePath;
+
+  // Size, page count and protection by path, filled in as the core reads each file.
+  const [infos, setInfos] = useState<Record<string, PdfInfo | 'failed'>>({});
 
   // Form State
   const [userPw, setUserPw] = useState('');
@@ -83,14 +86,18 @@ export function ProtectPage() {
     };
   }, []);
 
-  const resetForm = () => {
-    setUserPw('');
-    setConfirmPw('');
-    setRemovePw('');
-    setOutputName('');
-    setAllowPrint(true);
-    setAllowCopy(true);
-    setAllowModify(true);
+  /** A new or removed file starts its mode clean: no passwords, name or result from the previous one. */
+  const resetMode = (which: TabMode) => {
+    if (which === 'add') {
+      setUserPw('');
+      setConfirmPw('');
+      setOutputName('');
+      setAllowPrint(true);
+      setAllowCopy(true);
+      setAllowModify(true);
+    } else {
+      setRemovePw('');
+    }
     setResult(null);
     setError(null);
   };
@@ -98,9 +105,7 @@ export function ProtectPage() {
   // ── File handling ───────────────────────────────────────────────────────────
   const loadPath = (next: string) => {
     setPath(next);
-    setPdfInfo(null);
-    setInfoFailed(false);
-    resetForm();
+    resetMode(mode);
   };
 
   const { desktop, isDragOver, pick } = useNativePaths({
@@ -121,12 +126,14 @@ export function ProtectPage() {
     if (!path) return undefined;
     let cancelled = false;
     getPdfInfo(path)
-      .then((info) => { if (!cancelled) setPdfInfo(info); })
-      .catch(() => { if (!cancelled) setInfoFailed(true); });
+      .then((info) => { if (!cancelled) setInfos((current) => ({ ...current, [path]: info })); })
+      .catch(() => { if (!cancelled) setInfos((current) => ({ ...current, [path]: 'failed' })); });
     return () => { cancelled = true; };
   }, [path]);
 
-  const infoLoading = Boolean(path) && !pdfInfo && !infoFailed;
+  const known = path ? infos[path] : undefined;
+  const pdfInfo = known && known !== 'failed' ? known : null;
+  const infoLoading = Boolean(path) && known === undefined;
   const isEncrypted = Boolean(pdfInfo?.encrypted);
   const fileStem = path ? stemOf(path) : 'document';
 
@@ -154,15 +161,6 @@ export function ProtectPage() {
         filename,
         action: action === 'add' ? 'Protected PDF' : 'Removed Password',
         size: report.outputSizeBytes,
-      });
-      showToast({
-        type: 'success',
-        title: action === 'add' ? t('PDF Protected!') : t('Password Removed!'),
-        message: action === 'add'
-          ? t('{name} — AES-256 encrypted', { name: filename })
-          : t('{name} is now unprotected', { name: filename }),
-        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
-        duration: 8000,
       });
     } catch (err: unknown) {
       if (!mountedRef.current || isCoreCancelled(err)) return;
@@ -195,9 +193,7 @@ export function ProtectPage() {
 
   const clearFile = () => {
     setPath(null);
-    setPdfInfo(null);
-    setInfoFailed(false);
-    resetForm();
+    resetMode(mode);
   };
 
   const openPicker = () => {
@@ -226,7 +222,7 @@ export function ProtectPage() {
       <Tabs
         ariaLabel={t('Protect mode')}
         value={mode}
-        onChange={(next) => { setMode(next); setResult(null); setError(null); }}
+        onChange={(next) => { setMode(next); setError(null); }}
         items={[
           { value: 'add', id: 'protect-tab-add', label: t('Add Password'), icon: <Lock size={15} aria-hidden="true" /> },
           { value: 'remove', id: 'protect-tab-remove', label: t('Remove Password'), icon: <LockOpen size={15} aria-hidden="true" /> },
@@ -246,7 +242,7 @@ export function ProtectPage() {
         )}
 
         {desktop && (
-          <div className={`form-col${path ? '' : ' form-col--center'}`}>
+          <div className={`form-col${path ? ' form-col--roomy' : ' form-col--center'}`}>
 
             {/* Drop zone */}
             {!path ? (
@@ -421,82 +417,70 @@ export function ProtectPage() {
               </div>
             )}
 
-            {/* Result */}
-            {result && (
-              <div className="card result-card" role="status">
-                <CheckCircle size={28} className="result-card-icon" />
-                <div className="grow">
-                  <div className="result-card-title">
-                    {result.mode === 'add' ? t('PDF encrypted and saved') : t('Password removed and saved')}
-                  </div>
-                  <div className="result-card-meta">
-                    <Filename name={result.filename} /> · {t('Saved to your Downloads folder')}
-                  </div>
-                </div>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  id="protect-open-folder-btn"
-                  onClick={() => { void revealPath(result.outputPath).catch(() => undefined); }}
-                  title={t('Show in folder')}
-                >
-                  <FolderOpen size={14} />
-                  {t('Show in folder')}
-                </button>
-              </div>
-            )}
-
-            {/* Actions */}
+            {/* Actions, with the green result beside them */}
             {path && (
-              <div className="action-row">
-                <button
-                  className="btn btn-secondary"
-                  onClick={clearFile}
-                  disabled={isLoading}
-                >
-                  {t('Clear')}
-                </button>
-                {mode === 'add' ? (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleProtect}
-                    disabled={isLoading || addBlocked || !userPw || userPw !== confirmPw}
-                    id="protect-add-btn"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 size={15} className="spin" />
-                        {t('Encrypting…')}
-                      </>
-                    ) : (
-                      <>
-                        <Shield size={15} />
-                        {t('Protect PDF')}
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleRemovePassword}
-                    disabled={isLoading || removeBlocked || !removePw}
-                    id="protect-remove-btn"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 size={15} className="spin" />
-                        {t('Removing…')}
-                      </>
-                    ) : (
-                      <>
-                        <LockOpen size={15} />
-                        {t('Remove Password')}
-                      </>
-                    )}
-                  </button>
+              <div className="action-bar">
+                {result && result.mode === mode && (
+                  <ResultCard
+                    title={result.mode === 'add' ? t('PDF encrypted and saved') : t('Password removed and saved')}
+                    detail={<><Filename name={result.filename} /> · {t('Saved to your Downloads folder')}</>}
+                    action={{
+                      label: t('Show in folder'),
+                      id: 'protect-open-folder-btn',
+                      onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+                    }}
+                  />
                 )}
+                <div className="action-row">
+                  <button
+                    className="btn btn-secondary"
+                    onClick={clearFile}
+                    disabled={isLoading}
+                  >
+                    {t('Clear')}
+                  </button>
+                  {mode === 'add' ? (
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleProtect}
+                      disabled={isLoading || addBlocked || !userPw || userPw !== confirmPw}
+                      id="protect-add-btn"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 size={15} className="spin" />
+                          {t('Encrypting…')}
+                        </>
+                      ) : (
+                        <>
+                          <Shield size={15} />
+                          {t('Protect PDF')}
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleRemovePassword}
+                      disabled={isLoading || removeBlocked || !removePw}
+                      id="protect-remove-btn"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 size={15} className="spin" />
+                          {t('Removing…')}
+                        </>
+                      ) : (
+                        <>
+                          <LockOpen size={15} />
+                          {t('Remove Password')}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
-
           </div>
         )}
       </div>

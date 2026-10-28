@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { useToast } from '../../hooks/useToast';
-import { isCoreCancelled, revealPath } from '../../api/nativeCore';
+import { isCoreCancelled } from '../../api/nativeCore';
 import { baseName, pathKey } from '../../utils/paths';
 import {
   assembleDocument, fetchThumbnails, openDocument, releaseDocument, thumbnailKey, thumbnailUrl,
@@ -620,13 +620,6 @@ export function useOrganizeWorkspace(): OrganizeWorkspace {
         detail: tn(report.pages, '{n} page', '{n} pages'),
       });
       addHistoryEntry({ filename, action: 'Organize PDF', size: report.outputSizeBytes });
-      showToast({
-        type: 'success',
-        title: t('Document saved'),
-        message: tn(report.pages, '{n} page assembled', '{n} pages assembled'),
-        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
-        duration: 8000,
-      });
     } catch (err) {
       if (!mountedRef.current || isCoreCancelled(err)) return;
       const message = organizeErrorMessage(err, t('The document could not be saved.'));

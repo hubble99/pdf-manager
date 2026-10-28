@@ -198,7 +198,9 @@ interface DeletePagesPanelProps {
 export function DeletePagesPanel({
   value, total, preview, disabled, onChange, onConfirm, onCancel,
 }: DeletePagesPanelProps) {
-  const invalid = Boolean(preview.error);
+  // Nothing typed yet is not a mistake: the hint says which pages can be deleted.
+  const empty = value.trim() === '';
+  const invalid = !empty && Boolean(preview.error);
   const canDelete = !disabled && !invalid && preview.positions.length > 0;
 
   return (
@@ -236,7 +238,9 @@ export function DeletePagesPanel({
         >
           {invalid
             ? preview.error
-            : tn(preview.positions.length, 'Numbers are current positions in the grid (1-{total}). Will delete {n} page, highlighted in the grid.', 'Numbers are current positions in the grid (1-{total}). Will delete {n} pages, highlighted in the grid.', { total })}
+            : empty
+              ? t('You can delete any page from 1 to {total}. Type page numbers or ranges, for example 20-45, 50.', { total })
+              : tn(preview.positions.length, 'Numbers are current positions in the grid (1-{total}). Will delete {n} page, highlighted in the grid.', 'Numbers are current positions in the grid (1-{total}). Will delete {n} pages, highlighted in the grid.', { total })}
         </p>
       </div>
 

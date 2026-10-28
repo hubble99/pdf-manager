@@ -76,7 +76,7 @@ fn several_pages_become_one_zip_in_page_order() {
     let report = pdf_to_images(&pdf, &options(out.path(), ImageFormat::Png, 72, ""), &JobContext::detached()).unwrap();
     assert!(report.is_zip);
     assert_eq!(report.pages, 12);
-    assert_eq!(report.output_path, out.path().join("report_images.zip"));
+    assert_eq!(report.output_path, out.path().join("report.zip"));
     let entries = zip_entries(&report.output_path);
     assert_eq!(entries.len(), 12);
     for (i, (name, data)) in entries.iter().enumerate() {
@@ -85,7 +85,7 @@ fn several_pages_become_one_zip_in_page_order() {
         let img = image::load_from_memory(data).unwrap();
         assert_eq!((img.width(), img.height()), (100 + 10 * n, 200), "page {n}");
     }
-    assert_eq!(names(out.path()), vec!["report_images.zip"]);
+    assert_eq!(names(out.path()), vec!["report.zip"]);
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn a_custom_name_is_made_safe() {
     let mut o = options(out.path(), ImageFormat::Png, 72, "");
     o.output_name = Some("Laporan: Q1/2025.zip".into());
     let report = pdf_to_images(&pdf, &o, &JobContext::detached()).unwrap();
-    assert_eq!(report.output_path, out.path().join("Laporan_ Q1_2025_images.zip"));
+    assert_eq!(report.output_path, out.path().join("Laporan_ Q1_2025.zip"));
 }
 
 #[test]
