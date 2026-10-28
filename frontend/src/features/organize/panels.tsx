@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, FileImage, FilePlus2, Plus, Trash2, X } from 'lucide-react';
+import { RadioCardGroup } from '../../components/ui';
 import { sourceLetter } from './pageList';
 import type { InsertMode, InsertPosition, SourceHandle } from './types';
 import { t, tn } from '../../i18n';
@@ -40,12 +41,29 @@ export function InsertPanel({
   const referenceInvalid = Boolean(preview.referenceError);
   const canInsert = !disabled && !pagesInvalid && !referenceInvalid
     && preview.pages.length > 0 && total > 0;
+  const SourceIcon = source.kind === 'image' ? FileImage : FilePlus2;
+
+  // The pages that will sit on either side of the new ones, so the result is visible
+  // before it happens.
+  const before = position === 'after' ? preview.reference : preview.reference - 1;
+  const neighbours = {
+    previous: before >= 1 ? t('Page {n}', { n: before }) : t('Start'),
+    next: before + 1 <= total ? t('Page {n}', { n: before + 1 }) : t('End'),
+  };
 
   return (
-    <section className="card organize-panel" aria-label={t('Insert pages')}>
+    <section className="card organize-panel organize-insert" aria-label={t('Insert pages')}>
       <div className="organize-panel-head">
-        <span className="organize-panel-title">
-          {t('Insert:')} {source.name} ({tn(source.pageCount, '{n} page', '{n} pages')})
+        <span className="organize-insert-file">
+          <span className="organize-insert-icon" aria-hidden="true"><SourceIcon size={18} /></span>
+          <span className="organize-insert-copy">
+            <span className="organize-panel-title organize-insert-name" title={source.name}>
+              {source.name}
+            </span>
+            <span className="organize-help">
+              {source.kind === 'image' ? t('Image') : 'PDF'} · {tn(source.pageCount, '{n} page', '{n} pages')}
+            </span>
+          </span>
         </span>
         <button
           type="button"
@@ -59,30 +77,20 @@ export function InsertPanel({
 
       <div className="organize-panel-grid">
         {showPages && (
-          <div className="organize-field">
+          <div className="organize-insert-section">
             <span className="organize-field-label" id="insert-pages-label">{t('Pages')}</span>
-            <div role="radiogroup" aria-labelledby="insert-pages-label" className="organize-choices">
-              <label className="organize-choice">
-                <input
-                  type="radio"
-                  name="insert-pages-mode"
-                  checked={mode === 'all'}
-                  onChange={() => onModeChange('all')}
-                  disabled={disabled}
-                />
-                <span>{t('All')}</span>
-              </label>
-              <label className="organize-choice">
-                <input
-                  type="radio"
-                  name="insert-pages-mode"
-                  checked={mode === 'pick'}
-                  onChange={() => onModeChange('pick')}
-                  disabled={disabled}
-                />
-                <span>{t('Pick')}</span>
-              </label>
-            </div>
+            <RadioCardGroup
+              labelledBy="insert-pages-label"
+              name="insert-pages-mode"
+              idPrefix="insert-pages"
+              value={mode}
+              disabled={disabled}
+              onChange={onModeChange}
+              options={[
+                { value: 'all', label: t('All'), desc: t('Every page of the file') },
+                { value: 'pick', label: t('Pick'), desc: t('Choose which pages to use') },
+              ]}
+            />
             {mode === 'pick' && (
               <>
                 <input
@@ -111,30 +119,20 @@ export function InsertPanel({
           </div>
         )}
 
-        <div className="organize-field">
+        <div className="organize-insert-section">
           <span className="organize-field-label" id="insert-position-label">{t('Position')}</span>
-          <div role="radiogroup" aria-labelledby="insert-position-label" className="organize-choices">
-            <label className="organize-choice">
-              <input
-                type="radio"
-                name="insert-position"
-                checked={position === 'after'}
-                onChange={() => onPositionChange('after')}
-                disabled={disabled}
-              />
-              <span>{t('After')}</span>
-            </label>
-            <label className="organize-choice">
-              <input
-                type="radio"
-                name="insert-position"
-                checked={position === 'before'}
-                onChange={() => onPositionChange('before')}
-                disabled={disabled}
-              />
-              <span>{t('Before')}</span>
-            </label>
-          </div>
+          <RadioCardGroup
+            labelledBy="insert-position-label"
+            name="insert-position"
+            idPrefix="insert-position"
+            value={position}
+            disabled={disabled}
+            onChange={onPositionChange}
+            options={[
+              { value: 'after', label: t('After'), desc: t('Placed after the reference page') },
+              { value: 'before', label: t('Before'), desc: t('Placed before the reference page') },
+            ]}
+          />
           <div className="organize-reference">
             <label className="organize-help" htmlFor="organize-insert-reference">{t('Reference page')}</label>
             <input
@@ -156,15 +154,27 @@ export function InsertPanel({
         </div>
       </div>
 
-      <p
-        id="organize-reference-help"
-        className={`organize-help${referenceInvalid ? ' organize-help--error' : ''}`}
-        role={referenceInvalid ? 'alert' : undefined}
-      >
-        {referenceInvalid
-          ? preview.referenceError
-          : t('Will be inserted {position} page {reference} (of {total}).', { position, reference: preview.reference, total })}
-      </p>
+      <div className={`organize-insert-summary${referenceInvalid ? ' organize-insert-summary--error' : ''}`}>
+        {referenceInvalid ? null : (
+          <span className="organize-insert-strip" aria-hidden="true">
+            <span className="organize-strip-chip">{neighbours.previous}</span>
+            <span className="organize-strip-chip organize-strip-chip--new">
+              <Plus size={12} />
+              {tn(preview.pages.length, '{n} new page', '{n} new pages')}
+            </span>
+            <span className="organize-strip-chip">{neighbours.next}</span>
+          </span>
+        )}
+        <p
+          id="organize-reference-help"
+          className={`organize-help${referenceInvalid ? ' organize-help--error' : ''}`}
+          role={referenceInvalid ? 'alert' : undefined}
+        >
+          {referenceInvalid
+            ? preview.referenceError
+            : t('Will be inserted {position} page {reference} (of {total}).', { position, reference: preview.reference, total })}
+        </p>
+      </div>
 
       <div className="organize-panel-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={disabled}>
