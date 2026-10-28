@@ -1,6 +1,5 @@
 export { PageHeader } from './PageHeader';
 export { StateView } from './StateView';
-export { ChangeFileControls } from './ChangeFileControls';
 export { PasswordField } from './PasswordField';
 export { Tabs } from './Tabs';
 export type { TabItem } from './Tabs';

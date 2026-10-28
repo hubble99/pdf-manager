@@ -86,3 +86,8 @@ UAT/
 flow.md
 experiment-edit-content-pdf/
 ui_improvement/
+
+# ── MSIX packaging output (the scripts are committed, the packages are not) ──────
+packaging/msix/build/
+packaging/msix/test-cert/
+packaging/msix/*.msix

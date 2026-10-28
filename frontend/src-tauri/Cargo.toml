@@ -1,10 +1,10 @@
 [package]
 name = "app"
-version = "1.11.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
+version = "2.0.0"
+description = "Dokuwu: offline PDF and image tools for Windows"
+authors = ["hubble99"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/hubble99/pdf-manager"
 edition = "2021"
 rust-version = "1.77.2"
 

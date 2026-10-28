@@ -4,8 +4,7 @@ const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
 
-import { clearTempFiles, getCoreHealth, openDownloadsFolder } from '../api/housekeeping';
-import { NativeCoreError } from '../api/nativeCore';
+import { getCoreHealth, openDownloadsFolder } from '../api/housekeeping';
 import { openOutputFolder } from '../utils/tauriDialog';
 
 describe('housekeeping client', () => {
@@ -14,21 +13,8 @@ describe('housekeeping client', () => {
     delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
   });
 
-  it('clears temporary files and returns the report', async () => {
-    const report = { filesDeleted: 3, bytesFreed: 60, skipped: 0 };
-    mocks.invoke.mockResolvedValue(report);
-    expect(await clearTempFiles()).toEqual(report);
-    expect(mocks.invoke).toHaveBeenCalledWith('core_clear_temp');
-  });
-
-  it('turns a busy refusal into a NativeCoreError', async () => {
-    mocks.invoke.mockRejectedValue({ code: 'busy', message: 'busy: a job is still running' });
-    await expect(clearTempFiles()).rejects.toBeInstanceOf(NativeCoreError);
-    await expect(clearTempFiles()).rejects.toMatchObject({ code: 'busy' });
-  });
-
   it('reads the health of the core', async () => {
-    const health = { appVersion: '1.11.0', coreVersion: '0.1.0' };
+    const health = { appVersion: '2.0.0', coreVersion: '0.1.0' };
     mocks.invoke.mockResolvedValue(health);
     expect(await getCoreHealth()).toEqual(health);
   });

@@ -23,6 +23,9 @@ export const APP_VERSION: string = packageJson.version;
 
 /** Public repository and feedback destinations shown on Settings > About. */
 export const APP_SOURCE_URL = 'https://github.com/hubble99/pdf-manager';
+export const APP_COPYRIGHT = '\u00a9 2026 hubble99';
+export const APP_LICENSE_NAME = 'GNU AGPL v3 or later';
+export const APP_LICENSE_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
 export const APP_TECH_STACK = 'Tauri 2, React 19, Vite, Rust, MuPDF, PDFium';
 
 export const APP_TAGLINE = t('Local document tools that keep your files on your device.');

@@ -3,12 +3,10 @@
 
 use std::time::Duration;
 
-use dokuwu_core::ops::housekeeping::{clear_temp, AppDirs, ClearReport, Scope};
-use dokuwu_core::{CoreError, CoreResult, JobRunner};
+use dokuwu_core::ops::housekeeping::{clear_temp, AppDirs, Scope};
+use dokuwu_core::CoreError;
 use serde::Serialize;
-use tauri::{AppHandle, Manager, Runtime, State};
-
-use crate::core_bridge::CoreState;
+use tauri::{AppHandle, Manager, Runtime};
 
 /// Scratch folders older than this are leftovers of a crashed run.
 const STALE_AFTER: Duration = Duration::from_secs(60 * 60);
@@ -27,23 +25,6 @@ pub fn core_health<R: Runtime>(app: AppHandle<R>) -> Health {
         app_version: app.package_info().version.to_string(),
         core_version: dokuwu_core::VERSION,
     }
-}
-
-/// Removes temporary and legacy output files. Refused while a job runs, so a
-/// working copy is never deleted under it.
-#[tauri::command]
-pub async fn core_clear_temp(state: State<'_, CoreState>) -> Result<ClearReport, CoreError> {
-    ensure_idle(&state.runner)?;
-    tauri::async_runtime::spawn_blocking(|| clear_temp(&AppDirs::detect(), Scope::All))
-        .await
-        .map_err(|e| CoreError::Internal(format!("cleanup stopped: {e}")))
-}
-
-fn ensure_idle(runner: &JobRunner) -> CoreResult<()> {
-    if runner.active_jobs() > 0 {
-        return Err(CoreError::Busy("a job is still running".into()));
-    }
-    Ok(())
 }
 
 /// Opens the system Downloads folder in the file manager. The path comes from
@@ -83,18 +64,5 @@ mod tests {
         let health = core_health(app.handle().clone());
         assert_eq!(health.core_version, dokuwu_core::VERSION);
         assert!(!health.app_version.is_empty());
-    }
-
-    #[test]
-    fn clearing_is_refused_while_a_job_runs() {
-        let runner = JobRunner::new();
-        assert!(ensure_idle(&runner).is_ok());
-        let (tx, rx) = std::sync::mpsc::channel::<()>();
-        runner
-            .spawn("t", None, move |_| { let _ = rx.recv(); Ok(()) }, |_, _| {})
-            .unwrap();
-        let err = ensure_idle(&runner).unwrap_err();
-        assert_eq!(err.code(), "busy");
-        tx.send(()).unwrap();
     }
 }

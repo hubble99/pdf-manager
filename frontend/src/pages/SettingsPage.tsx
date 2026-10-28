@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  FolderOpen,
   Heart,
   History,
   Info,
@@ -16,9 +15,10 @@ import { Filename } from '../components/Filename';
 import { useTheme } from '../hooks/useTheme';
 import { THEME_OPTIONS, THEME_SWATCH } from '../context/ThemeContext.context';
 import { PageHeader, SegmentedControl } from '../components/ui';
+import { BrandLogo } from '../components/BrandLogo';
 import { useLanguage } from '../i18n/useLanguage';
 import {
-  APP_NAME, APP_PRIVACY_NOTE, APP_SOURCE_URL, APP_TECH_STACK, APP_VERSION,
+  APP_COPYRIGHT, APP_LICENSE_NAME, APP_NAME, APP_PRIVACY_NOTE, APP_SOURCE_URL, APP_TECH_STACK, APP_VERSION,
 } from '../config/app';
 import { LANGUAGE_OPTIONS, t } from '../i18n';
 
@@ -198,9 +198,7 @@ export function SettingsPage() {
               <h2>{t('About')}</h2>
             </div>
             <div className="about-head">
-              <span className="about-logo" aria-hidden="true">
-                <FolderOpen size={18} />
-              </span>
+              <BrandLogo variant="mark" size={40} className="about-logo" />
               <span className="about-copy">
                 <strong>{APP_NAME}</strong>
                 <span className="about-version">v{APP_VERSION}</span>
@@ -217,6 +215,19 @@ export function SettingsPage() {
               <div className="about-row">
                 <dt>{t('Built with')}</dt>
                 <dd>{APP_TECH_STACK}</dd>
+              </div>
+              <div className="about-row">
+                <dt>{t('License')}</dt>
+                <dd>
+                  {APP_LICENSE_NAME}{' '}
+                  <Link className="link-btn" to="/licenses" id="settings-licenses">
+                    {t('Read the licenses')}
+                  </Link>
+                </dd>
+              </div>
+              <div className="about-row">
+                <dt>{t('Copyright')}</dt>
+                <dd>{APP_COPYRIGHT}</dd>
               </div>
               <div className="about-row">
                 <dt>{t('Source code')}</dt>
@@ -246,6 +257,9 @@ export function SettingsPage() {
             </dl>
             <div className="settings-card-foot">
               {t('Every tool runs locally. Nothing is uploaded and nothing is kept after you close the app.')}
+            </div>
+            <div className="settings-card-foot" id="settings-legal-notice">
+              {t('{app} is free software: you may share and change it under the GNU Affero General Public License, version 3 or later. It comes with ABSOLUTELY NO WARRANTY.', { app: APP_NAME })}
             </div>
           </section>
 

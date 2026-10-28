@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Dokuwu",
-  "version": "1.11.0",
+  "version": "2.0.0",
   "identifier": "com.pdfmanager.app",
   "build": {
     "frontendDist": "../dist",
@@ -38,7 +38,9 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "target/edit-content-runtime/": "edit-content/"
+      "target/edit-content-runtime/": "edit-content/",
+      "../../LICENSE": "legal/LICENSE",
+      "../../THIRD-PARTY-NOTICES.txt": "legal/THIRD-PARTY-NOTICES.txt"
     },
     "windows": {
       "nsis": {
@@ -46,7 +48,8 @@
         "installerHooks": "windows/hooks.nsh"
       }
     },
-    "copyright": "Copyright © 2026 Dokuwu",
+    "copyright": "Copyright © 2026 hubble99. Free software under the GNU AGPL version 3 or later.",
+    "license": "AGPL-3.0-or-later",
     "category": "Utility",
     "shortDescription": "Professional PDF management toolkit",
     "longDescription": "Dokuwu is a professional desktop application for merging, splitting, compressing, converting, and editing PDF documents. Everything runs on your computer."

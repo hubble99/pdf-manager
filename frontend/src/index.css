@@ -1326,8 +1326,7 @@ select.input {
   color: var(--on-surface);
 }
 
-.edit-content-section p,
-.edit-content-hint {
+.edit-content-section p {
   color: var(--on-surface-variant);
   font-size: var(--font-size-sm);
   line-height: 1.45;
@@ -1926,18 +1925,6 @@ select.input {
 }
 
 /* ── Converter (PDF & Image) ────────────────────────────────────────────────── */
-.converter-file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .converter-badges {
   display: flex;
   gap: var(--space-2);
@@ -2078,24 +2065,6 @@ select.input {
   font-weight: 600;
   color: var(--on-surface-variant);
   letter-spacing: 0.02em;
-}
-
-.organize-choices {
-  display: flex;
-  gap: var(--space-4);
-}
-
-.organize-choice {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.organize-choice input {
-  accent-color: var(--accent);
-  margin: 0;
 }
 
 .organize-help {
@@ -2704,13 +2673,6 @@ select.input {
 
 .merge-problem-reason {
   color: var(--error);
-}
-
-.merge-result {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
 }
 
 .merge-queue-need {
@@ -3771,12 +3733,6 @@ select.input {
   color: var(--muted);
 }
 
-.settings-actions-left {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3971,6 +3927,42 @@ select.input {
   overflow-wrap: anywhere;
 }
 
+.licenses-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 920px;
+  width: 100%;
+  margin: 16px auto 32px;
+  padding: 0 16px;
+  min-width: 0;
+}
+
+.licenses-intro {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.licenses-text {
+  margin: 0;
+  padding: 14px 16px;
+  height: calc(100vh - 260px);
+  min-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .about-head {
   display: flex;
   align-items: center;
@@ -3982,11 +3974,6 @@ select.input {
 .about-logo {
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-md);
-  background: var(--act);
-  color: var(--primary);
-  display: grid;
-  place-items: center;
   flex-shrink: 0;
 }
 

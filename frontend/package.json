@@ -1,7 +1,10 @@
 {
   "name": "pdf-manager",
   "private": true,
-  "version": "1.11.0",
+  "version": "2.0.0",
+  "description": "Dokuwu: offline PDF and image tools for Windows",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://github.com/hubble99/pdf-manager",
   "type": "module",
   "scripts": {
     "dev": "vite",

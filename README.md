@@ -1,50 +1,92 @@
-# Dokuwu
-
-> Dokuwu was previously named PDF Manager. The repository and its URL keep the original name.
-
-![Version](https://img.shields.io/badge/version-1.11.0-blue)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Release](https://img.shields.io/github/downloads/hubble99/pdf-manager/total)
 <p align="center">
-  <img src="frontend/src-tauri/icons/128x128.png" alt="Dokuwu Logo" width="96"/>
+  <img src="docs/brand/dokuwu-logo.svg" alt="Dokuwu, a friendly document mascot" width="140">
+</p>
+
+<h1 align="center">Dokuwu</h1>
+
+<p align="center">
+  <strong>Twelve PDF and image tools in one app. Offline. Free. Yours.</strong><br>
+  Merge, split, organize, compress, convert, edit and protect documents without sending a single byte anywhere.
 </p>
 
 <p align="center">
-  <strong>An offline desktop application for professional PDF document processing.</strong><br/>
-  Built with Tauri + React + Rust.
+  <a href="https://apps.microsoft.com/detail/9NC9W2L2DG15"><img alt="Get it from the Microsoft Store" src="https://img.shields.io/badge/Get%20it%20from-Microsoft%20Store-0078D4?style=for-the-badge&logo=microsoft&logoColor=white"></a>
+  <a href="https://github.com/hubble99/pdf-manager/releases/latest"><img alt="Download the installer" src="https://img.shields.io/badge/Download-Windows%20installer-3A4E6E?style=for-the-badge&logo=github&logoColor=white"></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-Windows%2010%2F11-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/Version-1.11.0-green?style=flat-square" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" />
-  <img src="https://img.shields.io/badge/Offline-100%25-purple?style=flat-square" />
+  <img alt="Version 2.0.0" src="https://img.shields.io/badge/version-2.0.0-blue">
+  <img alt="Windows 10 and 11" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey">
+  <img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-green">
+  <img alt="100% offline" src="https://img.shields.io/badge/offline-100%25-purple">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/hubble99/pdf-manager/total">
 </p>
 
----
+<p align="center">
+  <img src="docs/assets/screenshot-1.png" width="92%" alt="Dokuwu home screen with every tool grouped by task">
+</p>
 
-## ✨ Features
+> Dokuwu used to be called PDF Manager. The repository keeps the old name so existing links still work.
 
-| Feature | Description |
-|-------|-----------|
-| 📎 **Merge PDF** | Combine multiple PDF files into one using drag & drop |
-| ✂️ **Split PDF** | Split a PDF or extract specific pages into separate files |
-| 🗜️ **Compress PDF** | Reduce PDF file size with adaptive image compression |
-| 🖼️ **PDF & Image** | Two tabs: export PDF pages to PNG, JPEG, or WEBP, or combine images (JPG/PNG/WEBP/BMP) into a single PDF |
-| 🔲 **QR & Barcode** | Generate QR codes and barcodes (Code128, EAN13, EAN8, Code39) |
-| 🗂️ **Organize Pages** | Rearrange, rotate, mirror, delete, and insert pages visually |
-| ✏️ **Canvas PDF** | Add native text overlays, images, shapes, lines, freehand drawing, and highlights on an interactive PDF canvas |
-| 🖊️ **Edit Content** (beta) | Correct existing native PDF text (typo fixes, word and shorter replacements, deletions, and genuine longer replacements) with verification before saving |
-| 🔒 **Protect PDF** | Protect PDFs with a password or remove existing passwords |
+## Why Dokuwu?
 
-Dokuwu is available in **English** and **Bahasa Indonesia** (Settings → Language) and has four themes.
+- **It never phones home.** Your files are processed on your PC, never uploaded, and nothing is kept after you close the app. There is no account, no ads and no tracking, so it is fine for contracts, payslips and anything confidential.
+- **It never overwrites your files.** Results land in your Downloads folder under a free name (`report (1).pdf`). The original is not touched.
+- **It is light.** One small native program, no background helper, no local server. It opens at once and stays out of your RAM.
+- **It tells you when it can't.** Edit Content checks every change by reopening the result, and says no rather than risk damaging your document.
+- **It is free software.** Read it, change it, share it. See [License](#license).
 
-> **All processing runs 100% offline on your machine. Your files are never sent to the internet. Temporary files are automatically cleaned up.**
+## What it does
 
-Read the [Privacy Policy](https://hubble99.github.io/pdf-manager/privacy.html) (English and Bahasa Indonesia).
+| | Tool | What you get |
+|---|---|---|
+| 📎 | **Merge PDF** | Combine several PDFs (or a whole folder) into one, in the order you choose |
+| ✂️ | **Split PDF** | Take out pages or ranges as a new document; Shift-click selects a range |
+| 🗂️ | **Organize PDF** | Reorder, rotate, mirror, delete and insert pages (even whole PDFs or images) visually |
+| 🖼️ | **PDF & Image** | PDF pages to PNG, JPEG or WEBP (or a ZIP of them), and images to one PDF |
+| 📝 | **PDF to Word** | Turn a PDF into an editable `.docx` |
+| 🔄 | **WEBP to PNG/JPG** | Convert WEBP images in bulk |
+| ✏️ | **Canvas PDF** | Add text, pictures, shapes, lines, drawings and highlights onto pages |
+| 🔧 | **Edit Content** (beta) | Correct the existing text of a PDF, verified before it is saved |
+| 🗜️ | **Compress PDF** | Shrink a PDF; a 158-page, 62 MB report takes about five seconds |
+| 📷 | **Compress Photos** | Make JPEG and PNG photos smaller, many at once |
+| 🔒 | **Protect PDF** | Add or remove a password and set permissions |
+| 🔲 | **QR & Barcode** | QR codes and Code128, EAN-13, EAN-8 and Code39 barcodes as images |
 
-### Edit Content V1 — what it can and cannot safely do
+Dokuwu speaks **English** and **Bahasa Indonesia** (Settings > Language) and comes in four themes: Light, Dark, Dusty Rose and Steel Blue.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/screenshot-2.png" width="48%" alt="Organize PDF: page thumbnails with insert, delete and save actions">
+  <img src="docs/assets/screenshot-3.png" width="48%" alt="PDF and Image: choose pages and export them as images">
+  <br>
+  <img src="docs/assets/screenshot-4.png" width="48%" alt="Canvas PDF: annotate a page with text, shapes and drawings">
+  <img src="docs/assets/screenshot-5.png" width="48%" alt="Compress PDF: pick a quality and see the size before and after">
+  <br>
+  <img src="docs/assets/screenshot-8.png" width="48%" alt="Edit Content: open a PDF, with the checks it makes before saving">
+  <img src="docs/assets/screenshot-9.png" width="48%" alt="Settings, About: version, license and source code">
+  <br>
+  <img src="docs/assets/screenshot-6.png" width="48%" alt="The home screen in Bahasa Indonesia">
+  <img src="docs/assets/screenshot-7.png" width="48%" alt="The home screen in the dark theme">
+</p>
+
+## Install
+
+**Microsoft Store (easiest):** [Get Dokuwu from the Microsoft Store](https://apps.microsoft.com/detail/9NC9W2L2DG15). Updates come with Windows.
+
+**Installer:** download the setup from [Releases](https://github.com/hubble99/pdf-manager/releases/latest), run it (it installs for the current user, no admin rights needed) and start **Dokuwu** from the Start menu.
+
+Requirements: Windows 10 (1809) or 11, 64-bit, 4 GB RAM, 500 MB of disk space. The Microsoft Edge WebView2 Runtime, which Windows 11 already has, is needed to show the interface.
+
+> **SmartScreen:** the installer is not code-signed, because a certificate costs money and this is a free project. If Windows says "Windows protected your PC", click **More info** and then **Run anyway**. The Store version is signed by Microsoft. You can also read every line of the source below.
+
+## Privacy
+
+Everything runs on your computer. Dokuwu has no network code: it does not upload, check for updates or send statistics. Read the [Privacy Policy](https://hubble99.github.io/pdf-manager/privacy.html) (English and Bahasa Indonesia).
+
+<details>
+<summary><strong>Edit Content: what it can and cannot safely do</strong></summary>
 
 Edit Content edits the **existing native text** of a supported PDF. A change is
 published only after it has been regenerated privately, reopened, and verified;
@@ -87,157 +129,70 @@ application failed.
 - Rejections leave the document, the accepted revision, and the publication state
   unchanged and produce no download. After certain guarded rejections the
   selection is cleared and you must select the text again before retrying.
+</details>
 
----
+## Under the hood
 
-## 🛠️ Tech Stack
+Dokuwu is a [Tauri](https://tauri.app/) shell around a React interface, and every tool runs in a Rust core. The long version, with a diagram, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-| Layer | Technology | Version |
-|-------|-----------|-------|
-| Desktop Shell | Tauri | 2.11.2 |
-| Frontend | React + TypeScript | 19 + TS 6 |
-| Build Tool | Vite | 8.0 |
-| Styling | Tailwind CSS | 4.3 |
-| Icons | lucide-react | 1.17 |
-| Router | React Router | 7.16 |
-| PDF Engine | MuPDF (`mupdf` crate) | 0.8 |
-| Edit Content Engine | PDFium (pinned build) | see `native/edit-content-engine/pdfium-artifacts.json` |
-| Image Processing | `image`, `webp`, `jpeg-encoder` | 0.25 |
-| QR Code | `qrcode`, `rxing` (decoder, tests) | 0.14 |
-| Barcode | Rust encoders in `dokuwu-core` | - |
-| Rust | rustc / cargo | 1.88+ |
+| Layer | Technology |
+|---|---|
+| Desktop shell | Tauri 2.11 |
+| Interface | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, React Router 7, lucide-react |
+| PDF engine | [MuPDF](https://mupdf.com/) through the `mupdf` crate 0.8 |
+| Edit Content engine | [PDFium](https://pdfium.googlesource.com/pdfium/) (pinned build, see `native/edit-content-engine/pdfium-artifacts.json`) in its own process |
+| Images | `image`, `webp`, `jpeg-encoder`, `png` |
+| QR and barcodes | `qrcode` and Rust encoders in `dokuwu-core` |
+| Canvas | fabric.js |
+| Rust | 1.88 or newer |
 
----
+## Build from source
 
-## 📸 Screenshots
+You need [Node.js](https://nodejs.org) 20.19+, [Rust](https://rustup.rs) 1.88+, and on Windows the Visual Studio Build Tools (C++ workload) and LLVM (`winget install LLVM.LLVM`), because MuPDF is compiled from C.
 
-<p align="center">
-  <img src="docs/assets/screenshot-1.png" width="48%" alt="Dokuwu home screen with every tool grouped by task">
-  <img src="docs/assets/screenshot-2.png" width="48%" alt="Organize PDF: page thumbnails with insert, delete and save actions">
-  <br>
-  <img src="docs/assets/screenshot-3.png" width="48%" alt="PDF &amp; Image: choose pages and export them as images">
-  <img src="docs/assets/screenshot-4.png" width="48%" alt="Canvas PDF: annotate a page with text, shapes and drawings">
-  <br>
-  <img src="docs/assets/screenshot-5.png" width="48%" alt="Edit Content: select native text and correct it with verification">
-  <img src="docs/assets/screenshot-6.png" width="48%" alt="Home screen in Bahasa Indonesia">
-</p>
-
----
-
-## 🔨 Build from Source
-
-### Prerequisites
-
-- **Node.js 20.19+** — [nodejs.org](https://nodejs.org)
-- **Rust 1.77+** — [rustup.rs](https://rustup.rs)
-
-### 1. Clone the repository
-
-```bash
+```powershell
 git clone https://github.com/hubble99/pdf-manager.git
 cd pdf-manager
-```
 
-### 2. Setup the frontend
+# Environment for the MuPDF build (sets LIBCLANG_PATH and the MSVC toolset)
+. native\dokuwu-core\windows\build-env.ps1
 
-```powershell
 cd frontend
-npm install
+npm ci
+npm run prepare:edit-content:desktop   # builds the Edit Content worker and fetches the pinned PDFium
+
+npm run tauri:dev                      # run the app
+npm run tauri:build                    # make the installers
 ```
 
-### 3. Run in development mode
+The installers end up in `frontend/src-tauri/target/release/bundle/`. Every feature runs in the Rust core, so it only works inside the Dokuwu window: a browser tab shows the interface but has no file access. To make the Microsoft Store package, see [packaging/msix](packaging/msix/README.md).
 
-Every feature runs in the Rust core, so it only works inside the Dokuwu
-window. A browser tab shows the interface but has no file access.
-
-```powershell
-# Ensure Rust is in your PATH:
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-
-# Edit Content needs its worker and the pinned PDFium library once
-cd frontend
-npm run prepare:edit-content:desktop
-
-npm run tauri:dev
-```
-
-### 4. Build the Tauri production installer
+## Tests
 
 ```powershell
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-cd frontend
-npm run prepare:edit-content:desktop
-npm run tauri build
-```
-
-The output installers will be located at: `frontend/src-tauri/target/release/bundle/`
-
----
-
-## 📦 Installation Guide (End User)
-
-1. Download the latest published installer from the [Releases](../../releases) page.
-2. Follow the installation wizard.
-3. Launch the app from **Start Menu → Dokuwu**.
-
-### System Requirements
-- Windows 10 / 11 (64-bit)
-- Minimum 4 GB RAM
-- Minimum 500 MB Storage
-
----
-
-## ⚠️ Windows SmartScreen Warning
-
-When installing Dokuwu for the first time, Windows SmartScreen may show a warning saying *"Windows protected your PC"*. This is expected behavior for open-source apps without an expensive code signing certificate.
-
-**To proceed with installation:**
-1. Click **"More info"** on the SmartScreen dialog
-2. Click **"Run anyway"**
-3. Installation will proceed normally
-
-Dokuwu is fully open-source. You can review the entire source code in this repository.
-
----
-
-## 🧪 Testing
-
-```powershell
-# Rust core and Edit Content host
 cargo test --locked --manifest-path native/dokuwu-core/Cargo.toml
-
-# Frontend tests
 cd frontend
-npm run test
-
-# TypeScript type check
-cd frontend
-npx tsc --noEmit
+npm test
+npx tsc -b
+npm run lint
 ```
 
----
+More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#tests).
 
-## 🎨 UI Design System
+## Good to know
 
-Dokuwu follows a compact desktop-productivity design system: document
-preview remains primary, controls stay space-efficient, and shared patterns are
-preferred over feature-specific styling through shared tokens and components.
+Dokuwu is a finished, small project made by one person, and it is **not going to be maintained for long**. Bug reports are welcome and I read them, but do not count on quick answers. The licence lets you fork it and keep it going, so please do.
 
-The application provides Light (default), Dark, Dusty Rose, and Steel Blue
-themes. Document pages and generated QR/barcode images stay white in every
-theme.
+If it saved you an evening, there is a support page inside the app (Donate).
 
----
+## License
 
-## 📄 License
+Dokuwu is free software under the **[GNU Affero General Public License, version 3 or later](LICENSE)**. In plain words: you can use it for anything, read and change the source, and share it, as long as whoever gets your version gets the same freedoms and the source code. It comes with **no warranty**.
 
-MIT License — free to use, modify, and distribute.
+It has to be AGPL because it is built on MuPDF, which is AGPL. The licenses of everything else it is built from (about 600 Rust crates and npm packages, PDFium and the bundled fonts) are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), and in the app under Settings > About > Read the licenses. The source of every released version is the git tag with its name (for example `v2.0.0`).
 
----
+Copyright (C) 2026 hubble99. Your own PDFs and images stay yours: the license covers the program, not the documents you process.
 
-## 🙏 Acknowledgements
+## Thanks
 
-- [MuPDF](https://mupdf.com/) — PDF rendering and editing engine
-- [PDFium](https://pdfium.googlesource.com/pdfium/) — Edit Content text engine
-- [Tauri](https://tauri.app/) — Desktop shell framework
-- [React](https://react.dev/) — UI framework
+[MuPDF](https://mupdf.com/) and [PDFium](https://pdfium.googlesource.com/pdfium/) do the heavy lifting; [Tauri](https://tauri.app/), [React](https://react.dev/) and [fabric.js](https://fabricjs.com/) make it a desktop app; and the Rust and npm communities wrote the rest. Thank you.
