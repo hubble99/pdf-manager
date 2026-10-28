@@ -1,24 +1,18 @@
 import { useEffect, useState } from 'react';
 import {
   FolderOpen,
-  HardDrive,
   Heart,
   History,
   Info,
   Languages,
-  Loader2,
   Palette,
   Settings,
-  Trash2,
   X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { clearTempFiles } from '../api/housekeeping';
-import { NativeCoreError } from '../api/nativeCore';
 import { getHistory, clearHistory, removeHistoryEntry } from '../utils/historyStore';
 import type { HistoryEntry } from '../utils/historyStore';
 import { Filename } from '../components/Filename';
-import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import { THEME_OPTIONS, THEME_SWATCH } from '../context/ThemeContext.context';
 import { PageHeader, SegmentedControl } from '../components/ui';
@@ -26,7 +20,7 @@ import { useLanguage } from '../i18n/useLanguage';
 import {
   APP_NAME, APP_PRIVACY_NOTE, APP_SOURCE_URL, APP_TECH_STACK, APP_VERSION,
 } from '../config/app';
-import { LANGUAGE_OPTIONS, t, tn } from '../i18n';
+import { LANGUAGE_OPTIONS, t } from '../i18n';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -47,10 +41,8 @@ function timeAgo(timestamp: number): string {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export function SettingsPage() {
-  const { showToast } = useToast();
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
-  const [isClearing, setIsClearing] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
@@ -59,25 +51,6 @@ export function SettingsPage() {
     window.addEventListener('history-updated', updateHistory);
     return () => window.removeEventListener('history-updated', updateHistory);
   }, []);
-
-  const handleClearTemp = async () => {
-    setIsClearing(true);
-    try {
-      const { filesDeleted, bytesFreed } = await clearTempFiles();
-      showToast({
-        type: 'success',
-        title: t('Temp files cleared'),
-        message: tn(filesDeleted, 'Deleted {n} file, freed {size}.', 'Deleted {n} files, freed {size}.', { size: formatBytes(bytesFreed) }),
-      });
-    } catch (err: unknown) {
-      const msg = err instanceof NativeCoreError && err.code === 'busy'
-        ? t('A job is still running. Wait for it to finish, then try again.')
-        : err instanceof Error ? err.message : t('Unknown error');
-      showToast({ type: 'error', title: t('Clear failed'), message: msg });
-    } finally {
-      setIsClearing(false);
-    }
-  };
 
   const handleRemoveHistory = (id: string) => {
     removeHistoryEntry(id);
@@ -158,25 +131,6 @@ export function SettingsPage() {
                 options={LANGUAGE_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
               />
               <p className="settings-hint">{t('The app restarts its screens when you switch. Your choice is remembered on this device.')}</p>
-            </div>
-          </section>
-
-          {/* Temporary storage */}
-          <section className="card settings-card">
-            <div className="settings-card-head">
-              <HardDrive size={16} aria-hidden="true" />
-              <h2>{t('Temporary storage')}</h2>
-            </div>
-            <div className="settings-card-body">
-              <p className="settings-hint">
-                {t('Temporary files and generated outputs can accumulate over time.')}
-              </p>
-              <div className="settings-actions-left">
-                <button className="btn btn-secondary" onClick={handleClearTemp} disabled={isClearing}>
-                  {isClearing ? <Loader2 size={15} className="converter-spin" /> : <Trash2 size={15} />}
-                  {t('Clear temp files')}
-                </button>
-              </div>
             </div>
           </section>
 

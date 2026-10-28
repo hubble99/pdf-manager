@@ -38,9 +38,6 @@ export interface FeatureEntry {
  */
 export const BETA_TOOLTIP = t('Beta: this feature is still unstable.');
 
-/** Why PDF to Word carries the BETA badge; shown as the badge tooltip and on the page. */
-export const PDF_TO_WORD_BETA_NOTE = t('Beta: the result can look messy when the PDF contains pictures or a letterhead.');
-
 /** Group order defines the order on both surfaces. */
 export const FEATURE_GROUPS: { id: FeatureGroupId; label: string }[] = [
   { id: 'organize', label: t('Organize') },
@@ -71,7 +68,6 @@ export const FEATURES: FeatureEntry[] = [
   {
     id: 'pdf-to-word', name: t('PDF to Word'), group: 'convert', icon: FEATURE_ICONS['pdf-to-word'],
     description: t('Turn a PDF into an editable Word document.'), route: '/pdf-to-word',
-    beta: true, betaNote: PDF_TO_WORD_BETA_NOTE,
   },
   {
     id: 'image-format', name: t('WEBP to PNG/JPG'), group: 'convert', icon: FEATURE_ICONS['image-format'],

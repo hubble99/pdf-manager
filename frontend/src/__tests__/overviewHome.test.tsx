@@ -80,12 +80,9 @@ describe('Home', () => {
     const badge = card.querySelector('.home-card-badge');
     expect(badge).toHaveTextContent('BETA');
     expect(badge).toHaveAttribute('title', 'Beta: this feature is still unstable.');
-    // PDF to Word is Beta too, with its own explanation.
-    const wordBadge = (document.getElementById('home-card-pdf-to-word') as HTMLElement).querySelector('.home-card-badge');
-    expect(wordBadge).toHaveTextContent('BETA');
-    expect(wordBadge).toHaveAttribute('title', expect.stringContaining('pictures or a letterhead'));
-    // Every other card is free of the badge.
-    expect(document.querySelectorAll('.home-card-badge')).toHaveLength(2);
+    // Every other card is free of the badge, PDF to Word included.
+    expect((document.getElementById('home-card-pdf-to-word') as HTMLElement).querySelector('.home-card-badge')).toBeNull();
+    expect(document.querySelectorAll('.home-card-badge')).toHaveLength(1);
   });
 
   it('names the canvas feature Canvas PDF everywhere', () => {

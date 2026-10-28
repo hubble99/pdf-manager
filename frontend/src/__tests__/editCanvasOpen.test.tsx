@@ -98,7 +98,9 @@ describe('Canvas PDF opens a PDF by path', () => {
     expect(screen.getByTestId('page-1').getAttribute('src')).toBe('blob:page-2-200');
     expect(renderMock).toHaveBeenCalledWith(PATH, 1, 200);
     expect(screen.getByText('report.pdf')).toBeTruthy();
-    expect(screen.getByText('2.0 KB')).toBeTruthy();
+    // Only the name is shown, with the full name on hover; the size is left out.
+    expect(screen.getByTitle('report.pdf')).toBeTruthy();
+    expect(screen.queryByText('2.0 KB')).toBeNull();
   });
 
   it('shows the page boxes before any image has arrived', async () => {

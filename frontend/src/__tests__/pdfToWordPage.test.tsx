@@ -26,10 +26,10 @@ describe('PDF to Word page', () => {
     expect(screen.getByText('PDF to Word runs in the Dokuwu desktop app')).toBeTruthy();
   });
 
-  it('shows the BETA badge and the note about pictures and letterheads', () => {
+  it('carries no BETA badge or beta note', () => {
     const { container } = render(<PdfToWordPage />);
-    expect(container.querySelector('.page-header-badge')).toHaveTextContent('BETA');
-    expect(container.querySelector('#pdf-to-word-beta-note')).toHaveTextContent(/pictures or a letterhead/);
+    expect(container.querySelector('.page-header-badge')).toBeNull();
+    expect(container.querySelector('#pdf-to-word-beta-note')).toBeNull();
   });
 
   it('passes the output name to the core command', async () => {

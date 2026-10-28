@@ -26,19 +26,11 @@ export const EN: Record<string, string> = {
   'Please wait...': 'Hang on a moment...',
   'Click here or drag a file to begin editing.': 'Click here or drag in a file to start editing.',
   // Success
-  'Merge complete!': 'Merged successfully',
-  'Merge complete': 'Merged successfully',
   'Saved to your Downloads folder': 'Your file is in Downloads!',
   'Saved {name} to your Downloads folder': '{name} is in Downloads!',
   'Compression complete': 'Compressed successfully',
-  'Compression complete!': 'Compressed successfully',
-  'Conversion complete': 'Converted successfully',
-  'Extraction complete!': 'Split successfully',
-  'PDF Protected!': 'PDF protected successfully',
-  'Password Removed!': 'Password removed successfully',
   'PDF Saved Successfully': 'PDF saved successfully',
   'PDF Loaded Successfully': 'PDF loaded successfully',
-  'Word document ready': 'Your Word document is ready',
   'Your edited PDF document is ready.': 'Your edited PDF is ready.',
   'Link copied to the clipboard.': 'Link copied.',
   'Merged {n} file': '{n} file merged successfully',
@@ -68,7 +60,6 @@ export const EN: Record<string, string> = {
   // Buttons
   'Show in folder': 'Open Downloads',
   'Open Folder': 'Open Downloads',
-  'Open folder': 'Open Downloads',
   // Info
   'Compressed copies are saved to your Downloads folder. The originals are not changed.': 'Compressed copies go to your Downloads folder. Your originals stay untouched.',
   'Converted copies are saved to a folder you choose. The originals are not changed.': 'Converted copies go to the folder you pick. Your originals stay untouched.',

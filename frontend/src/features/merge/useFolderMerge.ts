@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useToast } from '../../hooks/useToast';
 import { addHistoryEntry } from '../../utils/historyStore';
 import { chooseFolderDialog, isTauri } from '../../utils/tauriDialog';
 import { baseName } from '../../utils/paths';
-import { NativeCoreError, isCoreCancelled, revealPath, type CoreProgress } from '../../api/nativeCore';
+import { NativeCoreError, isCoreCancelled, type CoreProgress } from '../../api/nativeCore';
 import {
   describePdfs, inspectPdfs, mergePdfs, scanFolder,
   type FileDescription, type FolderListing, type FolderNode, type MergeProblem,
@@ -85,7 +84,6 @@ const describeFailure = (thrown: unknown, fallback: string) =>
   thrown instanceof NativeCoreError ? mergeErrorMessage(thrown) : fallback;
 
 export function useFolderMerge(): FolderMergeState {
-  const { showToast } = useToast();
   const [root, setRoot] = useState<ChosenFolder | null>(null);
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -258,15 +256,6 @@ export function useFolderMerge(): FolderMergeState {
         totalPages: report.totalPages,
       });
       addHistoryEntry({ filename, action: 'Merge PDF', size: report.outputSizeBytes });
-      showToast({
-        type: 'success',
-        title: t('Merge complete'),
-        message: report.skipped.length
-          ? tn(report.mergedFiles, '{n} file merged, {skipped} skipped', '{n} files merged, {skipped} skipped', { skipped: report.skipped.length })
-          : tn(report.mergedFiles, '{n} file merged', '{n} files merged'),
-        action: { label: t('Show in folder'), onClick: () => { void revealPath(report.outputPath).catch(() => undefined); } },
-        duration: 8000,
-      });
     } catch (thrown) {
       if (!mountedRef.current || isCoreCancelled(thrown)) return;
       setError(mergeErrorMessage(thrown));
@@ -279,7 +268,7 @@ export function useFolderMerge(): FolderMergeState {
         setProgress(null);
       }
     }
-  }, [outputName, root, showToast]);
+  }, [outputName, root]);
 
   const requestMerge = useCallback(async () => {
     if (!root || queue.length < 2 || busyRef.current) return;

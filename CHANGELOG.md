@@ -19,6 +19,17 @@
 - **Taskbar icon:** the Windows icon file now lists its largest frame first, so the window and taskbar icon is no longer picked from the 16 px frame and stretched.
 - **Compress PDF:** the page now has two containers like Compress Photos: the file, its output name, the size comparison and the result on the left; the quality settings and the Compress button on the right.
 - **Canvas PDF:** the top bar is tidied into two rows. The first names the page (with its icon) and holds the PDF, the output name and Save as PDF at the right edge; the second holds the tools, zoom and undo/redo. Nothing wraps into a stray line any more. The browser-preview notice is wrapped into a narrow centred block instead of one long line.
+- **One green result card:** after a tool saves its file, one green "Your file is in Downloads!" card says so. The duplicate pop-up notice is gone from Merge (Quick and Folder), Split, Organize, PDF & Image, PDF to Word, WEBP to PNG/JPG, both compress tools, Protect, QR & Barcode and Edit Content; Canvas PDF keeps its notices because it has no such card. The card sits next to the run button on the wide pages (Split, PDF & Image, Compress PDF, PDF to Word, WEBP, Protect) and under the buttons in Merge, so both sides of a page are filled. In Compress Photos the result spans the full width under both columns with a green header.
+- **Readable active options:** hovering the option that is already selected (a format, a DPI, a quality or compression level, a language) no longer turns it white with white text.
+- **PDF & Image:** a ZIP of page images is named after the PDF (`report.zip`), without the extra `_images`.
+- **PDF to Word:** the page shows the PDF's size and page count, and the BETA badge and note are gone from the page, the sidebar and Home.
+- **WEBP to PNG/JPG:** the converted count and the total size are in the green card.
+- **Organize PDF:** Delete pages tells you at once that any page from 1 to the last can be deleted, instead of an error before you type.
+- **Protect PDF:** Add Password and Remove Password each keep their own PDF, so the file chosen to encrypt no longer shows up in Remove Password.
+- **QR & Barcode:** Open Downloads appears, green with a check mark, only after the file is saved.
+- **Canvas PDF:** the file box shows the name only; a long name ends in "…" and the full name appears on hover.
+- **Edit Content:** the limits text describes what the editor can do now (16 MiB, passwords, refused edits keep your text).
+- **Settings:** the Temporary storage section is removed, since Dokuwu keeps no PDF between tools.
 
 ## 1.11.0 — 2026-10-27 · Phase 3: the Python backend is gone
 

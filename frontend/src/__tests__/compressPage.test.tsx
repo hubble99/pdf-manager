@@ -117,7 +117,8 @@ describe('Compress PDF page', () => {
     act(() => emit(CORE_FINISHED_EVENT, { jobId: 11, kind: 'pdf_compress', status: 'succeeded', result: report }));
     expect(await screen.findByText('Your file is in Downloads!')).toBeTruthy();
     expect(screen.getByText('−80%')).toBeTruthy();
-    expect(showToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    // The green card is the only notice of the result.
+    expect(showToast).not.toHaveBeenCalled();
   });
 
   it('refuses a protected PDF before compressing', async () => {

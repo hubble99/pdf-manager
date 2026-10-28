@@ -60,6 +60,14 @@ async function openWithPdf() {
   await waitFor(() => expect(calls('core_pdf_info')).toHaveLength(1));
 }
 
+/** Opens the mode's tab and gives it the PDF; each mode has its own file. */
+async function openInMode(tabId: string) {
+  fireEvent.click(document.getElementById(tabId) as HTMLElement);
+  await drop([PDF]);
+  await screen.findByText('doc.pdf');
+  await waitFor(() => expect(calls('core_pdf_info').length).toBeGreaterThan(0));
+}
+
 const field = (id: string) => document.getElementById(id) as HTMLInputElement;
 const type = (id: string, value: string) => fireEvent.change(field(id), { target: { value } });
 const addButton = () => document.getElementById('protect-add-btn') as HTMLButtonElement;
@@ -182,8 +190,8 @@ describe('Protect PDF', () => {
 
   it('removes a password and explains a wrong one', async () => {
     encrypted = true;
-    await openWithPdf();
-    fireEvent.click(document.getElementById('protect-tab-remove') as HTMLElement);
+    renderPage();
+    await openInMode('protect-tab-remove');
     expect(removeButton()).toBeDisabled();
     type('protect-remove-pw', 'nope');
     expect(removeButton()).toBeEnabled();
@@ -211,11 +219,24 @@ describe('Protect PDF', () => {
   });
 
   it('has nothing to remove on a PDF without a password', async () => {
-    await openWithPdf();
-    fireEvent.click(document.getElementById('protect-tab-remove') as HTMLElement);
+    renderPage();
+    await openInMode('protect-tab-remove');
     expect(await screen.findByText('This PDF has no password to remove.')).toBeInTheDocument();
     type('protect-remove-pw', 'x');
     expect(removeButton()).toBeDisabled();
+  });
+
+  it('keeps a separate file for each mode', async () => {
+    await openWithPdf();
+    fireEvent.click(document.getElementById('protect-tab-remove') as HTMLElement);
+    // The PDF chosen to encrypt does not follow into Remove Password.
+    expect(screen.queryByText('doc.pdf')).not.toBeInTheDocument();
+    expect(document.getElementById('protect-drop-zone')).not.toBeNull();
+    await drop(['C:\\Docs\\locked.pdf']);
+    await screen.findByText('locked.pdf');
+    fireEvent.click(document.getElementById('protect-tab-add') as HTMLElement);
+    expect(await screen.findByText('doc.pdf')).toBeInTheDocument();
+    expect(screen.queryByText('locked.pdf')).not.toBeInTheDocument();
   });
 
   it('turns away files that are not PDFs and starts clean with a new file', async () => {

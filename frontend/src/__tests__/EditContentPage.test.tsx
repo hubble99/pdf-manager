@@ -289,13 +289,13 @@ describe('Edit Content page', () => {
     expect(await screen.findByText(/invisible \(a hidden layer over an image\)/)).toBeInTheDocument();
   });
 
-  it('opens text choices below the picker and shows V1 limits before editing', async () => {
+  it('opens text choices below the picker and shows the limits before editing', async () => {
     renderPage();
-    expect(screen.getByText('Edit Content V1 limits')).toBeInTheDocument();
+    expect(screen.getByText('Edit Content limits')).toBeInTheDocument();
     await dropPdf();
     await screen.findByRole('heading', { name: 'Select text on the page' });
     // The long list of limits belongs to the start screen; it is not repeated beside an open PDF.
-    expect(screen.queryByText('Edit Content V1 limits')).not.toBeInTheDocument();
+    expect(screen.queryByText('Edit Content limits')).not.toBeInTheDocument();
     const trigger = screen.getByRole('button', { name: 'Native text object' });
     fireEvent.click(trigger);
     const choices = screen.getByRole('listbox', { name: 'Native text options' });

@@ -149,7 +149,7 @@ pub(crate) fn pdf_to_images_with(
     let ext = format.extension();
     let is_zip = pages.len() > 1;
     let (final_stem, final_ext) = if is_zip {
-        (format!("{stem}_images"), "zip")
+        (stem.clone(), "zip")
     } else {
         (format!("{stem}_page{:04}", pages[0]), ext)
     };

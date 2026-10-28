@@ -1040,6 +1040,16 @@ body {
   background: color-mix(in srgb, var(--error-container) 78%, var(--error));
 }
 
+.btn-success {
+  background: var(--success-container);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.btn-success:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success-container) 78%, var(--success));
+}
+
 .btn-sm {
   min-height: var(--control-height-sm);
   padding: 0 var(--space-3);
@@ -1958,37 +1968,6 @@ select.input {
   background: var(--error-container, var(--surface-container));
   border: 1px solid var(--error);
   color: var(--on-surface);
-}
-
-.converter-result {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  background: var(--success-container);
-  border: 1px solid var(--success);
-}
-
-.converter-result > svg {
-  color: var(--success);
-  flex-shrink: 0;
-}
-
-.converter-result-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.converter-result-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--success);
-  margin-bottom: var(--space-1);
-}
-
-.converter-result-detail {
-  font-size: 12px;
-  color: var(--on-surface-variant);
-  line-height: 1.4;
 }
 
 /* ── Organize PDF workspace ─────────────────────────────────────────────────── */
@@ -3348,7 +3327,9 @@ select.input {
 }
 
 .seg button.active,
-.seg button[aria-pressed="true"] {
+.seg button[aria-pressed="true"],
+.seg button.active:hover:not(:disabled),
+.seg button[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--pb);
   color: var(--on-accent);
 }
@@ -3683,6 +3664,11 @@ select.input {
 
 .form-col--wide {
   max-width: 1000px;
+}
+
+/* A single column with room for the green result card beside the run button. */
+.form-col--roomy {
+  max-width: 680px;
 }
 
 .form-actions {
@@ -5401,30 +5387,65 @@ select.input {
   margin-top: 4px;
 }
 
-/* Success banner shown after a download starts. */
-.result-card {
+/* The green "your file is in Downloads" card (ResultCard). It wraps its button below the
+   text when the column is narrow. */
+.result-banner {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.result-banner .status-card-copy {
+  flex: 1 1 110px;
+}
+
+.result-banner--stacked .status-card-copy {
+  flex-basis: calc(100% - 40px);
+}
+
+.result-banner .status-card-copy small {
+  color: var(--on-surface-variant);
+  font-size: 12px;
+}
+
+/* The result card on the left and the run button(s) on the right of one row. It spans every
+   column of a grid page, so the card sits under the left column and the button under the right. */
+.action-bar {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+}
+
+.action-bar > .result-banner {
+  flex: 1 1 260px;
+}
+
+.action-bar > .form-actions,
+.action-bar > .action-row {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* A card header that reports success (Compress Photos result). */
+.card-head--success {
   background: var(--success-container);
-  border: 1px solid var(--success);
+  border-bottom-color: var(--success);
+  color: var(--success);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
-.result-card-icon {
-  flex-shrink: 0;
+.card-head--success .card-head-title,
+.card-head--success .card-head-icon {
   color: var(--success);
 }
 
-.result-card-title {
-  margin-bottom: 4px;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--success);
-}
-
-.result-card-meta {
-  font-size: 12px;
-  color: var(--on-surface-variant);
+/* A result that spans the full width of a two-column page. */
+.result-wide {
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 
 /* A PDF page preview inside a sortable card. */

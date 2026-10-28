@@ -106,7 +106,7 @@ function convertButton() {
 const startCalls = (cmd: string) => invokeMock.mock.calls.filter(([c]) => c === cmd);
 
 const pdfReport = (overrides: Record<string, unknown> = {}) => ({
-  outputPath: 'C:\\Users\\a\\Downloads\\document_images.zip',
+  outputPath: 'C:\\Users\\a\\Downloads\\document.zip',
   outputSizeBytes: 1_500_000,
   pages: 3,
   isZip: true,
@@ -392,7 +392,7 @@ describe('unified converter workspace', () => {
     await waitFor(() => expect(handlers[CORE_FINISHED_EVENT]?.length).toBeGreaterThan(0));
     emit(CORE_FINISHED_EVENT, { jobId: 7, kind: 'pdf_to_image', status: 'succeeded', result: pdfReport() });
     await screen.findByText('Your file is in Downloads!');
-    expect(screen.getByText('document_images.zip')).toBeInTheDocument();
+    expect(screen.getByText('document.zip')).toBeInTheDocument();
     expect(screen.getByText(/3 pages · PNG · 150 DPI \(ZIP archive\) · 1\.43 MB/)).toBeInTheDocument();
     expect(startCalls('core_pdf_to_image_start')).toHaveLength(1);
   });
@@ -421,7 +421,7 @@ describe('unified converter workspace', () => {
     await screen.findByText('Your file is in Downloads!');
 
     fireEvent.click(document.getElementById('converter-open-folder') as HTMLButtonElement);
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_reveal_path', { path: 'C:\\Users\\a\\Downloads\\document_images.zip' }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('core_reveal_path', { path: 'C:\\Users\\a\\Downloads\\document.zip' }));
   });
 
   it('rejects a conflicting addition without losing the existing image batch', async () => {

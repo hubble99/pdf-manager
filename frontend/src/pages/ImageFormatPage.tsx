@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import {
   AlertTriangle,
-  CheckCircle,
   FileImage,
   FolderOpen,
   ImageDown,
@@ -23,7 +22,7 @@ import {
   NativeCoreError,
 } from '../api/nativeCore';
 import { Filename } from '../components/Filename';
-import { PageHeader, RangeField, SegmentedControl } from '../components/ui';
+import { PageHeader, RangeField, ResultCard, SegmentedControl } from '../components/ui';
 import {
   DEFAULT_JPEG_QUALITY,
   baseName,
@@ -141,19 +140,6 @@ export function ImageFormatPage() {
           addHistoryEntry({ filename: baseName(file.output), action: 'Converted WEBP', size: file.outputBytes ?? 0 });
         }
       }
-      if (result.failed === 0) {
-        showToast({
-          type: 'success',
-          title: t('Conversion complete'),
-          message: tn(result.succeeded, '{n} image converted.', '{n} images converted.'),
-        });
-      } else {
-        showToast({
-          type: result.succeeded > 0 ? 'warning' : 'error',
-          title: result.succeeded > 0 ? t('Some images were not converted') : t('Conversion failed'),
-          message: t('{done} converted, {failed} failed.', { done: result.succeeded, failed: result.failed }),
-        });
-      }
     } catch (err) {
       if (isCoreCancelled(err)) {
         showToast({
@@ -186,6 +172,7 @@ export function ImageFormatPage() {
 
   const percent = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
   const failedFiles = report?.files.filter((f) => f.error) ?? [];
+  const totalBytes = report?.files.reduce((sum, f) => sum + (f.outputBytes ?? 0), 0) ?? 0;
   const animatedCount = report?.files.filter((f) => f.output && f.animated).length ?? 0;
   const canConvert = paths.length > 0 && Boolean(outputDir) && !running;
 
@@ -198,7 +185,7 @@ export function ImageFormatPage() {
       />
 
       <div className="page-body">
-        <div className={`form-col${paths.length > 0 ? '' : ' form-col--center'}`}>
+        <div className={`form-col${paths.length > 0 ? ' form-col--roomy' : ' form-col--center'}`}>
           {!desktop ? (
             <p className="empty-hint" role="status">{t('This tool is available in the desktop app.')}</p>
           ) : paths.length === 0 ? (
@@ -338,22 +325,6 @@ export function ImageFormatPage() {
                 </div>
               )}
 
-              {/* Result */}
-              {report && report.succeeded > 0 && (
-                <div className="card status-card status-card--ok">
-                  <CheckCircle size={22} aria-hidden="true" />
-                  <div className="status-card-copy">
-                    <b>{tn(report.succeeded, '{n} image converted', '{n} images converted')}</b>
-                    <small>
-                      <Filename name={outputDir ?? ''} />
-                      {animatedCount > 0 && <> · {tn(animatedCount, '{n} animated image kept only its first frame', '{n} animated images kept only their first frame')}</>}
-                    </small>
-                  </div>
-                  <button type="button" className="btn btn-ghost btn-sm" id="image-format-open-folder-btn" onClick={openResultFolder}>
-                    <FolderOpen size={14} aria-hidden="true" /> {t('Open output folder')}
-                  </button>
-                </div>
-              )}
               {failedFiles.length > 0 && (
                 <div className="card card--flush" role="alert">
                   <div className="card-head">
@@ -373,20 +344,30 @@ export function ImageFormatPage() {
                 </div>
               )}
 
-              <div className="form-actions">
-                <button className="btn btn-primary" id="image-format-run-btn" onClick={handleConvert} disabled={!canConvert}>
-                  {running ? (
-                    <><Loader2 size={15} className="spin" /> {t('Converting…')}</>
-                  ) : (
-                    <><ImageDown size={15} /> {tn(paths.length, 'Convert {n} image', 'Convert {n} images')}</>
-                  )}
-                </button>
+              <div className="action-bar">
+                {report && report.succeeded > 0 && (
+                  <ResultCard
+                    title={tn(report.succeeded, '{n} image converted', '{n} images converted')}
+                    detail={(
+                      <>
+                        <Filename name={outputDir ?? ''} />
+                        {totalBytes > 0 && <> · {t('Total size: {size}', { size: formatBytes(totalBytes) })}</>}
+                        {animatedCount > 0 && <> · {tn(animatedCount, '{n} animated image kept only its first frame', '{n} animated images kept only their first frame')}</>}
+                      </>
+                    )}
+                    action={{ label: t('Open output folder'), id: 'image-format-open-folder-btn', onClick: openResultFolder }}
+                  />
+                )}
+                <div className="form-actions">
+                  <button className="btn btn-primary" id="image-format-run-btn" onClick={handleConvert} disabled={!canConvert}>
+                    {running ? (
+                      <><Loader2 size={15} className="spin" /> {t('Converting…')}</>
+                    ) : (
+                      <><ImageDown size={15} /> {tn(paths.length, 'Convert {n} image', 'Convert {n} images')}</>
+                    )}
+                  </button>
+                </div>
               </div>
-              {report && report.files.some((f) => f.outputBytes) && (
-                <p className="empty-hint">
-                  {t('Total size: {size}', { size: formatBytes(report.files.reduce((sum, f) => sum + (f.outputBytes ?? 0), 0)) })}
-                </p>
-              )}
             </>
           )}
         </div>

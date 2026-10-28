@@ -36,7 +36,7 @@ import { useToast } from '../hooks/useToast';
 import { useFeatureFile } from '../hooks/useFeatureFile';
 import { useLeaveGuard } from '../hooks/useLeaveGuard';
 import { useNativePaths } from '../hooks/useNativePaths';
-import { NativeCoreError, fileSizes, revealPath } from '../api/nativeCore';
+import { NativeCoreError, revealPath } from '../api/nativeCore';
 import { baseName, stemOf } from '../utils/paths';
 import { isTauri } from '../utils/tauriDialog';
 import { isEmptyTextState } from '../utils/textPlaceholder';
@@ -139,13 +139,6 @@ const FONT_FAMILIES = [
 
 const BASE_DISPLAY_WIDTH = 800;
 
-// Helper to format file size
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 // ── Lazy Loading Container ────────────────────────────────────────────────────
 /** Starts the eyedropper for one colour field; click the page to fill it, Esc cancels. */
 function EyedropperButton({ active, onClick }: { active: boolean; onClick: () => void }) {
@@ -245,7 +238,6 @@ export function EditCanvasPage() {
   const showToastRef = useRef(showToast);
   const { fileData: file, setFileData: setFile } = useFeatureFile<string | null>('edit-canvas');
   useLeaveGuard(Boolean(file));
-  const [fileSize, setFileSize] = useState<number | null>(null);
 
   const [pages, setPages] = useState<PageData[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
@@ -739,10 +731,9 @@ export function EditCanvasPage() {
     setLoading(true);
 
     try {
-      const [meta, sizes] = await Promise.all([fetchPagesMeta(pdfPath, PREVIEW_BASE_DPI), fileSizes([pdfPath])]);
+      const meta = await fetchPagesMeta(pdfPath, PREVIEW_BASE_DPI);
       if (run !== openRunRef.current) return;
 
-      setFileSize(sizes[0] ?? null);
       setPages(meta.pages.map((p) => ({
         index: p.index,
         width: p.width,
@@ -847,7 +838,6 @@ export function EditCanvasPage() {
     openRunRef.current += 1;
     releasePageUrls();
     setFile(null);
-    setFileSize(null);
     setPages([]);
     setSelectedObjectId(null);
     setLoading(false);
@@ -1691,8 +1681,7 @@ export function EditCanvasPage() {
               }}
             >
               <div style={{ minWidth: 0, flex: 1 }}>
-                <Filename name={baseName(file)} className="text-xs font-semibold text-[var(--canvas-text-primary)] truncate block" />
-                <span className="text-[10px] text-[var(--canvas-text-muted)] block">{fileSize !== null ? formatBytes(fileSize) : ''}</span>
+                <Filename name={baseName(file)} truncate className="text-xs font-semibold text-[var(--canvas-text-primary)] block" />
               </div>
               <button
                 onClick={clearDocument}

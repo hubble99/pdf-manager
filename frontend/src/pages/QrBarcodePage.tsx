@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Barcode,
+  Check,
   Download,
-  FolderOpen,
   Info,
   Loader2,
   QrCode,
@@ -112,6 +112,8 @@ export function QrBarcodePage() {
 
   // Output filename
   const [outputFilename, setOutputFilename] = useState('');
+  // The file name once Save has run; the green Open Downloads button shows only until the next change.
+  const [savedName, setSavedName] = useState<string | null>(null);
 
   // Sequence of the newest generation request. Only that request may commit
   // preview/loading state; superseded or aborted requests are ignored.
@@ -137,6 +139,7 @@ export function QrBarcodePage() {
     const requestId = ++requestIdRef.current;
 
     setPreviewError(null);
+    setSavedName(null);
 
     if (!content.trim()) {
       setIsLoading(false);
@@ -202,10 +205,6 @@ export function QrBarcodePage() {
           pixels: pngDimensions(bytes) ?? undefined,
           qr: isQr ? { content, errorCorrection: qrErrorCorrection } : undefined,
         });
-      }
-
-      if (isUserAction) {
-        showToastRef.current({ type: 'success', title: t('Generated successfully'), message: t('{kind} is ready.', { kind: isQr ? t('QR Code') : t('Barcode') }) });
       }
 
     } catch (err: unknown) {
@@ -308,7 +307,7 @@ export function QrBarcodePage() {
       return;
     }
 
-    showToast({ type: 'success', title: t('File saved'), message: t('Saved {name} to your Downloads folder', { name: filename }) });
+    setSavedName(filename);
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -522,14 +521,17 @@ export function QrBarcodePage() {
                     <Download size={15} />
                     {t('Save {format}', { format: format.toUpperCase() })}
                   </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => openOutputFolder()}
-                    disabled={!canSave}
-                  >
-                    <FolderOpen size={15} />
-                    {t('Open Folder')}
-                  </button>
+                  {savedName && (
+                    <button
+                      className="btn btn-success"
+                      id="qr-open-downloads-btn"
+                      onClick={() => openOutputFolder()}
+                      title={t('Saved {name} to your Downloads folder', { name: savedName })}
+                    >
+                      <Check size={15} aria-hidden="true" />
+                      {t('Open Folder')}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

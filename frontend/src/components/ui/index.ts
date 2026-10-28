@@ -10,3 +10,4 @@ export { RadioCardGroup } from './RadioCardGroup';
 export type { RadioCardOption } from './RadioCardGroup';
 export { RangeField } from './RangeField';
 export { SizeCompareCard } from './SizeCompareCard';
+export { ResultCard } from './ResultCard';

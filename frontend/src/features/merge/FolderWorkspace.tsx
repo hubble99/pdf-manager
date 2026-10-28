@@ -5,6 +5,8 @@ import {
 import type { KeyboardEvent } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Filename } from '../../components/Filename';
+import { ResultCard } from '../../components/ui';
 import { SortableArea } from '../../components/sortable/SortableArea';
 import { revealPath } from '../../api/nativeCore';
 import type { FileDescription, FolderNode } from '../../api/pdfMerge';
@@ -405,26 +407,6 @@ export function FolderWorkspace() {
             </div>
           )}
 
-          {workspace.result && (
-            <div className="card status-card status-card--ok">
-              <Check size={22} aria-hidden="true" />
-              <div className="status-card-copy">
-                <p className="merge-result" role="status">
-                  {tn(workspace.result.merged, 'Merged {n} file', 'Merged {n} files')}{workspace.result.skipped ? `, ${t('skipped {count}', { count: workspace.result.skipped })}` : ''} · {tn(workspace.result.totalPages, '{n} page', '{n} pages')} · <span className="merge-tree-name">{workspace.result.filename}</span>
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                id="merge-folder-open-folder-btn"
-                onClick={() => { void revealPath(workspace.result!.outputPath).catch(() => undefined); }}
-                title={t('Show in folder')}
-              >
-                <FolderOpen size={14} aria-hidden="true" /> {t('Show in folder')}
-              </button>
-            </div>
-          )}
-
           <div className="card card--flush">
             <div className="card-body">
               <div className="field">
@@ -468,6 +450,24 @@ export function FolderWorkspace() {
           </div>
           {workspace.queue.length < 2 && (
             <p className="hint merge-queue-need">{t('Add at least 2 files.')}</p>
+          )}
+
+          {workspace.result && (
+            <ResultCard
+              stacked
+              title={t('Saved to your Downloads folder')}
+              detail={(
+                <>
+                  <Filename name={workspace.result.filename} /> · {tn(workspace.result.merged, 'Merged {n} file', 'Merged {n} files')}
+                  {workspace.result.skipped ? `, ${t('skipped {count}', { count: workspace.result.skipped })}` : ''} · {tn(workspace.result.totalPages, '{n} page', '{n} pages')}
+                </>
+              )}
+              action={{
+                label: t('Show in folder'),
+                id: 'merge-folder-open-folder-btn',
+                onClick: () => { void revealPath(workspace.result!.outputPath).catch(() => undefined); },
+              }}
+            />
           )}
         </div>
       </div>
