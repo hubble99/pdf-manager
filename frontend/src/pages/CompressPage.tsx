@@ -300,40 +300,41 @@ export function CompressPage() {
                 </div>
               )}
 
-                {result && (
-                  <ResultCard
-                    stacked
-                    title={result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}
-                    detail={(
-                      <>
-                        <Filename name={baseName(result.outputPath)} />
-                        {result.keptOriginal
-                          ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
-                          : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
-                      </>
-                    )}
-                    action={{ label: t('Open Folder'), id: 'compress-open-folder-btn', onClick: () => openOutputFolder() }}
-                  />
-                )}
-                <div className="form-actions">
-                  <button
-                    className="btn btn-primary"
-                    id="compress-run-btn"
-                    onClick={() => void handleCompress()}
-                    disabled={running}
-                  >
-                    {running ? (
-                      <>
-                        <Loader2 size={15} className="spin" />
-                        {t('Compressing…')}
-                      </>
-                    ) : (
-                      <>
-                        <Minimize2 size={15} />
-                        {t('Compress PDF')}
-                      </>
-                    )}
-                  </button>
+                <div className="action-bar action-bar--row">
+                  <div className="form-actions">
+                    <button
+                      className="btn btn-primary"
+                      id="compress-run-btn"
+                      onClick={() => void handleCompress()}
+                      disabled={running}
+                    >
+                      {running ? (
+                        <>
+                          <Loader2 size={15} className="spin" />
+                          {t('Compressing…')}
+                        </>
+                      ) : (
+                        <>
+                          <Minimize2 size={15} />
+                          {t('Compress PDF')}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {result && (
+                    <ResultCard
+                      title={result.keptOriginal ? t('Already as small as it gets') : t('Saved to your Downloads folder')}
+                      detail={(
+                        <>
+                          <Filename name={baseName(result.outputPath)} />
+                          {result.keptOriginal
+                            ? <> · {t('Nothing could be made smaller, so the file was saved unchanged.')}</>
+                            : <> · {tn(result.imagesRecompressed, '{n} image re-encoded', '{n} images re-encoded')} · {t('saved')} {formatBytes(result.sizeBefore - result.sizeAfter)}</>}
+                        </>
+                      )}
+                      action={{ label: t('Open Folder'), id: 'compress-open-folder-btn', onClick: () => openOutputFolder() }}
+                    />
+                  )}
                 </div>
               </div>
             </>
