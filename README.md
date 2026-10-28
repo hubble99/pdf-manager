@@ -179,12 +179,6 @@ npm run lint
 
 More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#tests).
 
-## Good to know
-
-Dokuwu is a finished, small project made by one person, and it is **not going to be maintained for long**. Bug reports are welcome and I read them, but do not count on quick answers. The licence lets you fork it and keep it going, so please do.
-
-If it saved you an evening, there is a support page inside the app (Donate).
-
 ## License
 
 Dokuwu is free software under the **[GNU Affero General Public License, version 3 or later](LICENSE)**. In plain words: you can use it for anything, read and change the source, and share it, as long as whoever gets your version gets the same freedoms and the source code. It comes with **no warranty**.
