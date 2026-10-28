@@ -81,8 +81,16 @@ Libraries built into MuPDF, each under its own license:
 URW = """\
 Base 14 PDF fonts (Nimbus Sans, Nimbus Roman, Nimbus Mono PS, Standard Symbols,
 Dingbats), (c) URW++ Design & Development, shipped inside MuPDF to draw text
-set in the standard PDF fonts. They are distributed with MuPDF/Ghostscript
-under the GNU AGPL version 3.
+set in the standard PDF fonts. Source: https://github.com/ArtifexSoftware/urw-base35-fonts
+(the fonts MuPDF embeds are the 2014 URW++ releases of the same designs).
+They are distributed under the GNU AGPL version 3 (the text is in the file
+LICENSE of Dokuwu), with the exemption stated by Artifex in the LICENSE file of
+that repository, quoted here verbatim:
+
+    As a special exception, permission is granted to include these font
+    programs in a Postscript or PDF file that consists of a document that
+    contains text to be displayed or printed using this font, regardless
+    of the conditions or license applying to the document itself.
 
 DejaVu Sans Mono (native/dokuwu-core/assets/fonts), used for the text under
 barcodes, under the Bitstream Vera and DejaVu font license:
@@ -181,12 +189,12 @@ def grouped(packages):
         if not texts:
             without.append(pkg)
             continue
-        for text in texts:
+        for text in sorted(texts):
             key = hashlib.sha256(text.encode()).hexdigest()
             group = groups.setdefault(key, {"text": text, "packages": []})
             if pkg not in group["packages"]:
                 group["packages"].append(pkg)
-    ordered = sorted(groups.values(), key=lambda g: (-len(g["packages"]), g["packages"][0]["name"]))
+    ordered = sorted(groups.values(), key=lambda g: (-len(g["packages"]), g["packages"][0]["name"], g["text"]))
     return ordered, without
 
 
