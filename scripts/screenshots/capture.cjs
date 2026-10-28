@@ -6,7 +6,8 @@
  *   cd frontend && npx vite --port 5199 &
  *   node scripts/screenshots/capture.cjs [out-dir]        (from the repository root)
  *
- * Needs Playwright with Chromium. Output: docs/assets/screenshot-N.png (1440x900).
+ * Needs Playwright with Chromium. Output: docs/assets/screenshot-N.png (1440x900),
+ * or, with SHOTS_SET=store and SHOTS_LANG=en|id, the numbered Store set (see below).
  */
 const path = require('path');
 const { chromium } = require('playwright');
@@ -142,26 +143,44 @@ async function shot(browser, { file, route, lang = 'en', theme = 'light', drop, 
   await context.close();
 }
 
+// Store sets: the same eight pages in English and Indonesian, named in upload order.
+//   SHOTS_SET=store SHOTS_LANG=en node scripts/screenshots/capture.cjs docs/brand/store/screenshots/en
+const STORE = process.env.SHOTS_SET === 'store';
+const LANG = process.env.SHOTS_LANG || 'en';
+const FIT = LANG === 'id' ? 'Sesuaikan ke Halaman (Ctrl+0)' : 'Fit to Page (Ctrl+0)';
+
+async function fitCanvas(page) {
+  await page.locator(`[title="${FIT}"]`).first().click().catch(() => {});
+  await page.waitForTimeout(2000);
+}
+
+async function settingsShot(page) {
+  await page.locator('#settings-licenses').scrollIntoViewIfNeeded();
+}
+
 (async () => {
   const browser = await chromium.launch();
+  if (STORE) {
+    const lang = LANG;
+    await shot(browser, { file: '01-home.png', route: '/', lang });
+    await shot(browser, { file: '02-edit-content.png', route: '/edit-content', lang });
+    await shot(browser, { file: '03-canvas-pdf.png', route: '/edit-canvas', drop: true, lang, after: fitCanvas });
+    await shot(browser, { file: '04-pdf-and-image.png', route: '/converter', drop: true, lang });
+    await shot(browser, { file: '05-organize.png', route: '/organize', drop: true, lang });
+    await shot(browser, { file: '06-compress.png', route: '/compress', drop: true, lang });
+    await shot(browser, { file: '07-dark-theme.png', route: '/', theme: 'dark', lang });
+    await shot(browser, { file: '08-settings.png', route: '/settings', lang, after: settingsShot });
+    await browser.close();
+    return;
+  }
   await shot(browser, { file: 'screenshot-1.png', route: '/' });
   await shot(browser, { file: 'screenshot-2.png', route: '/organize', drop: true });
   await shot(browser, { file: 'screenshot-3.png', route: '/converter', drop: true });
-  await shot(browser, {
-    file: 'screenshot-4.png', route: '/edit-canvas', drop: true,
-    after: async (page) => {
-      await page.locator('[title="Fit to Page (Ctrl+0)"]').first().click().catch(() => {});
-      await page.waitForTimeout(1200);
-      await page.waitForTimeout(800);
-    },
-  });
+  await shot(browser, { file: 'screenshot-4.png', route: '/edit-canvas', drop: true, after: fitCanvas });
   await shot(browser, { file: 'screenshot-5.png', route: '/compress', drop: true });
   await shot(browser, { file: 'screenshot-6.png', route: '/', lang: 'id' });
   await shot(browser, { file: 'screenshot-7.png', route: '/', theme: 'dark' });
   await shot(browser, { file: 'screenshot-8.png', route: '/edit-content' });
-  await shot(browser, {
-    file: 'screenshot-9.png', route: '/settings',
-    after: async (page) => { await page.locator('#settings-licenses').scrollIntoViewIfNeeded(); },
-  });
+  await shot(browser, { file: 'screenshot-9.png', route: '/settings', after: settingsShot });
   await browser.close();
 })();
