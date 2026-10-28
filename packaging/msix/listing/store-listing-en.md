@@ -79,7 +79,7 @@ See `partner-center-fill.md`, section 6 (GNU AGPL v3 or later).
 Short title: Dokuwu
 
 ## Screenshots (desktop, upload in this order from docs\assets)
-screenshot-1.png (Home), screenshot-5.png (Edit Content), screenshot-4.png (Canvas PDF),
+screenshot-1.png (Home), screenshot-8.png (Edit Content), screenshot-4.png (Canvas PDF),
 screenshot-3.png (PDF & Image), screenshot-2.png (Organize), screenshot-6.png (Indonesian)
 
 ## Store logos
