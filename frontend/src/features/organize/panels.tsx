@@ -51,6 +51,30 @@ export function InsertPanel({
     next: before + 1 <= total ? t('Page {n}', { n: before + 1 }) : t('End'),
   };
 
+  const summary = (
+    <div className={`organize-insert-summary${referenceInvalid ? ' organize-insert-summary--error' : ''}`}>
+      {referenceInvalid ? null : (
+        <span className="organize-insert-strip" aria-hidden="true">
+          <span className="organize-strip-chip">{neighbours.previous}</span>
+          <span className="organize-strip-chip organize-strip-chip--new">
+            <Plus size={12} />
+            {tn(preview.pages.length, '{n} new page', '{n} new pages')}
+          </span>
+          <span className="organize-strip-chip">{neighbours.next}</span>
+        </span>
+      )}
+      <p
+        id="organize-reference-help"
+        className={`organize-help${referenceInvalid ? ' organize-help--error' : ''}`}
+        role={referenceInvalid ? 'alert' : undefined}
+      >
+        {referenceInvalid
+          ? preview.referenceError
+          : t('Will be inserted {position} page {reference} (of {total}).', { position, reference: preview.reference, total })}
+      </p>
+    </div>
+  );
+
   return (
     <section className="card organize-panel organize-insert" aria-label={t('Insert pages')}>
       <div className="organize-panel-head">
@@ -133,6 +157,7 @@ export function InsertPanel({
               { value: 'before', label: t('Before'), desc: t('Placed before the reference page') },
             ]}
           />
+          <div className="organize-insert-inline">
           <div className="organize-reference">
             <label className="organize-help" htmlFor="organize-insert-reference">{t('Reference page')}</label>
             <input
@@ -151,30 +176,12 @@ export function InsertPanel({
             />
             <span className="organize-help">{t('of')} {total}</span>
           </div>
+          {!showPages && summary}
+          </div>
         </div>
       </div>
 
-      <div className={`organize-insert-summary${referenceInvalid ? ' organize-insert-summary--error' : ''}`}>
-        {referenceInvalid ? null : (
-          <span className="organize-insert-strip" aria-hidden="true">
-            <span className="organize-strip-chip">{neighbours.previous}</span>
-            <span className="organize-strip-chip organize-strip-chip--new">
-              <Plus size={12} />
-              {tn(preview.pages.length, '{n} new page', '{n} new pages')}
-            </span>
-            <span className="organize-strip-chip">{neighbours.next}</span>
-          </span>
-        )}
-        <p
-          id="organize-reference-help"
-          className={`organize-help${referenceInvalid ? ' organize-help--error' : ''}`}
-          role={referenceInvalid ? 'alert' : undefined}
-        >
-          {referenceInvalid
-            ? preview.referenceError
-            : t('Will be inserted {position} page {reference} (of {total}).', { position, reference: preview.reference, total })}
-        </p>
-      </div>
+      {showPages && summary}
 
       <div className="organize-panel-actions">
         <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={disabled}>
