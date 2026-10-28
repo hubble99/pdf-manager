@@ -78,9 +78,8 @@ Lihat `partner-center-fill.md`, bagian 6 (GNU AGPL v3 atau yang lebih baru).
 ## Supplemental fields
 Short title: Dokuwu
 
-## Screenshot (desktop, unggah dengan urutan ini dari docs\assets)
-screenshot-6.png (Indonesia), screenshot-1.png (Home), screenshot-8.png (Edit Content),
-screenshot-4.png (Canvas PDF), screenshot-3.png (PDF & Image), screenshot-2.png (Organize)
+## Screenshot (desktop, unggah berurutan menurut nama file)
+docs\brand\store\screenshots\id\ (01-home sampai 08-settings, 1440x900)
 
 ## Store logos
 1:1 box art 1080x1080: docs\brand\store\listing\logo-1080x1080-navy.png
