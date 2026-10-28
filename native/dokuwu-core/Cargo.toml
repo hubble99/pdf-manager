@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.88"
 publish = false
+license = "AGPL-3.0-or-later"
 description = "Shared native engine for Dokuwu features, called from Tauri commands."
 
 [lib]

@@ -5,3 +5,6 @@
 
 # Bundled donation codes are compared by SHA-256 in tests; never normalize them.
 /frontend/src/assets/donation-*.jpeg binary
+
+# Third-party notice texts are reproduced verbatim (and hash-checked); never normalize them.
+/native/edit-content-engine/notices/** -text

@@ -32,7 +32,6 @@ pub fn run() {
       core_bridge::core_file_sizes,
       core_bridge::core_job_cancel,
       core_housekeeping::core_health,
-      core_housekeeping::core_clear_temp,
       core_housekeeping::core_open_downloads,
       core_convert::core_pdf_to_image_start,
       core_convert::core_image_to_pdf_start,

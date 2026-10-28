@@ -1,8 +1,7 @@
 # dokuwu-core
 
-Shared native engine for Dokuwu. New features are written here in Rust and
-called from Tauri commands. Since 1.11.0 every feature runs here; the Python
-sidecar the app used before is gone.
+The native engine of Dokuwu. Every feature runs here in Rust and is called from
+Tauri commands.
 
 The crate has no Tauri dependency. `frontend/src-tauri/src/core_bridge.rs`
 wraps each operation in a command, and tests call the operations directly.
@@ -14,9 +13,20 @@ wraps each operation in a command, and tests call the operations directly.
 | `error` | `CoreError`, serialized to the frontend as `{ code, message }` |
 | `job` | `JobRunner`: background thread per job, throttled progress, cancel, panic capture |
 | `resources` | `worker_count` from free RAM and `MemoryBrake`, so memory use does not grow with file size |
-| `ops::checksum` | Streaming SHA-256 of a file; the first operation, used to prove the wiring |
-| `ops::image_convert` | WEBP to PNG / JPG / JPEG, batch, per-file report, never overwrites |
-| `ops::pdf_compress` | Compress PDF: JPEG re-encode of ordinary pictures, structural clean-up, batch flushes to a working copy so memory stays flat. CLI check: `cargo run --release --example pdf_compress -- in.pdf out.pdf 60` |
+| `ops::pdf_render`, `image_thumb` | PDF info, page and thumbnail rendering (MuPDF) |
+| `ops::pdf_merge`, `pdf_extract`, `organize`, `pdf_graft` | Merge, split and page organizing |
+| `ops::pdf_to_image`, `image_to_pdf`, `image_convert`, `photo_compress` | Image conversion and photo compression |
+| `ops::pdf_compress` | Compress PDF: picture re-encoding, repeated-object merging, structural clean-up |
+| `ops::pdf_to_word` | PDF to an editable Word document |
+| `ops::pdf_protect` | Add and remove passwords and permissions |
+| `ops::canvas_save`, `font_library` | Canvas PDF export and the font library |
+| `ops::edit_content` | The Edit Content host: sessions, worker process, history, export |
+| `ops::qr`, `barcode`, `code_image` | QR codes and barcodes |
+| `ops::housekeeping` | Scratch-folder cleanup at start and exit |
+| `ops::checksum` | Streaming SHA-256 of a file |
+
+Each operation has a command-line check in `examples/`, for example
+`cargo run --release --example pdf_compress -- in.pdf out.pdf 60`.
 
 ## Rules for new operations
 
@@ -41,10 +51,9 @@ wraps each operation in a command, and tests call the operations directly.
 ## Tests
 
 ```sh
-cargo test                      # this crate
-cargo run --release --example convert_webp -- png <out-dir> <file.webp>...
+cargo test                                  # this crate (Edit Content host tests need EDIT_CONTENT_TEST_PDFIUM_PATH)
 cd ../../frontend/src-tauri && cargo test   # Tauri commands and events
-cd .. && npx vitest run src/__tests__/nativeCore.test.ts
+cd .. && npx vitest run                     # interface tests
 ```
 
 ## Building on Windows

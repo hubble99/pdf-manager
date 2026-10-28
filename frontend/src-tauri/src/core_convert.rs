@@ -183,8 +183,8 @@ mod tests {
         assert_eq!(report["pages"], 3);
         assert_eq!(report["isZip"], true);
         assert_eq!(report["format"], "png");
-        assert_eq!(report["outputPath"], dir.path().join("shared_images.zip").to_str().unwrap());
-        assert!(dir.path().join("shared_images.zip").is_file());
+        assert_eq!(report["outputPath"], dir.path().join("shared.zip").to_str().unwrap());
+        assert!(dir.path().join("shared.zip").is_file());
     }
 
     #[test]

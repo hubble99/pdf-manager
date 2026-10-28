@@ -15,6 +15,7 @@ import { HomePage } from './pages/HomePage';
 import { DonationPage } from './pages/DonationPage';
 import { QrBarcodePage } from './pages/QrBarcodePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { LicensesPage } from './pages/LicensesPage';
 import { OrganizePage } from './pages/OrganizePage';
 import { ProtectPage } from './pages/ProtectPage';
 import { SplashScreen } from './components/SplashScreen';
@@ -110,6 +111,7 @@ export default function App() {
                   )}
                 />
                 <Route path="/settings"      element={<SettingsPage />} />
+                <Route path="/licenses"      element={<LicensesPage />} />
               </Routes>
             </MainContent>
           </div>

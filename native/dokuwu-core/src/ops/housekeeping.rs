@@ -47,8 +47,6 @@ fn home_dir() -> Option<PathBuf> {
 /// How much to remove.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// The user asked: all legacy files and every `dokuwu-*` scratch folder.
-    All,
     /// App exit: the legacy folders, and scratch folders made by this process
     /// (their names carry the process id), so another running copy is left alone.
     Exit { pid: u32 },
@@ -92,7 +90,6 @@ pub fn clear_temp(dirs: &AppDirs, scope: Scope) -> ClearReport {
 
 fn is_selected(entry: &fs::DirEntry, name: &str, scope: Scope) -> bool {
     match scope {
-        Scope::All => true,
         Scope::Exit { pid } => name_has_pid(name, pid),
         Scope::Stale { min_age } => entry
             .metadata()
@@ -181,14 +178,14 @@ mod tests {
     }
 
     #[test]
-    fn all_removes_legacy_files_and_scratch_folders_and_counts_them() {
+    fn exit_clears_legacy_files_and_own_scratch_folders_and_counts_them() {
         let root = tempfile::tempdir().unwrap();
         let d = dirs(root.path());
         write(&d.legacy_temp.join("a.pdf"), 10);
         write(&d.legacy_output.join("sub/b.pdf"), 20);
         write(&d.os_temp.join("dokuwu-compress-1-0/work.pdf"), 30);
 
-        let report = clear_temp(&d, Scope::All);
+        let report = clear_temp(&d, Scope::Exit { pid: 1 });
 
         assert_eq!(report, ClearReport { files_deleted: 3, bytes_freed: 60, skipped: 0 });
         assert_eq!(fs::read_dir(&d.legacy_temp).unwrap().count(), 0);
@@ -205,7 +202,7 @@ mod tests {
         write(&d.os_temp.join("dokuwu"), 5); // no dash after the prefix word: not ours either
         write(&root.path().join("PDFManager/data/fonts/f.ttf"), 5);
 
-        let report = clear_temp(&d, Scope::All);
+        let report = clear_temp(&d, Scope::Stale { min_age: Duration::ZERO });
 
         assert_eq!(report.files_deleted, 0);
         assert!(d.os_temp.join("other-app/keep.bin").exists());
@@ -252,7 +249,7 @@ mod tests {
             legacy_output: PathBuf::new(),
             os_temp: root.path().join("none/ostemp"),
         };
-        assert_eq!(clear_temp(&d, Scope::All), ClearReport::default());
+        assert_eq!(clear_temp(&d, Scope::Exit { pid: 1 }), ClearReport::default());
     }
 
     #[test]
