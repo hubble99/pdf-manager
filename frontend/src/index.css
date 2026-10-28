@@ -5746,3 +5746,97 @@ select.input {
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* ── Organize PDF: the insert panel ─────────────────────────────────────────── */
+.organize-insert-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.organize-insert-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.organize-insert-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.organize-insert-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Each choice sits in its own tinted block so Pages and Position read as two steps. */
+.organize-insert-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--surface-container-lowest, var(--surface));
+  min-width: 0;
+}
+
+.organize-insert .organize-panel-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  align-items: stretch;
+}
+
+.organize-insert-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+}
+
+.organize-insert-summary--error {
+  background: var(--error-container, transparent);
+}
+
+.organize-insert-summary p {
+  margin: 0;
+  color: var(--on-surface);
+}
+
+.organize-insert-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.organize-strip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px dashed var(--outline);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  white-space: nowrap;
+}
+
+.organize-strip-chip--new {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-weight: 600;
+}

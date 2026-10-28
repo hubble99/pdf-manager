@@ -270,7 +270,7 @@ describe('organize workspace', () => {
     await openDocument(7);
     selectCell(4);
     await insertFrom('other.pdf', 'PDF');
-    fireEvent.click(screen.getByRole('radio', { name: 'Pick' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Pick/ }));
     fireEvent.change(screen.getByLabelText('Pages to insert from the source file'), {
       target: { value: '7, 1, 3' },
     });
@@ -329,7 +329,7 @@ describe('organize workspace', () => {
     await openDocument(5);
     selectCell(2);
     await insertFrom('single.pdf', 'PDF');
-    fireEvent.click(screen.getByRole('radio', { name: 'Before' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Before/ }));
     // "Before" re-derives the reference from the first selected page.
     expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('3');
     expect(screen.getByText('Will be inserted before page 3 (of 5).')).toBeInTheDocument();
@@ -344,11 +344,11 @@ describe('organize workspace', () => {
     await insertFrom('single.pdf', 'PDF');
     fireEvent.change(screen.getByLabelText('Reference page'), { target: { value: '2' } });
     // After is already active, so this must not re-derive the reference.
-    fireEvent.click(screen.getByRole('radio', { name: 'After' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^After/ }));
     expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('2');
 
     // Switching to the other side does re-derive it from the selection.
-    fireEvent.click(screen.getByRole('radio', { name: 'Before' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Before/ }));
     expect((screen.getByLabelText('Reference page') as HTMLInputElement).value).toBe('6');
   });
 
@@ -405,7 +405,7 @@ describe('organize workspace', () => {
   it('reports an invalid insert pick inline and disables Insert', async () => {
     await openDocument(3);
     await insertFrom('other.pdf', 'PDF');
-    fireEvent.click(screen.getByRole('radio', { name: 'Pick' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Pick/ }));
     fireEvent.change(screen.getByLabelText('Pages to insert from the source file'), {
       target: { value: '99' },
     });
@@ -423,7 +423,7 @@ describe('organize workspace', () => {
     // The page that was 7 now sits at position 7 (index 6): insert after it.
     selectCell(6);
     await insertFrom('other.pdf', 'PDF');
-    fireEvent.click(screen.getByRole('radio', { name: 'Pick' }));
+    fireEvent.click(screen.getByRole('radio', { name: /^Pick/ }));
     fireEvent.change(screen.getByLabelText('Pages to insert from the source file'), {
       target: { value: '2-3' },
     });
