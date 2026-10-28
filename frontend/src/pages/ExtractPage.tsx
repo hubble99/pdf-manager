@@ -411,44 +411,44 @@ export function ExtractPage() {
                 </div>
               )}
 
-            </div>
-            <div className="action-bar">
-              {result && (
-                <ResultCard
-                  title={t('Saved to your Downloads folder')}
-                  detail={(
-                    <>
-                      <Filename name={result.filename} /> · {tn(result.pagesExtracted, '{n} page extracted', '{n} pages extracted')}
-                      {result.isZip ? t(' · ZIP archive') : ''}
-                    </>
-                  )}
-                  action={{
-                    label: t('Show in folder'),
-                    id: 'extract-open-folder-btn',
-                    onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
-                  }}
-                />
-              )}
-              <div className="form-actions">
-                <button
-                  className="btn btn-primary"
-                  id="extract-run-btn"
-                  onClick={handleExtract}
-                  disabled={!path || isLoading || isProtected}
-                  title={isProtected ? t('This PDF is protected. Remove the protection first, then split its pages.') : undefined}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 size={15} className="spin" />
-                      {t('Splitting…')}
-                    </>
-                  ) : (
-                    <>
-                      <Scissors size={15} />
-                      {t('Split PDF')}
-                    </>
-                  )}
-                </button>
+              <div className="action-bar action-bar--row">
+                <div className="form-actions">
+                  <button
+                    className="btn btn-primary"
+                    id="extract-run-btn"
+                    onClick={handleExtract}
+                    disabled={!path || isLoading || isProtected}
+                    title={isProtected ? t('This PDF is protected. Remove the protection first, then split its pages.') : undefined}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 size={15} className="spin" />
+                        {t('Splitting…')}
+                      </>
+                    ) : (
+                      <>
+                        <Scissors size={15} />
+                        {t('Split PDF')}
+                      </>
+                    )}
+                  </button>
+                </div>
+                {result && (
+                  <ResultCard
+                    title={t('Saved to your Downloads folder')}
+                    detail={(
+                      <>
+                        <Filename name={result.filename} /> · {tn(result.pagesExtracted, '{n} page extracted', '{n} pages extracted')}
+                        {result.isZip ? t(' · ZIP archive') : ''}
+                      </>
+                    )}
+                    action={{
+                      label: t('Show in folder'),
+                      id: 'extract-open-folder-btn',
+                      onClick: () => { void revealPath(result.outputPath).catch(() => undefined); },
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
