@@ -5423,6 +5423,23 @@ select.input {
   flex: 1 1 260px;
 }
 
+/* Run button on the left, the green result card appears beside it: one row even in a half-width column. */
+.action-bar--row {
+  flex-wrap: nowrap;
+}
+
+.action-bar--row {
+  justify-content: flex-start;
+}
+
+.action-bar--row > .form-actions {
+  margin-left: 0;
+}
+
+.action-bar--row > .result-banner {
+  flex: 1 1 0;
+}
+
 .action-bar > .form-actions,
 .action-bar > .action-row {
   flex: 0 0 auto;
